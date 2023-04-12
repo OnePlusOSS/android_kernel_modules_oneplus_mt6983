@@ -1,0 +1,20 @@
+#
+# oplus extend audio codec configuration
+#
+config SND_SOC_SIA81XX
+	tristate "SoC Audio for  SIA81XX PA"
+	help
+	This option enables support for SIA81XX  K PA.
+
+config SND_SOC_OPLUS_PA_MANAGER
+	tristate "SoC Audio for PA MANAGER"
+	help
+	This option enables support for PA MANAGER.
+
+config SIA_PA_ALGO
+	bool "Use SIA PA ALGO"
+	default n
+
+config HSKEY_BLOCK
+	bool "Block hskey for 1s"
+	default n
