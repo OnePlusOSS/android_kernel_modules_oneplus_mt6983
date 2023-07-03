@@ -1372,15 +1372,16 @@ static ssize_t tfa98xx_dbgfs_otc_set(struct file *file, const char __user *user_
 	enum tfa_error err = tfa_error_ok;
 	int ret = 0;
 	int val = 0;
-	char buf[32] = {0};
-	
+	char buf[33] = {0};
+
 	if (copy_from_user(buf, user_buf, 32)) {
 		ret =  -EFAULT;
 		goto r_err;
-    }
-	
+	}
+	buf[32] = '\0';
+
 	val = simple_strtol(buf, NULL, 10);
-	
+
 	if (val != 0 && val != 1) {
 		pr_err("[0x%x] Unexpected value %llu\n",
 			tfa98xx->i2c->addr, val);
@@ -1449,13 +1450,14 @@ static ssize_t tfa98xx_dbgfs_mtpex_set(struct file *file, const char __user *use
 	enum tfa_error err = tfa_error_ok;
 	int ret = 0;
 	int value = 0;
-	char buf[32] = {0};
-	
+	char buf[33] = {0};
+
 	if (copy_from_user(buf, user_buf, 32)) {
 		ret =  -EFAULT;
 		goto r_err;
-    }
-	
+	}
+	buf[32] = '\0';
+
 	value = simple_strtol(buf, NULL, 10);
 
 	if (value != 0) {
@@ -1526,13 +1528,14 @@ static ssize_t tfa98xx_dbgfs_temp_set(struct file *file, const char __user *user
 	enum tfa_error err = tfa_error_ok;
 	int ret = 0;
 	int value = 0;
-	char buf[32] = {0};
-	
+	char buf[33] = {0};
+
 	if (copy_from_user(buf, user_buf, 32)) {
 		ret =  -EFAULT;
 		goto r_err;
-    }
-	
+	}
+	buf[32] = '\0';
+
 	value = simple_strtol(buf, NULL, 10);
 
 	mutex_lock(&tfa98xx->dsp_lock);

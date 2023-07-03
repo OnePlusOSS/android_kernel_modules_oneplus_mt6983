@@ -38,6 +38,7 @@ static int vreg_setup(struct fp_dev *fp_dev, fp_power_info_t *pwr_info, bool ena
     struct device *   dev  = &fp_dev->pdev->dev;
     const char *      name = NULL;
 
+    mutex_lock(&g_power_lock);
     if (NULL == pwr_info || NULL == pwr_info->vreg_config.name) {
         pr_err("pwr_info is NULL\n");
         rc = -EINVAL;
@@ -82,7 +83,6 @@ static int vreg_setup(struct fp_dev *fp_dev, fp_power_info_t *pwr_info, bool ena
         }
         pwr_info->vreg = vreg;
     } else {
-        mutex_lock(&g_power_lock);
         if (vreg) {
             if (regulator_is_enabled(vreg)) {
                 regulator_disable(vreg);
@@ -93,10 +93,10 @@ static int vreg_setup(struct fp_dev *fp_dev, fp_power_info_t *pwr_info, bool ena
         } else {
             pr_err("disable vreg is null \n");
         }
-        mutex_unlock(&g_power_lock);
         rc = 0;
     }
 fp_out:
+    mutex_unlock(&g_power_lock);
     return rc;
 }
 

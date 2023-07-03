@@ -41,6 +41,8 @@
 #include <linux/netfilter_ipv6.h>
 #include <linux/timekeeping.h>
 #include <trace/events/net.h>
+#include <linux/kprobes.h>
+
 
 
 #include "../include/ring_data.h"
@@ -157,15 +159,20 @@ static void wzry_record_delay(struct sk_buff *skb, enum wzry_event_type type)
 	wzry_delay_save *save = &s_delay_current;
 
 	switch (type) {
-	case WZRY_ENTRY_RX_UDP:
+	case WZRY_ENTRY_RX_IP:
 		skb->android_kabi_reserved1 = 0;
 		if (!s_down_calc) {
 			s_down_calc = 1;
 			save->rx_dev_time = skb_get_ktime(skb);
-			save->rx_ip_time = skb->android_kabi_reserved2;
-			save->rx_udp_time = cur_time;
+			save->rx_ip_time = cur_time;
 			skb->android_kabi_reserved1 = 1;
-			logi("WZRY_ENTRY_RX_UDP enter 2 %llu,%llu,%llu", save->rx_dev_time, save->rx_ip_time, cur_time);
+			logi("WZRY_ENTRY_RX_IP enter 2 %llu,%llu,%llu", save->rx_dev_time, save->rx_ip_time, cur_time);
+		}
+		break;
+	case WZRY_ENTRY_RX_UDP:
+		if (skb->android_kabi_reserved1) {
+			save->rx_udp_time = cur_time;
+			logi("WZRY_ENTRY_RX_UDP enter 2 %llu", cur_time);
 		}
 		break;
 	case WZRY_ENTRY_RX_USER:
@@ -303,13 +310,13 @@ static void wzry_delay_entry(struct sk_buff *skb, enum wzry_event_type type)
 
 static unsigned int wzry_prerouting_hook(void *priv, struct sk_buff *skb, const struct nf_hook_state *state)
 {
-	wzry_delay_entry(skb, WZRY_ENTRY_RX_UDP);
+	wzry_delay_entry(skb, WZRY_ENTRY_RX_IP);
 	return NF_ACCEPT;
 }
 
 static unsigned int wzry_input_hook(void *priv, struct sk_buff *skb, const struct nf_hook_state *state)
 {
-	wzry_delay_entry(skb, WZRY_ENTRY_RX_USER);
+	wzry_delay_entry(skb, WZRY_ENTRY_RX_UDP);
 	return NF_ACCEPT;
 }
 
@@ -362,42 +369,49 @@ static void probe_netif_rx(void *data, struct sk_buff *skb)
 #endif
 }
 
-static void probe_netif_receive_skb(void *data, struct sk_buff *skb)
-{
-#ifdef CONFIG_ANDROID_KABI_RESERVE
-	skb->android_kabi_reserved2 = get_time_ts64_ns();
-	logi("probe_netif_receive_skb time %llu", skb->android_kabi_reserved2);
-#else
-	wzry_delay_entry(skb, WZRY_ENTRY_RX_IP);
-#endif
-}
-
 static void probe_net_dev_queue(void *data, struct sk_buff *skb)
 {
 	wzry_delay_entry(skb, WZRY_ENTRY_TX_IP);
 }
 
-/*
-static void probe_net_dev_start_xmit(void *data, const struct sk_buff *skb, const struct net_device *dev)
-{
-	if (check_wzry_data_skb((struct sk_buff *)skb, 1)) {
-		spin_lock_bh(&s_wzry_lock);
-		{
-			u64 cur_time = get_time_ts64_ns();
-			wzry_delay_save *save = &s_delay_current;
-#ifdef CONFIG_ANDROID_KABI_RESERVE
-			if (skb->android_kabi_reserved1) {
-#else
-			if (skb->mark & SKB_MARK_MASK_UL) {
 #endif
-				save->tx_dev_time = cur_time;
-				logi("WZRY_ENTRY_TX_DEV enter xx %llu", cur_time);
-			}
-		}
-		spin_unlock_bh(&s_wzry_lock);
+
+#ifdef USE_TRACE_FUNC
+static int __skb_recv_udp_ret_handler(struct kretprobe_instance *ri, struct pt_regs *regs)
+{
+	unsigned long ret = regs_return_value(regs);
+	struct sk_buff *skb = (struct sk_buff *)ret;
+
+	if (skb == NULL) {
+		return 0;
 	}
+
+	wzry_delay_entry(skb, WZRY_ENTRY_RX_USER);
+	return 0;
 }
-*/
+
+static int xmit_one_pre_handler(struct kprobe *kp, struct pt_regs *regs)
+{
+	struct sk_buff *skb = (struct sk_buff *)regs->regs[0];
+
+	if (skb == NULL) {
+		return 0;
+	}
+
+	wzry_delay_entry(skb, WZRY_ENTRY_TX_DEV);
+	return 0;
+}
+
+
+static struct kretprobe kretp__skb_recv_udp = {
+	.kp.symbol_name = "__skb_recv_udp",
+	.handler = __skb_recv_udp_ret_handler,
+};
+
+static struct kprobe kp_xmit_one = {
+	.symbol_name = "xmit_one",
+	.pre_handler = xmit_one_pre_handler,
+};
 #endif
 
 static int probe_func_init(void)
@@ -411,10 +425,10 @@ static int probe_func_init(void)
 		return -1;
 	}
 
-	ret = register_trace_netif_receive_skb(probe_netif_receive_skb, NULL);
-	logt("register_trace_netif_receive_skb return %d", ret);
-	if (ret) {
-		goto netif_receive_skb_fail;
+	ret = register_kretprobe(&kretp__skb_recv_udp);
+	if (ret < 0) {
+		logt("register_kretprobe register kretp__skb_recv_udp failed with %d", ret);
+		goto kprobe_recv_udp_failed;
 	}
 
 	ret = register_trace_net_dev_queue(probe_net_dev_queue, NULL);
@@ -422,24 +436,23 @@ static int probe_func_init(void)
 	if (ret) {
 		goto net_dev_queue_fail;
 	}
-/*
-	ret = register_trace_net_dev_start_xmit(probe_net_dev_start_xmit, NULL);
-	logt("register_trace_net_dev_start_xmit return %d", ret);
-	if (ret) {
-		goto net_dev_xmit_fail;
+
+	ret = register_kprobe(&kp_xmit_one);
+	if (ret < 0) {
+		logt("register_kprobe register kp_xmit_one failed with %d", ret);
+		goto kprobe_dev_start_xmit_failed;
 	}
-*/
+
 	return 0;
 
-netif_receive_skb_fail:
+kprobe_recv_udp_failed:
 	unregister_trace_netif_rx(probe_netif_rx, NULL);
 net_dev_queue_fail:
-	unregister_trace_netif_receive_skb(probe_netif_receive_skb, NULL);
-/*
-net_dev_xmit_fail:
+	unregister_kretprobe(&kretp__skb_recv_udp);
+kprobe_dev_start_xmit_failed:
 	unregister_trace_net_dev_queue(probe_net_dev_queue, NULL);
-*/
-return -1;
+
+	return -1;
 #endif
 	return 0;
 }
@@ -453,15 +466,15 @@ static void probe_func_deinit(void)
 	ret = unregister_trace_netif_rx(probe_netif_rx, NULL);
 	logt("unregister_trace_netif_rx_entry return %d", ret);
 
-	ret = unregister_trace_netif_receive_skb(probe_netif_receive_skb, NULL);
-	logt("unregister_trace_netif_receive_skb return %d", ret);
+	unregister_kretprobe(&kretp__skb_recv_udp);
+	logt("unregister_kretprobe kretp__skb_recv_udp return %d", 0);
 
 	ret = unregister_trace_net_dev_queue(probe_net_dev_queue, NULL);
 	logt("unregister_trace_net_dev_queue return %d", ret);
-	/*
-	ret = unregister_trace_net_dev_start_xmit(probe_net_dev_start_xmit, NULL);
-	logt("unregister_trace_net_dev_start_xmit return %d", ret);
-	*/
+
+	unregister_kprobe(&kp_xmit_one);
+	logt("unregister_kprobe kp_xmit_one return %d", 0);
+
 #endif
 }
 

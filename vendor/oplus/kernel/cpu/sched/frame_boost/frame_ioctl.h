@@ -98,6 +98,11 @@ struct ofb_stune_data {
 	int util_min_threshold;
 	int util_min_obtain_view;
 	int util_min_timeout;
+	int ed_task_boost_mid_duration;
+	int ed_task_boost_mid_util;
+	int ed_task_boost_max_duration;
+	int ed_task_boost_max_util;
+	int ed_task_boost_timeout_duration;
 };
 
 #define OFB_MAGIC 0XDE

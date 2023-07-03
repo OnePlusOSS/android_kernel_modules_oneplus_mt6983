@@ -60,12 +60,15 @@ DEFINE_PER_CPU(struct list_head, ux_thread_list);
 
 /* debug print frequency limit */
 static DEFINE_PER_CPU(int, prev_ux_state);
+static DEFINE_PER_CPU(int, prev_ux_priority);
 static DEFINE_PER_CPU(int, prev_hwbinder_flag);
 
 #if IS_ENABLED(CONFIG_SCHED_WALT)
 #define WINDOW_SIZE (16000000)
 #define scale_demand(d) ((d)/(WINDOW_SIZE >> SCHED_CAPACITY_SHIFT))
 #endif
+
+static void insert_ux_task_into_list(struct oplus_task_struct *ots, struct oplus_rq *orq);
 
 #define TOPAPP 4
 #define BGAPP  3
@@ -168,6 +171,82 @@ void update_ux_sched_cputopo(void)
 	}
 }
 
+void oplus_set_ux_state(struct task_struct *t, int ux_state) {
+	oplus_set_ux_state_lock(t, ux_state, false);
+}
+
+/* UX synchronization rules
+ * 1. when task set ux first time, or alter ux state,
+ *    ACQUIRE (rq->lock)         prevent task migrate between rq
+ *    ACQUIRE (ux_list->lock)
+ *    add task to list or change position in list
+ *    RELEASE (ux_list->lock)
+ *    RELEASE (rq->lock)
+
+ * 2. when task ux -> 0, or dequeue from list
+ *    ACQUIRE (ux_list->lock)
+ *    list_del_init(ux_entry)
+ *    RELEASE (ux_list->lock)
+
+ * 3. oplus_list_empty(ux_list) is atomic, unnecessary to lock
+
+ * 4. oplus_list_empty(ux_list) and then list_first_entry(ux_list)
+ *    ACQUIRE (ux_list->lock)
+ *    oplus_list_empty(ux_list)
+ *    list_first_entry(ux_list)
+ *    RELEASE(ux_list->lock)
+
+*/
+void oplus_set_ux_state_lock(struct task_struct *t, int ux_state, bool need_lock_rq)
+{
+	struct rq *rq;
+	struct rq_flags flags;
+	struct oplus_rq *orq;
+	struct oplus_task_struct *ots;
+	unsigned long irqflag;
+
+	if (need_lock_rq)
+		rq = task_rq_lock(t, &flags);
+	else
+		rq = task_rq(t);
+
+	ots = get_oplus_task_struct(t);
+	if (ux_state == ots->ux_state) {
+		goto out;
+	}
+
+	orq = (struct oplus_rq *) rq->android_oem_data1;
+	spin_lock_irqsave(&orq->ux_list_lock, irqflag);
+
+	ots->ux_state = ux_state;
+	if (0 == ux_state) {
+		if (!oplus_list_empty(&ots->ux_entry)) {
+			list_del_init(&ots->ux_entry);
+			put_task_struct(t);
+		}
+	} else if (task_on_rq_queued(t)) {
+		bool unlinked = oplus_list_empty(&ots->ux_entry);
+		lockdep_assert_held(&rq->lock);
+		if (unlinked) {
+			get_task_struct(t);
+			/* when obtain ux state first time after enqueued,
+			  sum_exec_baseline reset to task's curr exec runtime
+			  make sure this task gain ux bonus exec time. */
+			if (!ots->total_exec)
+				ots->sum_exec_baseline = t->se.sum_exec_runtime;
+		} else {
+			list_del_init(&ots->ux_entry);
+		}
+
+		insert_ux_task_into_list(ots, orq);
+	}
+	spin_unlock_irqrestore(&orq->ux_list_lock, irqflag);
+
+	out:
+	if (need_lock_rq)
+		task_rq_unlock(rq, t, &flags);
+}
+
 noinline int tracing_mark_write(const char *buf)
 {
 	trace_printk(buf);
@@ -176,14 +255,27 @@ noinline int tracing_mark_write(const char *buf)
 
 void ux_state_systrace_c(unsigned int cpu, struct task_struct *p)
 {
-	int ux_state = oplus_get_ux_state(p);
+	int ux_state = (oplus_get_ux_state(p)  & (SCHED_ASSIST_UX_MASK | SA_TYPE_INHERIT));
 
 	if (per_cpu(prev_ux_state, cpu) != ux_state) {
 		char buf[256];
 
-		snprintf(buf, sizeof(buf), "C|9999|Cpu%d_ux_state|%d\n", cpu, ux_state & SCHED_ASSIST_UX_MASK);
+		snprintf(buf, sizeof(buf), "C|9999|Cpu%d_ux_state|%d\n", cpu, ux_state);
 		tracing_mark_write(buf);
 		per_cpu(prev_ux_state, cpu) = ux_state;
+	}
+}
+
+void ux_priority_systrace_c(unsigned int cpu, struct task_struct *p)
+{
+	int ux_priority = (oplus_get_ux_state(p) & SCHED_ASSIST_UX_PRIORITY_MASK) >> SCHED_ASSIST_UX_PRIORITY_SHIFT;
+
+	if (per_cpu(prev_ux_priority, cpu) != ux_priority) {
+		char buf[256];
+
+		snprintf(buf, sizeof(buf), "C|9998|Cpu%d_ux_priority|%d\n", cpu, ux_priority);
+		tracing_mark_write(buf);
+		per_cpu(prev_ux_priority, cpu) = ux_priority;
 	}
 }
 
@@ -235,6 +327,7 @@ void sched_assist_init_oplus_rq(void)
 		}
 		orq = (struct oplus_rq *) rq->android_oem_data1;
 		INIT_LIST_HEAD(&orq->ux_list);
+		spin_lock_init(&orq->ux_list_lock);
 #ifdef CONFIG_LOCKING_PROTECT
 		INIT_LIST_HEAD(&orq->locking_thread_list);
 		orq->rq_locking_task = 0;
@@ -406,6 +499,12 @@ EXPORT_SYMBOL_GPL(get_ux_state_type);
 /* check if a's ux prio higher than b's prio */
 bool prio_higher(int a, int b)
 {
+	int a_priority = a & SCHED_ASSIST_UX_PRIORITY_MASK;
+	int b_priority = b & SCHED_ASSIST_UX_PRIORITY_MASK;
+
+	if (a_priority != b_priority)
+		return (a_priority > b_priority);
+
 	if (a & SA_TYPE_ANIMATOR)
 		return !(b & SA_TYPE_ANIMATOR);
 
@@ -418,10 +517,10 @@ bool prio_higher(int a, int b)
 	/* SA_TYPE_LISTPICK */
 	return false;
 }
+
 static void insert_ux_task_into_list(struct oplus_task_struct *ots, struct oplus_rq *orq)
 {
 	struct list_head *pos;
-	struct task_struct *tsk = NULL;
 
 	list_for_each(pos, &orq->ux_list) {
 		struct oplus_task_struct *tmp_ots = container_of(pos, struct oplus_task_struct,
@@ -433,14 +532,14 @@ static void insert_ux_task_into_list(struct oplus_task_struct *ots, struct oplus
 
 	list_add(&ots->ux_entry, pos->prev);
 
-	tsk = ots_to_ts(ots);
-	if (unlikely(global_debug_enabled & DEBUG_FTRACE))
+	if (unlikely(global_debug_enabled & DEBUG_FTRACE)) {
+		struct task_struct *tsk = ots_to_ts(ots);
 		trace_printk("insert ux=%-12s pid=%d ux_state=%d\n", tsk->comm, tsk->pid, ots->ux_state);
+	}
 }
 
 void account_ux_runtime(struct rq *rq, struct task_struct *curr)
 {
-	struct oplus_rq *orq = (struct oplus_rq *) rq->android_oem_data1;
 	struct oplus_task_struct *ots = get_oplus_task_struct(curr);
 	s64 delta;
 	unsigned int limit;
@@ -467,20 +566,19 @@ void account_ux_runtime(struct rq *rq, struct task_struct *curr)
 	if (ots->total_exec > limit) {
 		list_del_init(&ots->ux_entry);
 		put_task_struct(curr);
-		return;
+	} else {
+		struct oplus_rq *orq = (struct oplus_rq *) rq->android_oem_data1;
+		/* if ux slice has expired but total exectime not, just requeue without put/get task_struct */
+		list_del_init(&ots->ux_entry);
+		insert_ux_task_into_list(ots, orq);
 	}
-
-	/* if ux slice has expired but total exectime not, just requeue without put/get task_struct */
-	list_del_init(&ots->ux_entry);
-	insert_ux_task_into_list(ots, orq);
 }
 
 static void enqueue_ux_thread(struct rq *rq, struct task_struct *p)
 {
-	struct list_head *pos, *n;
-	bool exist = false;
-	struct oplus_rq *orq = NULL;
-	struct oplus_task_struct *ots = NULL;
+	struct oplus_rq *orq;
+	struct oplus_task_struct *ots;
+	unsigned long irqflag;
 
 	if (unlikely(!global_sched_assist_enabled))
 		return;
@@ -490,38 +588,37 @@ static void enqueue_ux_thread(struct rq *rq, struct task_struct *p)
 	oplus_sched_assist_audio_enqueue_hook(p);
 #endif
 
-	ots = get_oplus_task_struct(p);
-
-	if (!test_task_is_fair(p) || !oplus_list_empty(&ots->ux_entry))
+	if (!test_task_is_fair(p))
 		return;
+
+	ots = get_oplus_task_struct(p);
+	orq = (struct oplus_rq *) rq->android_oem_data1;
+	spin_lock_irqsave(&orq->ux_list_lock, irqflag);
+	if (!oplus_list_empty(&ots->ux_entry)) {
+		WARN_ON(1);
+		spin_unlock_irqrestore(&orq->ux_list_lock, irqflag);
+		return;
+	}
 
 	/* task's ux entry should be initialized with INIT_LIST_HEAD() */
 	if (ots->ux_entry.prev == 0 && ots->ux_entry.next == 0)
 		INIT_LIST_HEAD(&ots->ux_entry);
 
 	if (test_task_ux(p)) {
-		orq = (struct oplus_rq *) rq->android_oem_data1;
-		list_for_each_safe(pos, n, &orq->ux_list) {
-			if (pos == oplus_get_ux_entry(p)) {
-				exist = true;
-				BUG_ON(1);
-				break;
-			}
-		}
-
-		if (!exist) {
-			insert_ux_task_into_list(ots, orq);
-			get_task_struct(p);
-		}
+		insert_ux_task_into_list(ots, orq);
+		get_task_struct(p);
 
 		if (!ots->total_exec)
 			ots->sum_exec_baseline = p->se.sum_exec_runtime;
 	}
+	spin_unlock_irqrestore(&orq->ux_list_lock, irqflag);
 }
 
 static void dequeue_ux_thread(struct rq *rq, struct task_struct *p)
 {
-	struct oplus_task_struct *ots = NULL;
+	struct oplus_rq *orq;
+	struct oplus_task_struct *ots;
+	unsigned long irqflag;
 
 	if (!rq || !p)
 		return;
@@ -529,6 +626,8 @@ static void dequeue_ux_thread(struct rq *rq, struct task_struct *p)
 	oplus_set_enqueue_time(p, 0);
 	ots = get_oplus_task_struct(p);
 
+	orq = (struct oplus_rq *) rq->android_oem_data1;
+	spin_lock_irqsave(&orq->ux_list_lock, irqflag);
 	if (!oplus_list_empty(&ots->ux_entry)) {
 		u64 now = jiffies_to_nsecs(jiffies);
 
@@ -556,6 +655,7 @@ static void dequeue_ux_thread(struct rq *rq, struct task_struct *p)
 
 	if (p->state != TASK_RUNNING)
 		ots->total_exec = 0;
+	spin_unlock_irqrestore(&orq->ux_list_lock, irqflag);
 }
 
 void queue_ux_thread(struct rq *rq, struct task_struct *p, int enqueue)
@@ -595,12 +695,7 @@ inline void inherit_ux_sub(struct task_struct *task, int type, int value)
 
 void inc_inherit_ux_refs(struct task_struct *task, int type)
 {
-	struct rq_flags flags;
-	struct rq *rq;
-
-	rq = task_rq_lock(task, &flags);
 	inherit_ux_inc(task, type);
-	task_rq_unlock(rq, task, &flags);
 }
 EXPORT_SYMBOL_GPL(inc_inherit_ux_refs);
 
@@ -619,16 +714,10 @@ EXPORT_SYMBOL_GPL(test_set_inherit_ux);
 
 void set_inherit_ux(struct task_struct *task, int type, int depth, int inherit_val)
 {
-	struct rq_flags flags;
-	struct rq *rq = NULL;
-
 	if (!task || type >= INHERIT_UX_MAX)
 		return;
 
-	rq = task_rq_lock(task, &flags);
-
 	if (!test_task_is_fair(task)) {
-		task_rq_unlock(rq, task, &flags);
 		return;
 	}
 
@@ -639,26 +728,14 @@ void set_inherit_ux(struct task_struct *task, int type, int depth, int inherit_v
 		inherit_val &= (~SA_TYPE_LISTPICK);
 		inherit_val |= SA_TYPE_HEAVY;
 	}
-	oplus_set_ux_state(task, (inherit_val & SCHED_ASSIST_UX_MASK) | SA_TYPE_INHERIT);
+	oplus_set_ux_state_lock(task, (inherit_val & SCHED_ASSIST_UX_MASK) | SA_TYPE_INHERIT, true);
 	oplus_set_inherit_ux_start(task, jiffies_to_nsecs(jiffies));
 	trace_inherit_ux_set(task, type, oplus_get_ux_state(task), oplus_get_inherit_ux(task), oplus_get_ux_depth(task));
-
-	if (task->on_rq && oplus_list_empty(oplus_get_ux_entry(task))) {
-		struct oplus_task_struct *ots = get_oplus_task_struct(task);
-		struct oplus_rq *orq = (struct oplus_rq *) rq->android_oem_data1;
-
-		insert_ux_task_into_list(ots, orq);
-		get_task_struct(task);
-	}
-
-	task_rq_unlock(rq, task, &flags);
 }
 EXPORT_SYMBOL_GPL(set_inherit_ux);
 
 void reset_inherit_ux(struct task_struct *inherit_task, struct task_struct *ux_task, int reset_type)
 {
-	struct rq_flags flags;
-	struct rq *rq;
 	int reset_depth = 0;
 	int reset_inherit = 0;
 	int ux_state;
@@ -672,35 +749,26 @@ void reset_inherit_ux(struct task_struct *inherit_task, struct task_struct *ux_t
 	if (!test_inherit_ux(inherit_task, reset_type) || !(reset_inherit & SA_TYPE_ANIMATOR))
 		return;
 
-	rq = task_rq_lock(inherit_task, &flags);
-
 	ux_state = (oplus_get_ux_state(inherit_task) & ~SCHED_ASSIST_UX_MASK) | reset_inherit;
 	oplus_set_ux_depth(inherit_task, reset_depth + 1);
-	oplus_set_ux_state(inherit_task, ux_state);
+	oplus_set_ux_state_lock(inherit_task, ux_state, true);
 	trace_inherit_ux_reset(inherit_task, reset_type, oplus_get_ux_state(inherit_task),
 		oplus_get_inherit_ux(inherit_task), oplus_get_ux_depth(inherit_task));
-
-	task_rq_unlock(rq, inherit_task, &flags);
 }
 EXPORT_SYMBOL_GPL(reset_inherit_ux);
 
 void unset_inherit_ux_value(struct task_struct *task, int type, int value)
 {
-	struct rq_flags flags;
-	struct rq *rq = NULL;
-	s64 inherit_ux = 0;
-	struct oplus_task_struct *ots = NULL;
+	s64 inherit_ux;
+	struct oplus_task_struct *ots;
 
 	if (!task || type >= INHERIT_UX_MAX)
 		return;
-
-	rq = task_rq_lock(task, &flags);
 
 	inherit_ux_sub(task, type, value);
 	inherit_ux = oplus_get_inherit_ux(task);
 
 	if (inherit_ux > 0) {
-		task_rq_unlock(rq, task, &flags);
 		return;
 	}
 
@@ -709,10 +777,9 @@ void unset_inherit_ux_value(struct task_struct *task, int type, int value)
 
 	ots = get_oplus_task_struct(task);
 	ots->ux_depth = 0;
-	ots->ux_state = 0;
+	oplus_set_ux_state(task, 0);
 
 	trace_inherit_ux_unset(task, type, oplus_get_ux_state(task), oplus_get_inherit_ux(task), oplus_get_ux_depth(task));
-	task_rq_unlock(rq, task, &flags);
 }
 EXPORT_SYMBOL_GPL(unset_inherit_ux_value);
 
@@ -734,37 +801,26 @@ bool cgroup_check_set_sched_assist_boost(char *comm)
 
 void cgroup_set_sched_assist_boost_task(struct task_struct *p,  char *comm)
 {
-	struct rq_flags flags;
-	struct rq *rq;
 	int ux_state;
 
 	if(cgroup_check_set_sched_assist_boost(comm)) {
-		rq = task_rq_lock(p, &flags);
-
 		ux_state = oplus_get_ux_state(p);
 		/* com.android.launcher was UX process even though exit to the background */
 		if (is_top(p) || test_task_ux(p->group_leader))
-			oplus_set_ux_state(p, (ux_state | SA_TYPE_HEAVY));
+			oplus_set_ux_state_lock(p, (ux_state | SA_TYPE_HEAVY), true);
 		else
-			oplus_set_ux_state(p, (ux_state & ~SA_TYPE_HEAVY));
-
-		task_rq_unlock(rq, p, &flags);
-	} else
-		return;
+			oplus_set_ux_state_lock(p, (ux_state & ~SA_TYPE_HEAVY), true);
+	}
 }
 
 void clear_all_inherit_type(struct task_struct *p)
 {
-	struct rq_flags flags;
-	struct rq *rq = NULL;
-	struct oplus_task_struct *ots = NULL;
+	struct oplus_task_struct *ots;
 
-	rq = task_rq_lock(p, &flags);
 	ots = get_oplus_task_struct(p);
 	atomic64_set(&ots->inherit_ux, 0);
 	ots->ux_depth = 0;
-	ots->ux_state = 0;
-	task_rq_unlock(rq, p, &flags);
+	oplus_set_ux_state(p, 0);
 }
 
 void sched_assist_target_comm(struct task_struct *task, const char *buf)
@@ -800,6 +856,7 @@ void adjust_rt_lowest_mask(struct task_struct *p, struct cpumask *local_cpu_mask
 	struct task_struct *task;
 	struct oplus_rq *orq;
 	struct oplus_task_struct *ots = NULL;
+	unsigned long irqflag;
 
 	if (!ret || !local_cpu_mask || cpumask_empty(local_cpu_mask))
 		return;
@@ -808,13 +865,17 @@ void adjust_rt_lowest_mask(struct task_struct *p, struct cpumask *local_cpu_mask
 
 	drop_cpu = cpumask_first(local_cpu_mask);
 	while (drop_cpu < nr_cpu_ids) {
+		int rt_task_im_flag;
+		int ux_task_state;
 		/* unlocked access */
 		rq = cpu_rq(drop_cpu);
 		orq = (struct oplus_rq *) rq->android_oem_data1;
 		task = rq->curr;
 
+		spin_lock_irqsave(&orq->ux_list_lock, irqflag);
 		if (!test_task_ux(task)) {
 			if (oplus_list_empty(&orq->ux_list)) {
+				spin_unlock_irqrestore(&orq->ux_list_lock, irqflag);
 				drop_cpu = cpumask_next(drop_cpu, local_cpu_mask);
 				continue;
 			} else {
@@ -822,26 +883,29 @@ void adjust_rt_lowest_mask(struct task_struct *p, struct cpumask *local_cpu_mask
 				task  = ots_to_ts(ots);
 			}
 		}
+		ux_task_state = oplus_get_ux_state(task);
+		spin_unlock_irqrestore(&orq->ux_list_lock, irqflag);
 
+		rt_task_im_flag = oplus_get_im_flag(p);
 		/* avoid sf premmpt heavy ux tasks,such as ui, render... */
-		if ((oplus_get_im_flag(p) == IM_FLAG_SURFACEFLINGER || oplus_get_im_flag(p) == IM_FLAG_RENDERENGINE) &&
-			((oplus_get_ux_state(task) & SA_TYPE_HEAVY) || (oplus_get_ux_state(task) & SA_TYPE_LISTPICK))) {
+		if ((rt_task_im_flag == IM_FLAG_SURFACEFLINGER || rt_task_im_flag == IM_FLAG_RENDERENGINE) &&
+			((ux_task_state & SA_TYPE_HEAVY) || (ux_task_state & SA_TYPE_LISTPICK))) {
 			cpumask_clear_cpu(drop_cpu, local_cpu_mask);
 			if (unlikely(global_debug_enabled & DEBUG_FTRACE))
 				trace_printk("clear cpu from lowestmask, curr_heavy task=%-12s pid=%d drop_cpu=%d\n", task->comm, task->pid, drop_cpu);
 		}
 
 #ifdef CONFIG_OPLUS_SCHED_MT6895
-		if (oplus_get_ux_state(task) & SA_TYPE_HEAVY) {
+		if (ux_task_state & SA_TYPE_HEAVY) {
 #else
-		if (sched_assist_scene(SA_LAUNCH) && (oplus_get_ux_state(task) & SA_TYPE_HEAVY)) {
+		if (sched_assist_scene(SA_LAUNCH) && (ux_task_state & SA_TYPE_HEAVY)) {
 #endif
 			cpumask_clear_cpu(drop_cpu, local_cpu_mask);
 			if (unlikely(global_debug_enabled & DEBUG_FTRACE))
 				trace_printk("clear cpu from lowestmask, curr_heavy task=%-12s pid=%d drop_cpu=%d\n", task->comm, task->pid, drop_cpu);
 		}
 
-		if (oplus_get_ux_state(task) & SA_TYPE_ANIMATOR) {
+		if (ux_task_state & SA_TYPE_ANIMATOR) {
 			cpumask_clear_cpu(drop_cpu, local_cpu_mask);
 			if (unlikely(global_debug_enabled & DEBUG_FTRACE))
 				trace_printk("clear cpu from lowestmask, curr_anima task=%-12s pid=%d drop_cpu=%d\n", task->comm, task->pid, drop_cpu);
@@ -903,14 +967,16 @@ bool sa_skip_rt_sync(struct rq *rq, struct task_struct *p, bool *sync)
 {
 	int cpu = cpu_of(rq);
 	struct oplus_rq *orq = (struct oplus_rq *) rq->android_oem_data1;
-	struct oplus_task_struct *ots = NULL;
+	struct oplus_task_struct *ots;
+	unsigned long irqflag;
 
-	if (oplus_list_empty(&orq->ux_list))
+	spin_lock_irqsave(&orq->ux_list_lock, irqflag);
+	ots = list_first_entry_or_null(&orq->ux_list, struct oplus_task_struct, ux_entry);
+	if ((NULL == ots) || (ots->im_flag == IM_FLAG_CAMERA_HAL)) {
+		spin_unlock_irqrestore(&orq->ux_list_lock, irqflag);
 		return false;
-
-	ots = list_first_entry(&orq->ux_list, struct oplus_task_struct, ux_entry);
-	if (ots->im_flag == IM_FLAG_CAMERA_HAL)
-		return false;
+	}
+	spin_unlock_irqrestore(&orq->ux_list_lock, irqflag);
 
 	if (*sync) {
 		*sync = false;
@@ -927,11 +993,9 @@ EXPORT_SYMBOL(sa_skip_rt_sync);
 void opt_ss_lock_contention(struct task_struct *p, int old_im, int new_im)
 {
 	struct rq_flags rf;
-	struct rq *rq = NULL;
+	struct rq *rq;
 	bool queued, running;
-	struct oplus_task_struct *ots = NULL;
-	struct oplus_rq *orq = NULL;
-	int ux_state = 0;
+	int ux_state;
 
 	if (new_im == IM_FLAG_SS_LOCK_OWNER) {
 		bool skip_scene = sched_assist_scene(SA_CAMERA);
@@ -949,7 +1013,6 @@ void opt_ss_lock_contention(struct task_struct *p, int old_im, int new_im)
 		return;
 	}
 
-	ots = get_oplus_task_struct(p);
 	/* When p leave critical section, clear the specific ux state and
 	 * remove from ux list if it's ux state is zero.
 	 */
@@ -957,35 +1020,18 @@ void opt_ss_lock_contention(struct task_struct *p, int old_im, int new_im)
 		ux_state &= ~SA_TYPE_LISTPICK;
 		oplus_set_ux_state(p, ux_state);
 
-		if (ux_state == 0 && !oplus_list_empty(&ots->ux_entry)) {
-			list_del_init(&ots->ux_entry);
-			put_task_struct(p);
-		}
-
 		goto out;
 	}
 
 	ux_state |= SA_TYPE_LISTPICK;
+
 	oplus_set_ux_state(p, ux_state);
 
-	if (unlikely(!oplus_list_empty(&ots->ux_entry))) {
-		if (unlikely(global_debug_enabled & DEBUG_FTRACE))
-			trace_printk("ux entry is not empty, comm=%-12s pid=%d tgid=%d old_im=%d new_im=%d ux_state=%d",
-				p->comm, p->pid, p->tgid, old_im, new_im, oplus_get_ux_state(p));
-		goto out;
-	}
-
-	orq = (struct oplus_rq *) rq->android_oem_data1;
 	queued = task_on_rq_queued(p);
 	running = task_current(rq, p);
 
 	/* If task is current running, put it into ux list. If not, requeue and resched. */
-	if (running) {
-		insert_ux_task_into_list(ots, orq);
-		get_task_struct(p);
-	} else if (queued) {
-		deactivate_task(rq, p, DEQUEUE_SAVE | DEQUEUE_NOCLOCK);
-		activate_task(rq, p, ENQUEUE_RESTORE | ENQUEUE_NOCLOCK);
+	if (!running && queued) {
 		resched_curr(rq);
 	}
 
@@ -997,7 +1043,6 @@ out:
 	if (unlikely(global_debug_enabled & DEBUG_FTRACE))
 		trace_printk("comm=%-12s pid=%d tgid=%d old_im=%d new_im=%d ux_state=%d\n",
 			p->comm, p->pid, p->tgid, old_im, new_im, oplus_get_ux_state(p));
-
 	task_rq_unlock(rq, p, &rf);
 }
 
@@ -1073,18 +1118,14 @@ void android_rvh_enqueue_task_handler(void *unused, struct rq *rq, struct task_s
 	jankinfo_android_rvh_enqueue_task_handler(unused, rq, p, flags);
 #endif
 	queue_ux_thread(rq, p, 1);
-#ifdef CONFIG_LOCKING_PROTECT
-	enqueue_locking_thread(rq, p);
-#endif
 }
+EXPORT_SYMBOL(android_rvh_enqueue_task_handler);
 
 void android_rvh_dequeue_task_handler(void *unused, struct rq *rq, struct task_struct *p, int flags)
 {
 	queue_ux_thread(rq, p, 0);
-#ifdef CONFIG_LOCKING_PROTECT
-	dequeue_locking_thread(rq, p);
-#endif
 }
+EXPORT_SYMBOL(android_rvh_dequeue_task_handler);
 
 void android_rvh_schedule_handler(void *unused, struct task_struct *prev, struct task_struct *next, struct rq *rq)
 {
@@ -1098,22 +1139,34 @@ void android_rvh_schedule_handler(void *unused, struct task_struct *prev, struct
 
 	oplus_set_enqueue_time(prev, rq->clock);
 
-	if (unlikely(global_debug_enabled & DEBUG_SYSTRACE) && likely(prev != next))
+	if (unlikely(global_debug_enabled & DEBUG_SYSTRACE) && likely(prev != next)) {
 		ux_state_systrace_c(cpu_of(rq), next);
+		ux_priority_systrace_c(cpu_of(rq), next);
+	}
 
 	if (unlikely(global_debug_enabled & DEBUG_FBG) && likely(prev != next))
 		fbg_state_systrace_c(cpu_of(rq), next);
+
+#ifdef CONFIG_LOCKING_PROTECT
+	if (unlikely(global_debug_enabled & DEBUG_SYSTRACE) && likely(prev != next))
+		locking_state_systrace_c(cpu_of(rq), next);
+#endif
 }
 
 void android_vh_scheduler_tick_handler(void *unused, struct rq *rq)
 {
+	struct oplus_rq *orq = (struct oplus_rq *) rq->android_oem_data1;
+	unsigned long irqflag;
+
 #ifdef CONFIG_OPLUS_FEATURE_SCHED_SPREAD
 	update_rq_nr_imbalance(smp_processor_id());
 #endif /* CONFIG_OPLUS_FEATURE_SCHED_SPREAD */
 
 	raw_spin_lock(&rq->lock);
+	spin_lock_irqsave(&orq->ux_list_lock, irqflag);
 	if (!oplus_list_empty(oplus_get_ux_entry(rq->curr)))
 		account_ux_runtime(rq, rq->curr);
+	spin_unlock_irqrestore(&orq->ux_list_lock, irqflag);
 	raw_spin_unlock(&rq->lock);
 
 	if (unlikely(global_debug_enabled & DEBUG_SYSTRACE) && (cpu_of(rq) == 0)) {

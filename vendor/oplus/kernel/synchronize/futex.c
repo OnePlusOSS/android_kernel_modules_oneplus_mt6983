@@ -20,7 +20,6 @@
 # define FLAGS_SHARED		0x00
 #endif
 
-#define FLAGS_OWNER_SHIFT		(8)
 
 /*
  * Note:
@@ -257,25 +256,115 @@ out_put_waiter:
 	put_task_struct(waiter);
 }
 
+/* using the param flags to pass info to wait_start&wait_end.
+ * flags total 32 bits long:
+ * wait situation:
+ *     bit0 ~ bit7 : Used by kernel.
+ *     bit8 ~ bit29 : Used to pass owner tid.
+ *     bit30 ~ bit31 : Used to pass lock type of JUC/ART.
+ * wake situation:
+ *     N/A.
+ **/
 #define WAKE_MSG (64)
 #define NOTIFY_WAITER_SHIFT (16)
 #define NOTIFY_OWNER_MASK   ((1 << NOTIFY_WAITER_SHIFT)-1)
-static void android_vh_do_futex_handler(void *unused, int cmd,
+#define FLAGS_OWNER_SHIFT		(8)
+extern int thread_info_ctrl;
+
+static int get_lock_stats_grp_idx(struct task_struct *task)
+{
+	struct cgroup_subsys_state *css;
+	int ret = U_GRP_OTHER;
+
+	rcu_read_lock();
+	css = task_css(task, cpu_cgrp_id);
+
+	if (!css) {
+		ret = U_GRP_OTHER;
+	} else if (css->id == CGROUP_TOP_APP) {
+		ret = U_GRP_TOP_APP;
+	} else if (css->id == CGROUP_FOREGROUND) {
+		ret = U_GRP_FRONDGROUD;
+	} else if (css->id == CGROUP_BACKGROUND) {
+		ret = U_GRP_BACKGROUND;
+	} else {
+		ret = U_GRP_OTHER;
+	}
+
+	rcu_read_unlock();
+	return ret;
+}
+
+static inline bool curr_is_ux_thread_nolimit()
+{
+	int state = get_ux_state_type(current);
+
+	return (state == UX_STATE_INHERIT) || (state == UX_STATE_SCHED_ASSIST);
+}
+
+void android_vh_do_futex_handler(void *unused, int cmd,
 		  unsigned int *flags, u32 __user *uaddr2)
 {
 	unsigned long waiter_pid, holder_pid;
-	char wake_msg[WAKE_MSG];
+	struct futex_uinfo info;
+	struct task_struct *leader;
+	int grp_idx;
+	int im_flag;
+	bool do_something;
 
 	switch (cmd) {
 	case FUTEX_WAIT:
 		fallthrough;
 	case FUTEX_WAIT_BITSET:
-		holder_pid = (unsigned long)uaddr2;
-		if (holder_pid > 0 && holder_pid <= PID_MAX_DEFAULT) {
-			*flags += holder_pid << FLAGS_OWNER_SHIFT;
-			cond_trace_printk(locking_opt_debug(LK_DEBUG_FTRACE),
-				"current(%-12s pid=%d tgid=%d) holder_pid=%lu flag=%u\n",
-				current->comm, current->pid, current->tgid, holder_pid, *flags);
+		do_something = (NULL != uaddr2) && (thread_info_ctrl || curr_is_ux_thread_nolimit());
+		if (do_something) {
+			if (copy_from_user(&info, uaddr2, sizeof(info))) {
+				cond_trace_printk(locking_opt_debug(LK_DEBUG_FTRACE),
+						"copy from user failed, uaddr2 = 0x%lx \n",
+						(unsigned long)uaddr2);
+				return;
+			}
+			memset(&info.inform_user, 0, sizeof(info.inform_user));
+			if ((info.cmd & MAGIC_MASK) == MAGIC_NUM) {
+				/* A. owner_tid part */
+				if (info.cmd & OWNER_BIT) {
+					/* owner_tid != 0 indicate that there is an owner to be set. */
+					if (info.owner_tid > 0 && info.owner_tid <= PID_MAX_LIMIT) {
+						*flags += info.owner_tid << FLAGS_OWNER_SHIFT;
+						cond_trace_printk(locking_opt_debug(LK_DEBUG_FTRACE),
+							"owner bit, current=%-12s, pid=%d, tgid=%d, holder_pid=%lu, flag=%u \n",
+							current->comm, current->pid, current->tgid, info.owner_tid, *flags);
+					}
+				}
+
+				/* B. identify thread attribute part */
+				if (info.cmd & THREAD_INFO_BIT) {
+					if (curr_is_ux_thread_nolimit())
+						info.inform_user |= UX_FLAG_BIT;
+
+					leader = current->group_leader;
+					if (leader) {
+						im_flag = oplus_get_im_flag(leader);
+						if (im_flag == IM_FLAG_SYSTEMSERVER_PID)
+							info.inform_user |= SS_FLAG_BIT;
+					}
+
+					grp_idx = get_lock_stats_grp_idx(current);
+					info.inform_user |= grp_idx;
+
+					cond_trace_printk(locking_opt_debug(LK_DEBUG_FTRACE)
+							&& (info.inform_user & (UX_FLAG_BIT | SS_FLAG_BIT)),
+							"thread info bit, comm=%s, pid=%d, ux=%d, ss=%d, grp=%d \n",
+							current->comm, current->pid,
+							!!(info.inform_user & UX_FLAG_BIT),
+							!!(info.inform_user & SS_FLAG_BIT), grp_idx >> GRP_SHIFT);
+
+					if (copy_to_user(uaddr2, &info, sizeof(struct futex_uinfo))) {
+						pr_err("copy to user failed. \n");
+						return;
+					}
+				}
+			}
 		}
 		break;
 	case FUTEX_WAIT_NOTIFY_WAITER:
@@ -284,8 +373,6 @@ static void android_vh_do_futex_handler(void *unused, int cmd,
 		futex_notify_waiter(waiter_pid);
 		break;
 	case FUTEX_WAKE:
-		if ((uaddr2 != NULL) && !copy_from_user(wake_msg, uaddr2, WAKE_MSG - 1))
-			wake_msg[WAKE_MSG-1] = '\0';
 		break;
 	}
 }
@@ -298,7 +385,7 @@ static void android_vh_futex_wait_start_handler(void *unused, unsigned int flags
 	if (!curr_is_ux_thread())
 		return;
 
-	holder = futex_find_task_by_pid(flags >> FLAGS_OWNER_SHIFT);
+	holder = futex_find_task_by_pid((flags & ~(0x3 << LOCK_TYPE_SHIFT)) >> FLAGS_OWNER_SHIFT);
 	if (!holder)
 		return;
 

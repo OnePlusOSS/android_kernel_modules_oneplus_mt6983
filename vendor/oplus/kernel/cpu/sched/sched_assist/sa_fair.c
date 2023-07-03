@@ -31,6 +31,11 @@ DEFINE_PER_CPU(struct task_count_rq, task_lb_count);
 EXPORT_PER_CPU_SYMBOL(task_lb_count);
 #endif
 
+static inline struct task_struct *task_of(struct sched_entity *se)
+{
+	return container_of(se, struct task_struct, se);
+}
+
 int oplus_idle_cpu(int cpu)
 {
 	struct rq *rq = cpu_rq(cpu);
@@ -127,7 +132,7 @@ bool should_ux_task_skip_cpu(struct task_struct *task, unsigned int dst_cpu)
 			return false;
 
 		orq = (struct oplus_rq *) cpu_rq(dst_cpu)->android_oem_data1;
-		if (!list_empty(&orq->ux_list)) {
+		if (!oplus_list_empty(&orq->ux_list)) {
 			reason = 2;
 			goto skip;
 		}
@@ -248,12 +253,16 @@ void oplus_replace_next_task_fair(struct rq *rq, struct task_struct **p, struct 
 	struct oplus_rq *orq = (struct oplus_rq *) rq->android_oem_data1;
 	struct list_head *pos = NULL;
 	struct list_head *n = NULL;
+	unsigned long irqflag;
 
 	if (unlikely(!global_sched_assist_enabled))
 		return;
 
-	if (oplus_list_empty(&orq->ux_list))
+	spin_lock_irqsave(&orq->ux_list_lock, irqflag);
+	if (oplus_list_empty(&orq->ux_list)) {
+		spin_unlock_irqrestore(&orq->ux_list_lock, irqflag);
 		return;
+	}
 
 	list_for_each_safe(pos, n, &orq->ux_list) {
 		struct oplus_task_struct *ots = list_entry(pos, struct oplus_task_struct, ux_entry);
@@ -262,12 +271,15 @@ void oplus_replace_next_task_fair(struct rq *rq, struct task_struct **p, struct 
 		if (unlikely(task_cpu(temp) != rq->cpu)) {
 			list_del_init(&ots->ux_entry);
 			put_task_struct(temp);
+			BUG_ON(1);
 			continue;
 		}
 
 		if (unlikely(!test_task_ux(temp))) {
 			list_del_init(&ots->ux_entry);
 			put_task_struct(temp);
+
+			WARN_ON(1);
 			continue;
 		}
 
@@ -277,12 +289,16 @@ void oplus_replace_next_task_fair(struct rq *rq, struct task_struct **p, struct 
 
 		break;
 	}
+	spin_unlock_irqrestore(&orq->ux_list_lock, irqflag);
 }
 EXPORT_SYMBOL(oplus_replace_next_task_fair);
 
 inline void oplus_check_preempt_wakeup(struct rq *rq, struct task_struct *p, bool *preempt, bool *nopreempt)
 {
 	struct task_struct *curr = rq->curr;
+	struct oplus_rq *orq;
+	unsigned long irqflag;
+
 #ifdef CONFIG_LOCKING_PROTECT
 	struct oplus_task_struct *ots = get_oplus_task_struct(curr);
 #endif
@@ -324,9 +340,12 @@ inline void oplus_check_preempt_wakeup(struct rq *rq, struct task_struct *p, boo
 		*preempt = true;
 
 update:
+	orq = (struct oplus_rq *) rq->android_oem_data1;
+	spin_lock_irqsave(&orq->ux_list_lock, irqflag);
 	/* if curr is ux task, update it's runtime here */
 	if (!oplus_list_empty(oplus_get_ux_entry(curr)))
 		account_ux_runtime(rq, curr);
+	spin_unlock_irqrestore(&orq->ux_list_lock, irqflag);
 }
 EXPORT_SYMBOL(oplus_check_preempt_wakeup);
 
@@ -499,6 +518,26 @@ void android_rvh_check_preempt_tick_handler(void *unused, struct task_struct *p,
 {
 }
 
+void android_rvh_enqueue_entity_handler(void *unused, struct cfs_rq *cfs, struct sched_entity *se)
+{
+	struct task_struct *p = entity_is_task(se) ? task_of(se) : NULL;
+	struct rq *rq = rq_of(cfs);
+
+#ifdef CONFIG_LOCKING_PROTECT
+	enqueue_locking_thread(rq, p);
+#endif
+}
+
+void android_rvh_dequeue_entity_handler(void *unused, struct cfs_rq *cfs, struct sched_entity *se)
+{
+	struct task_struct *p = entity_is_task(se) ? task_of(se) : NULL;
+	struct rq *rq = rq_of(cfs);
+
+#ifdef CONFIG_LOCKING_PROTECT
+	dequeue_locking_thread(rq, p);
+#endif
+}
+
 void android_rvh_pick_next_entity_handler(void *unused, struct cfs_rq *cfs_rq, struct sched_entity *curr,
 			struct sched_entity **se)
 {
@@ -513,6 +552,19 @@ void android_rvh_check_preempt_wakeup_handler(void *unused, struct rq *rq, struc
 {
 	oplus_check_preempt_wakeup(rq, p, preempt, nopreempt);
 }
+
+#ifndef CONFIG_OPLUS_SYSTEM_KERNEL_QCOM
+/*add hook for new task util init*/
+void android_rvh_post_init_entity_util_avg_handler(void *unused, struct sched_entity *se)
+{
+	struct task_struct *task = task_of(se);
+	struct sched_avg *sa = &se->avg;
+
+	/*in douyin scene,decease new task util for low power issue*/
+	if ((!strcmp(task->group_leader->comm, "droid.ugc.aweme")) && (sa->util_avg >= 50))
+		sa->util_avg = 50;
+}
+#endif
 
 void android_rvh_replace_next_task_fair_handler(void *unused,
 		struct rq *rq, struct task_struct **p, struct sched_entity **se, bool *repick, bool simple, struct task_struct *prev)

@@ -7095,11 +7095,16 @@ void p2pFuncSwitchSapChannel(
 			}
 		}
 
+		if (fgIsStaDfs) {
+			DBGLOG(P2P, INFO, "Sta is dfs channel, Not Switch.\n");
+			goto exit;
+		}
+
 		DBGLOG(P2P, INFO,
-			"[SCC][%d][Bss%d] StaCH(%d), SapCH(%d)(dfs: %u)\n",
+			"[SCC][%d][Bss%d] StaCH(%d), SapCH(%d)(dfs: %u), Setting: %d\n",
 			prP2pBssInfo->u4PrivateData,
 			prP2pBssInfo->ucBssIndex,
-			ucStaChannelNum, ucSapChannelNum, fgIsSapDfs);
+			ucStaChannelNum, ucSapChannelNum, fgIsSapDfs, prAdapter->rWifiVar.eChannelSwitchSetting);
 
 		/* Use sta ch info to do sap ch switch */
 		if (p2pFuncRoleToBssIdx(
@@ -7111,17 +7116,25 @@ void p2pFuncSwitchSapChannel(
 			eStaBand, ucStaChannelNum,
 			ucBssIdx, &rRfChnlInfo);
 
-		if (wlanGetSupportNss(prAdapter, prP2pBssInfo->ucBssIndex) > 1)
-			if (fgIsStaDfs) {
-					DBGLOG(P2P, INFO, "Sta is dfs channel, Not Switch.\n");
-			} else {
-					cnmSapChannelSwitchReq(prAdapter,
-						&rRfChnlInfo,
-						prP2pBssInfo->u4PrivateData);
-			}
-		else
-			DBGLOG(P2P, INFO,
-				"Do not change SAP channel if 1 NSS\n");
+		switch (prAdapter->rWifiVar.eChannelSwitchSetting) {
+		case CHANNEL_SWITCH_ALWAYS:
+			cnmSapChannelSwitchReq(prAdapter,
+				&rRfChnlInfo,
+				prP2pBssInfo->u4PrivateData);
+			break;
+		case CHANNEL_SWITCH_IF_NSS1:
+			if (wlanGetSupportNss(prAdapter,
+					prP2pBssInfo->ucBssIndex) > 1)
+				cnmSapChannelSwitchReq(prAdapter,
+					&rRfChnlInfo,
+					prP2pBssInfo->u4PrivateData);
+			else
+				DBGLOG(P2P, INFO,
+					"Do not switch channel if 1 NSS\n");
+			break;
+		default:
+			break;
+		}
 
 	}
 

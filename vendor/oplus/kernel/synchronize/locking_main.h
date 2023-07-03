@@ -12,6 +12,47 @@ do {										\
 		trace_printk(fmt, ##__VA_ARGS__);	\
 } while (0)
 
+
+
+#define MAGIC_NUM       (0xdead0000)
+#define MAGIC_MASK      (0xffff0000)
+#define MAGIC_SHIFT     (16)
+#define OWNER_BIT       (1 << 0)
+#define THREAD_INFO_BIT (1 << 1)
+#define TYPE_BIT        (1 << 2)
+
+#define UX_FLAG_BIT       (1<<0)
+#define SS_FLAG_BIT       (1<<1)
+#define GRP_SHIFT         (2)
+#define GRP_FLAG_MASK     (7 << GRP_SHIFT)
+#define U_GRP_OTHER       (1 << GRP_SHIFT)
+#define U_GRP_BACKGROUND  (2 << GRP_SHIFT)
+#define U_GRP_FRONDGROUD  (3 << GRP_SHIFT)
+#define U_GRP_TOP_APP     (4 << GRP_SHIFT)
+
+#define LOCK_TYPE_SHIFT (30)
+#define INVALID_TYPE    (0)
+#define LOCK_ART        (1)
+#define LOCK_JUC        (2)
+
+struct futex_uinfo {
+	u32 cmd;
+	u32 owner_tid;
+	u32 type;
+	u64 inform_user;
+};
+
+
+enum {
+	CGROUP_RESV = 0,
+	CGROUP_DEFAULT,
+	CGROUP_FOREGROUND,
+	CGROUP_BACKGROUND,
+	CGROUP_TOP_APP,
+
+	CGROUP_NRS,
+};
+
 #define LK_MUTEX_ENABLE (1 << 0)
 #define LK_RWSEM_ENABLE (1 << 1)
 #define LK_FUTEX_ENABLE (1 << 2)

@@ -54,6 +54,7 @@ oplus_chg-y += oplus_pps_ops_manager.o
 oplus_chg-y += adapter_ic/oplus_stm.o
 oplus_chg-y += charger_ic/oplus_short_ic.o
 oplus_chg-y += gauge_ic/oplus_bq27541.o
+oplus_chg-y += gauge_ic/oplus_sh366002.o
 ifeq ($(CONFIG_OPLUS_SM6375R_CHARGER),y)
 oplus_chg-y += gauge_ic/oplus_sm5602.o
 endif

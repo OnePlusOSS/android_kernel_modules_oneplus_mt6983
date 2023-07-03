@@ -392,9 +392,9 @@ static void set_sched_boost(struct task_struct *p, bool enable)
 {
 	int ux_state = oplus_get_ux_state(p);
 	if (enable) {
-		oplus_set_ux_state(p, (ux_state | SA_TYPE_LIGHT));
+		oplus_set_ux_state_lock(p, (ux_state | UX_PRIORITY_AUDIO | SA_TYPE_LIGHT), true);
 	} else {
-		oplus_set_ux_state(p, (ux_state & ~SA_TYPE_LIGHT));
+		oplus_set_ux_state_lock(p, (ux_state & ~(SCHED_ASSIST_UX_PRIORITY_MASK | SA_TYPE_LIGHT)), true);
 	}
 #if IS_ENABLED(CONFIG_SCHED_WALT)
 	sched_set_wake_up_idle(p, enable);

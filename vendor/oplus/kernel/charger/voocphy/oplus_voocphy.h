@@ -599,8 +599,6 @@ struct oplus_voocphy_manager {
 	unsigned int vooc_cool_down_num;
 	unsigned int current_default;
 	unsigned int current_expect;
-	unsigned int current_bcc_max;
-	unsigned int current_bcc_min;
 	unsigned int current_bcc_ext;
 	unsigned int current_max;
 	unsigned int current_spec;

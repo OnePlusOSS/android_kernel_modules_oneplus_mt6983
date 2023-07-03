@@ -15,12 +15,6 @@ EXPORT_SYMBOL(sysctl_slide_boost_enabled);
 EXPORT_SYMBOL(sysctl_input_boost_enabled);
 EXPORT_SYMBOL(sysctl_frame_boost_debug);
 
-unsigned int ed_task_boost_mid_duration_scale;
-EXPORT_SYMBOL_GPL(ed_task_boost_mid_duration_scale);
-unsigned int ed_task_boost_max_duration_scale;
-EXPORT_SYMBOL_GPL(ed_task_boost_max_duration_scale);
-unsigned int ed_task_boost_timeout_duration_scale;
-EXPORT_SYMBOL_GPL(ed_task_boost_timeout_duration_scale);
 unsigned int ed_task_boost_mid_util;
 EXPORT_SYMBOL_GPL(ed_task_boost_mid_util);
 unsigned int ed_task_boost_max_util;
@@ -94,54 +88,6 @@ out:
 	return result;
 }
 
-static int ed_task_boost_mid_duration_scale_handler(struct ctl_table *table, int write, void __user *buffer,
-	size_t *lenp, loff_t *ppos)
-{
-	int result;
-
-	result = proc_dointvec(table, write, buffer, lenp, ppos);
-
-	if (!write)
-		goto out;
-
-	update_ed_task_boost_mid_duration(ed_task_boost_mid_duration_scale);
-
-out:
-	return result;
-}
-
-static int ed_task_boost_max_duration_scale_handler(struct ctl_table *table, int write, void __user *buffer,
-	size_t *lenp, loff_t *ppos)
-{
-	int result;
-
-	result = proc_dointvec(table, write, buffer, lenp, ppos);
-
-	if (!write)
-		goto out;
-
-	update_ed_task_boost_max_duration(ed_task_boost_max_duration_scale);
-
-out:
-	return result;
-}
-
-static int ed_task_boost_timeout_duration_scale_handler(struct ctl_table *table, int write, void __user *buffer,
-	size_t *lenp, loff_t *ppos)
-{
-	int result;
-
-	result = proc_dointvec(table, write, buffer, lenp, ppos);
-
-	if (!write)
-		goto out;
-
-	update_ed_task_boost_timeout_duration(ed_task_boost_timeout_duration_scale);
-
-out:
-	return result;
-}
-
 struct ctl_table frame_boost_table[] = {
 	{
 		.procname	= "frame_boost_enabled",
@@ -171,41 +117,6 @@ struct ctl_table frame_boost_table[] = {
 		.mode		= 0666,
 		.proc_handler	= input_boost_ctrl_handler,
 	},
-	{
-		.procname       = "ed_task_boost_mid_duration_scale",
-		.data           = &ed_task_boost_mid_duration_scale,
-		.maxlen         = sizeof(unsigned int),
-		.mode           = 0666,
-		.proc_handler   = ed_task_boost_mid_duration_scale_handler,
-	},
-	{
-		.procname	= "ed_task_boost_max_duration_scale",
-		.data		= &ed_task_boost_max_duration_scale,
-		.maxlen		= sizeof(unsigned int),
-		.mode		= 0666,
-		.proc_handler	= ed_task_boost_max_duration_scale_handler,
-	},
-	{
-		.procname       = "ed_task_boost_timeout_duration_scale",
-		.data           = &ed_task_boost_timeout_duration_scale,
-		.maxlen         = sizeof(unsigned int),
-		.mode           = 0666,
-		.proc_handler   = ed_task_boost_timeout_duration_scale_handler,
-	},
-	{
-		.procname       = "ed_task_boost_mid_util",
-		.data           = &ed_task_boost_mid_util,
-		.maxlen         = sizeof(unsigned int),
-		.mode           = 0666,
-		.proc_handler   = proc_dointvec,
-	},
-	{
-		.procname	= "ed_task_boost_max_util",
-		.data		= &ed_task_boost_max_util,
-		.maxlen		= sizeof(unsigned int),
-		.mode		= 0666,
-		.proc_handler	= proc_dointvec,
-	},
 	{ }
 };
 
@@ -226,11 +137,6 @@ void fbg_sysctl_init(void)
 	sysctl_frame_boost_debug = 0;
 	sysctl_slide_boost_enabled = 0;
 	sysctl_input_boost_enabled = 0;
-	ed_task_boost_mid_duration_scale = 60; /* default 0.6*window */
-	ed_task_boost_max_duration_scale = 80; /* default 0.8*window */
-	ed_task_boost_timeout_duration_scale = 200; /* default 2*window */
-	ed_task_boost_mid_util = 600; /* default mid util */
-	ed_task_boost_max_util = 900; /* default max util */
 
 	ib_last_time = ktime_get();
 	intput_boost_duration = INPUT_BOOST_DURATION;

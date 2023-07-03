@@ -412,6 +412,7 @@ void cnmOpmodeEventHandler(
 u_int8_t cnmP2pIsActive(IN struct ADAPTER *prAdapter);
 
 struct BSS_INFO *cnmGetP2pBssInfo(IN struct ADAPTER *prAdapter);
+struct BSS_INFO *cnmGetSapGoBssInfo(IN struct ADAPTER *prAdapter);
 
 bool cnmIsMccMode(IN struct ADAPTER *prAdapter);
 

@@ -14,9 +14,31 @@
 #include "frame_boost.h"
 #include "frame_debug.h"
 #include "cluster_boost.h"
+#include "frame_group.h"
 
 static struct proc_dir_entry *frame_boost_proc;
 int stune_boost[BOOST_MAX_TYPE];
+
+static void fbg_update_ed_task_info(unsigned int type)
+{
+	switch (type) {
+	case BOOST_ED_TASK_MID_DURATION:
+		update_ed_task_boost_mid_duration(stune_boost[BOOST_ED_TASK_MID_DURATION]);
+		break;
+	case BOOST_ED_TASK_MID_UTIL:
+		ed_task_boost_mid_util = stune_boost[BOOST_ED_TASK_MID_UTIL];
+		break;
+	case BOOST_ED_TASK_MAX_DURATION:
+		update_ed_task_boost_max_duration(stune_boost[BOOST_ED_TASK_MAX_DURATION]);
+		break;
+	case BOOST_ED_TASK_MAX_UTIL:
+		ed_task_boost_max_util = stune_boost[BOOST_ED_TASK_MAX_UTIL];
+		break;
+	case BOOST_ED_TASK_TIME_OUT_DURATION:
+		update_ed_task_boost_timeout_duration(stune_boost[BOOST_ED_TASK_TIME_OUT_DURATION]);
+		break;
+	}
+}
 
 static void crtl_update_refresh_rate(int pid, unsigned int vsyncNs)
 {
@@ -271,6 +293,31 @@ static long ofb_sys_ioctl(struct file *file, unsigned int cmd, unsigned long arg
 		if ((stune_data.vutil_margin >= -16) && (stune_data.vutil_margin <= 16))
 			set_frame_margin(stune_data.vutil_margin);
 
+		if (stune_data.ed_task_boost_mid_duration >= 0) {
+			stune_boost[BOOST_ED_TASK_MID_DURATION] = stune_data.ed_task_boost_mid_duration;
+			fbg_update_ed_task_info(BOOST_ED_TASK_MID_DURATION);
+		}
+
+		if ((stune_data.ed_task_boost_mid_util >= 0) && (stune_data.ed_task_boost_mid_util <= 1024)) {
+			stune_boost[BOOST_ED_TASK_MID_UTIL] = stune_data.ed_task_boost_mid_util;
+			ed_task_boost_mid_util = stune_data.ed_task_boost_mid_util;
+		}
+
+		if (stune_data.ed_task_boost_max_duration >= 0) {
+			stune_boost[BOOST_ED_TASK_MAX_DURATION] = stune_data.ed_task_boost_max_duration;
+			fbg_update_ed_task_info(BOOST_ED_TASK_MAX_DURATION);
+		}
+
+		if ((stune_data.ed_task_boost_max_util >= 0) && (stune_data.ed_task_boost_max_util <= 1024)) {
+			stune_boost[BOOST_ED_TASK_MAX_UTIL] = stune_data.ed_task_boost_max_util;
+			ed_task_boost_max_util = stune_data.ed_task_boost_max_util;
+		}
+
+		if (stune_data.ed_task_boost_timeout_duration >= 0) {
+			stune_boost[BOOST_ED_TASK_TIME_OUT_DURATION] = stune_data.ed_task_boost_timeout_duration;
+			fbg_update_ed_task_info(BOOST_ED_TASK_TIME_OUT_DURATION);
+		}
+
 		break;
 	case CMD_ID_BOOST_STUNE_GPU: {
 		bool boost_allow = true;
@@ -372,6 +419,10 @@ static ssize_t proc_stune_boost_write(struct file *file, const char __user *buf,
 			    stune_boost[i] = max(0, min(boost_val, 240));
 			} else if ((i == BOOST_UTIL_MIN_THRESHOLD) || (i == BOOST_UTIL_MIN_OBTAIN_VIEW) || (i == BOOST_UTIL_MIN_TIMEOUT)) {
 			    stune_boost[i] = max(0, min(boost_val, 1024));
+			} else if ((i == BOOST_ED_TASK_MID_DURATION) || (i == BOOST_ED_TASK_MID_UTIL) || (i == BOOST_ED_TASK_MAX_DURATION) ||
+				(i == BOOST_ED_TASK_MAX_UTIL) || (i == BOOST_ED_TASK_TIME_OUT_DURATION)) {
+				stune_boost[i] = boost_val;
+				fbg_update_ed_task_info(i);
 			} else {
 			    stune_boost[i] = min(boost_val, 100);
 			}

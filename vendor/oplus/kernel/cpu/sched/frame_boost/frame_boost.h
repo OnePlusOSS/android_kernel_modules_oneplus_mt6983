@@ -28,6 +28,11 @@ enum STUNE_BOOST_TYPE {
 	BOOST_UTIL_MIN_TIMEOUT,
 	BOOST_SF_MIGR,
 	BOOST_SF_FREQ,
+	BOOST_ED_TASK_MID_DURATION,
+	BOOST_ED_TASK_MID_UTIL,
+	BOOST_ED_TASK_MAX_DURATION,
+	BOOST_ED_TASK_MAX_UTIL,
+	BOOST_ED_TASK_TIME_OUT_DURATION,
 	BOOST_MAX_TYPE,
 };
 
@@ -41,9 +46,7 @@ extern int sysctl_slide_boost_enabled;
 extern int sysctl_input_boost_enabled;
 extern int stune_boost[BOOST_MAX_TYPE];
 extern struct fbg_vendor_hook fbg_hook;
-extern unsigned int ed_task_boost_mid_duration_scale;
-extern unsigned int ed_task_boost_max_duration_scale;
-extern unsigned int ed_task_boost_timeout_duration_scale;
 
+void fbg_list_entry_lock_init(void);
 void fbg_sysctl_init(void);
 #endif /* _FRAME_BOOST_H_ */

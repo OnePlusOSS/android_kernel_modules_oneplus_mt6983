@@ -10539,6 +10539,9 @@ int priv_driver_set_ap_nss(IN struct net_device *prNetDev,
 {
 	struct GLUE_INFO *prGlueInfo = NULL;
 	struct BSS_INFO *prBssInfo = NULL;
+	struct ADAPTER *prAdapter = NULL;
+	struct P2P_ROLE_FSM_INFO *prP2pRoleFsmInfo =
+		(struct P2P_ROLE_FSM_INFO *) NULL;
 	int32_t i4BytesWritten = 0;
 	int32_t i4Argc = 0;
 	int8_t *apcArgv[WLAN_CFG_ARGV_MAX] = {0};
@@ -10553,6 +10556,12 @@ int priv_driver_set_ap_nss(IN struct net_device *prNetDev,
 
 	prGlueInfo = *((struct GLUE_INFO **) netdev_priv(prNetDev));
 
+	if (!prGlueInfo)
+		return -1;
+	prAdapter = prGlueInfo->prAdapter;
+	if (!prAdapter)
+		return -1;
+
 	DBGLOG(REQ, ERROR, "command is %s\n", pcCommand);
 	wlanCfgParseArgument(pcCommand, &i4Argc, apcArgv);
 	DBGLOG(REQ, ERROR, "i4Argc is %d\n", i4Argc);
@@ -10563,6 +10572,14 @@ int priv_driver_set_ap_nss(IN struct net_device *prNetDev,
 
 	prBssInfo = prGlueInfo->prAdapter->aprBssInfo[ucBssIndex];
 	if (!prBssInfo)
+		return -EFAULT;
+
+	prP2pRoleFsmInfo =
+		P2P_ROLE_INDEX_2_ROLE_FSM_INFO(prAdapter,
+			prBssInfo->u4PrivateData);
+
+	if (prP2pRoleFsmInfo &&
+		prP2pRoleFsmInfo->eCurrentState != P2P_ROLE_STATE_IDLE)
 		return -EFAULT;
 
 	if (i4Argc == 1) {

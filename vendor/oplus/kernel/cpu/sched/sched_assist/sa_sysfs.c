@@ -186,7 +186,7 @@ static ssize_t proc_ux_task_write(struct file *file, const char __user *buf,
 {
 	char buffer[MAX_SET];
 	char *str, *token;
-	char opt_str[OPT_STR_MAX][8] = {"0", "0", "0"};
+	char opt_str[OPT_STR_MAX][13] = {"0", "0", "0"};
 	int cnt = 0;
 	int pid = 0;
 	int ux_state = 0, ux_orig = 0;
@@ -253,13 +253,16 @@ static ssize_t proc_ux_task_write(struct file *file, const char __user *buf,
 						ux_orig &= SA_TYPE_ANIMATOR;
 					else
 						ux_orig = 0;
-					oplus_set_ux_state(ux_task, ux_orig);
+					oplus_set_ux_state_lock(ux_task, ux_orig, true);
 				} else if (ux_state & SA_OPT_SET) { /* set target ux type and clear set opt */
-					ux_orig |= ux_state & (~SA_OPT_SET);
-					oplus_set_ux_state(ux_task, ux_orig);
+					if (ux_state & SA_OPT_SET_PRIORITY) {
+						ux_orig &= ~(SCHED_ASSIST_UX_PRIORITY_MASK);
+					}
+					ux_orig |= ux_state & ~(SA_OPT_SET|SA_OPT_SET_PRIORITY);
+					oplus_set_ux_state_lock(ux_task, ux_orig, true);
 				} else if (ux_orig & ux_state) { /* reset target ux type */
 					ux_orig &= ~ux_state;
-					oplus_set_ux_state(ux_task, ux_orig);
+					oplus_set_ux_state_lock(ux_task, ux_orig, true);
 				}
 				put_task_struct(ux_task);
 			}
@@ -280,7 +283,7 @@ static ssize_t proc_ux_task_read(struct file *file, char __user *buf,
 	task = find_task_by_vpid(global_ux_task_pid);
 	if (task) {
 		get_task_struct(task);
-		len = snprintf(buffer, sizeof(buffer), "comm=%s pid=%d tgid=%d ux_state=%d inherit=%lld(bi:%d rw:%d mu:%d) im_flag=%d\n",
+		len = snprintf(buffer, sizeof(buffer), "comm=%s pid=%d tgid=%d ux_state=0x%08x inherit=%lld(bi:%d rw:%d mu:%d) im_flag=%d\n",
 			task->comm, task->pid, task->tgid, oplus_get_ux_state(task), oplus_get_inherit_ux(task),
 			test_inherit_ux(task, INHERIT_UX_BINDER), test_inherit_ux(task, INHERIT_UX_RWSEM), test_inherit_ux(task, INHERIT_UX_MUTEX),
 			oplus_get_im_flag(task));
@@ -308,8 +311,10 @@ static int im_flag_set_handle(struct task_struct *task, int im_flag)
 	ots->im_flag = im_flag;
 
 	switch (ots->im_flag) {
-	case IM_FLAG_LAUNCHER_NON_UX_RENDER:
-		ots->ux_state |= SA_TYPE_HEAVY;
+	case IM_FLAG_LAUNCHER_NON_UX_RENDER: {
+		int ux_state = oplus_get_ux_state(task);
+		oplus_set_ux_state_lock(task, ux_state | SA_TYPE_HEAVY, true);
+		}
 		break;
 	default:
 		break;
@@ -482,13 +487,18 @@ static ssize_t proc_im_flag_app_write(struct file *file, const char __user *buf,
 		if (pid > 0 && pid <= PID_MAX_DEFAULT) {
 			rcu_read_lock();
 			task = find_task_by_vpid(pid);
-			if (task && can_access_im_flag_app(task)) {
+			if (task) {
 				get_task_struct(task);
-				im_flag_set_handle(task, im_flag);
-				put_task_struct(task);
-			} else
-				ux_debug("Can not find task with pid=%d", pid);
+			}
 			rcu_read_unlock();
+
+			if (task) {
+				if (can_access_im_flag_app(task))
+					im_flag_set_handle(task, im_flag);
+				put_task_struct(task);
+			} else {
+				ux_debug("Can not find task with pid=%d", pid);
+			}
 		}
 	}
 

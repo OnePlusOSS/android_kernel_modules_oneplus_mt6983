@@ -325,7 +325,7 @@ typedef enum
 } SCC_GAUGE_TYPE;
 
 #define BCC_PARMS_COUNT 19
-#define BCC_PARMS_COUNT_LEN 69
+#define BCC_PARMS_COUNT_LEN (BCC_PARMS_COUNT * sizeof(int))
 #define ZY0602_KEY_INDEX	0X02
 struct cmd_address {
 /*      bq27411 standard cmds     */
@@ -534,6 +534,7 @@ struct chip_bq27541 {
 	int bq28z610_device_chem;
 	int gauge_num;
 	struct mutex chip_mutex;
+	struct mutex bq28z610_alt_manufacturer_access;
 	struct bq27541_authenticate_data *authenticate_data;
 	struct file_operations *authenticate_ops;
 	struct oplus_gauge_chip	*oplus_gauge;
@@ -551,6 +552,8 @@ struct chip_bq27541 {
 	int fg_soft_version;
 	bool b_soft_reset_for_zy;
 	atomic_t gauge_i2c_status;
+	int dump_sh366002_block;
+	unsigned long log_last_update_tick;
 };
 
 extern bool oplus_gauge_ic_chip_is_null(void);

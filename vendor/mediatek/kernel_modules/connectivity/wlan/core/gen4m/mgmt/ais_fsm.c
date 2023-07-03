@@ -2327,8 +2327,13 @@ void aisFsmSteps(IN struct ADAPTER *prAdapter,
 			    prAisBssInfo->ucBssIndex;
 			prMsgChReq->ucTokenID = ++prAisFsmInfo->ucSeqNumOfChReq;
 			prMsgChReq->eReqType = CH_REQ_TYPE_JOIN;
-			prMsgChReq->u4MaxInterval =
-					AIS_JOIN_CH_REQUEST_INTERVAL;
+			if (!cnmGetSapGoBssInfo(prAdapter)) {
+                            prMsgChReq->u4MaxInterval =
+                                AIS_JOIN_CH_REQUEST_INTERVAL;
+                        } else {
+                            prMsgChReq->u4MaxInterval =
+                                AIS_JOIN_CNM_SAPGO_INTERVAL;
+                        }
 			prMsgChReq->ucPrimaryChannel =
 			    prAisFsmInfo->prTargetBssDesc->ucChannelNum;
 			prMsgChReq->eRfSco =

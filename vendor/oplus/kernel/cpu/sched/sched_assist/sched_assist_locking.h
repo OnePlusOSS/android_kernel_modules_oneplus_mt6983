@@ -23,8 +23,9 @@ void enqueue_locking_thread(struct rq *rq, struct task_struct *p);
 bool task_inlock(struct oplus_task_struct *ots);
 int sched_assist_locking_init(void);
 void sched_assist_locking_exit(void);
+void locking_state_systrace_c(unsigned int cpu, struct task_struct *p);
+bool task_skip_protect(struct task_struct *p);
 extern unsigned int locking_wakeup_preepmt_enable;
-extern bool task_skip_protect(struct task_struct *p);
 extern bool locking_protect_disable;
 
 #endif /* _SCHED_ASSIST_LOCKING_H_ */

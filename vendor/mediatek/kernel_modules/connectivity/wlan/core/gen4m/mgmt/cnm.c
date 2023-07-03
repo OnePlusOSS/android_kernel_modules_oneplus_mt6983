@@ -4799,6 +4799,25 @@ struct BSS_INFO *cnmGetP2pBssInfo(IN struct ADAPTER *prAdapter)
 	return NULL;
 }
 
+struct BSS_INFO *cnmGetSapGoBssInfo(IN struct ADAPTER *prAdapter)
+{
+	struct BSS_INFO *prBssInfo;
+	uint8_t i;
+
+	if (!prAdapter)
+		return NULL;
+
+	for (i = 0; i < prAdapter->ucHwBssIdNum; i++) {
+		prBssInfo = prAdapter->aprBssInfo[i];
+
+		if (prBssInfo &&
+		    IS_BSS_APGO(prBssInfo) &&
+		    IS_BSS_ALIVE(prAdapter, prBssInfo))
+			return prBssInfo;
+	}
+
+        return NULL;
+}
 #if (CFG_SUPPORT_POWER_THROTTLING == 1 && CFG_SUPPORT_CNM_POWER_CTRL == 1)
 /*----------------------------------------------------------------------------*/
 /*!

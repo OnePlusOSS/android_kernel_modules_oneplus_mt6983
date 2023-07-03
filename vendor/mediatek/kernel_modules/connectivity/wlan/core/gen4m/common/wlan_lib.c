@@ -8398,6 +8398,10 @@ void wlanInitFeatureOption(IN struct ADAPTER *prAdapter)
 	prWifiVar->ucBTMOffloadEnabled = (uint8_t) wlanCfgGetUint32(
 		prAdapter, "BTMOffloadEnable", FEATURE_ENABLED);
 #endif
+
+	prWifiVar->eChannelSwitchSetting = (uint8_t) wlanCfgGetUint32(
+			prAdapter, "ChannelSwitchSetting",
+			CHANNEL_SWITCH_IF_NSS1);
 }
 
 void wlanCfgSetSwCtrl(IN struct ADAPTER *prAdapter)

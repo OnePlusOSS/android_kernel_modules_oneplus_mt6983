@@ -1307,6 +1307,11 @@ struct RateInfo {
 	uint32_t u4Rate;
 };
 
+enum ENUM_CHANNEL_SWITCH_SETTING {
+	CHANNEL_SWITCH_ALWAYS = 0,
+	CHANNEL_SWITCH_IF_NSS1
+};
+
 /*******************************************************************************
  *                            P U B L I C   D A T A
  *******************************************************************************

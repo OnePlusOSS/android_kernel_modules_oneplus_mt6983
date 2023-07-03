@@ -1365,6 +1365,8 @@ struct WIFI_VAR {
 	uint8_t ucConsecutivePerReqNum;
 	uint8_t ucBTMOffloadEnabled;
 #endif
+
+    enum ENUM_CHANNEL_SWITCH_SETTING eChannelSwitchSetting;
 };
 
 /* cnm_timer module */

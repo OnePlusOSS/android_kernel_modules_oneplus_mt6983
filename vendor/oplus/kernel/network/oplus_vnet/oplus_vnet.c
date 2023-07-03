@@ -202,6 +202,7 @@ static int check_is_local_skb(struct sk_buff *skb, int dir, u32 peerip)
 {
 	struct iphdr *iph = NULL;
 	struct ipv6hdr *ipv6h = NULL;
+	u32 mask = 0x00FFFFFF;
 	/* struct udphdr *udph = NULL; */
 
 	if (skb->protocol == htons(ETH_P_IP)) {
@@ -210,11 +211,11 @@ static int check_is_local_skb(struct sk_buff *skb, int dir, u32 peerip)
 			return 1;
 		}
 		if (dir) {
-			if ((iph->daddr == peerip) || (iph->daddr == 0xffffffff)) {
+			if (((iph->daddr & mask) == (peerip & mask)) || (iph->daddr == 0xffffffff)) {
 				return 1;
 			}
 		} else {
-			if ((iph->saddr == peerip) || (iph->saddr == 0) || (iph->daddr == 0xffffffff)) {
+			if (((iph->saddr & mask) == (peerip & mask)) || (iph->saddr == 0) || (iph->daddr == 0xffffffff)) {
 				return 1;
 			}
 		}
@@ -297,8 +298,16 @@ static netdev_tx_t ovnet_xmit(struct sk_buff *skb, struct net_device *dev)
 	int ret = 0;
 	struct ovnet_dev_private *private = netdev_priv(dev);
 	struct net_device *org_dev = NULL;
+	struct iphdr *iph = NULL;
+	int is_local_ip = 0;
+	u32 xmit_dst_ip = 0;
 
 	logi("ovnet_xmit start! %d", dev->ifindex);
+	if (skb->protocol != htons(ETH_P_IP)) {
+		logi("ovnet_xmit start! protocol not support %d", skb->protocol);
+		return NETDEV_TX_OK;
+	}
+	iph = ip_hdr(skb);
 
 	org_dev = private->bind_dev;
 	if (!org_dev) {
@@ -307,14 +316,19 @@ static netdev_tx_t ovnet_xmit(struct sk_buff *skb, struct net_device *dev)
 		logi("cannot find out device! %d", dev->ifindex);
 		return NETDEV_TX_OK;
 	}
-	if (check_is_local_skb(skb, 1, private->peer_ip)) {
+
+	is_local_ip = check_is_local_skb(skb, 1, private->peer_ip);
+	if (is_local_ip) {
 		logi("warn: local packet send to this device");
+		xmit_dst_ip = iph->daddr;
 	} else {
 		dev->stats.tx_packets += 1;
 		dev->stats.tx_bytes += skb->len;
+		xmit_dst_ip = private->peer_ip;
 	}
+
 	skb->dev = org_dev;
-	ret = neigh_xmit(NEIGH_ARP_TABLE, skb->dev, &private->peer_ip, skb);
+	ret = neigh_xmit(NEIGH_ARP_TABLE, skb->dev, &xmit_dst_ip, skb);
 	logi("ovnet_xmit skb %s return %d", skb->dev->name, ret);
 
 	return NETDEV_TX_OK;

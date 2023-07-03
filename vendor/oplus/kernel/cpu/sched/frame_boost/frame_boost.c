@@ -20,6 +20,7 @@ static int __init oplus_frame_boost_init(void)
 {
 	int ret = 0;
 
+	fbg_list_entry_lock_init();
 	fbg_sysctl_init();
 
 	ret = frame_ioctl_init();

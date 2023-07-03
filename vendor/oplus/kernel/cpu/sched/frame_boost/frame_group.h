@@ -42,12 +42,12 @@ struct oplus_sched_cluster {
 };
 
 extern unsigned int ed_task_boost_type;
+extern unsigned int ed_task_boost_mid_util;
+extern unsigned int ed_task_boost_max_util;
 extern int num_sched_clusters;
 /* FIXME */
 #define MAX_CLS_NUM 5
 extern struct oplus_sched_cluster *fb_cluster[MAX_CLS_NUM];
-extern unsigned int ed_task_boost_mid_util;
-extern unsigned int ed_task_boost_max_util;
 
 bool frame_boost_enabled(void);
 bool is_fbg_task(struct task_struct *p);

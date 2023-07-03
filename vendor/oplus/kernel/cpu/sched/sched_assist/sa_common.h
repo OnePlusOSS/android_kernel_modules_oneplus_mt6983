@@ -28,9 +28,10 @@
 #define UX_DEPTH_MAX		5
 
 /* define for debug */
-#define DEBUG_SYSTRACE (1 << 0)
-#define DEBUG_FTRACE   (1 << 1)
-#define DEBUG_FBG	(1 << 2)
+#define DEBUG_SYSTRACE  (1 << 0)
+#define DEBUG_FTRACE    (1 << 1)
+#define DEBUG_FBG       (1 << 2)
+#define DEBUG_FTRACE_LK (1 << 3)
 
 /* define for sched assist feature */
 #define FEATURE_COMMON (1 << 0)
@@ -47,8 +48,14 @@
 #define SA_TYPE_ONCE				(1 << 4) /* clear ux type when dequeue */
 #define SA_OPT_SET					(1 << 7)
 #define SA_TYPE_INHERIT				(1 << 8)
+#define SA_OPT_SET_PRIORITY			(1 << 9)
 
 #define SCHED_ASSIST_UX_MASK		(0xFF)
+#define SCHED_ASSIST_UX_PRIORITY_MASK	(0xFF000000)
+#define SCHED_ASSIST_UX_PRIORITY_SHIFT	24
+
+#define UX_PRIORITY_TOP_APP		0x0A000000
+#define UX_PRIORITY_AUDIO		0x0A000000
 
 /* define for sched assist scene type, keep same as the define in java file */
 #define SA_SCENE_OPT_CLEAR			(0)
@@ -101,6 +108,7 @@ enum IM_FLAG_TYPE {
 	IM_FLAG_LAUNCHER_NON_UX_RENDER,
 	IM_FLAG_SS_LOCK_OWNER,
 	IM_FLAG_FORBID_SET_CPU_AFFINITY, /* forbid setting cpu affinity from app */
+	IM_FLAG_SYSTEMSERVER_PID,
 	MAX_IM_FLAG_TYPE,
 };
 
@@ -148,6 +156,9 @@ struct oplus_task_struct {
 	u64 total_exec;
 	int ux_state;
 	int ux_depth;
+#if IS_ENABLED(CONFIG_OPLUS_FEATURE_ABNORMAL_FLAG)
+	int abnormal_flag;
+#endif
 	int im_flag;
 	int tpd; /* task placement decision */
 	/* CONFIG_OPLUS_FEATURE_SCHED_SPREAD */
@@ -185,6 +196,7 @@ struct oplus_task_struct {
 struct oplus_rq {
 	/* CONFIG_OPLUS_FEATURE_SCHED_ASSIST */
 	struct list_head ux_list;
+	spinlock_t ux_list_lock;
 #ifdef CONFIG_LOCKING_PROTECT
 	struct list_head locking_thread_list;
 	int rq_locking_task;
@@ -225,7 +237,7 @@ static inline bool is_optimized_audio_thread(struct task_struct *t)
 	if (oplus_get_im_flag(t) == IM_FLAG_AUDIO)
 		return true;
 
-        return false;
+	return false;
 }
 
 static inline void oplus_set_im_flag(struct task_struct *t, int im_flag)
@@ -242,12 +254,8 @@ static inline int oplus_get_ux_state(struct task_struct *t)
 	return ots->ux_state;
 }
 
-static inline void oplus_set_ux_state(struct task_struct *t, int ux_state)
-{
-	struct oplus_task_struct *ots = get_oplus_task_struct(t);
-
-	ots->ux_state = ux_state;
-}
+void oplus_set_ux_state(struct task_struct *t, int ux_state);
+void oplus_set_ux_state_lock(struct task_struct *t, int ux_state, bool need_lock_rq);
 
 static inline s64 oplus_get_inherit_ux(struct task_struct *t)
 {
@@ -331,6 +339,9 @@ static inline void init_task_ux_info(struct task_struct *t)
 	ots->enqueue_time = 0;
 	ots->inherit_ux_start = 0;
 	ots->tpd = 0;
+#if IS_ENABLED(CONFIG_OPLUS_FEATURE_ABNORMAL_FLAG)
+	ots->abnormal_flag = 0;
+#endif
 #ifdef CONFIG_OPLUS_FEATURE_SCHED_SPREAD
 	ots->lb_state = 0;
 	ots->ld_flag = 0;
@@ -404,6 +415,7 @@ static inline u32 task_wts_sum(struct task_struct *tsk)
 	return wts->sum;
 }
 #endif
+noinline int tracing_mark_write(const char *buf);
 void hwbinder_systrace_c(unsigned int cpu, int flag);
 void sched_assist_init_oplus_rq(void);
 void queue_ux_thread(struct rq *rq, struct task_struct *p, int enqueue);

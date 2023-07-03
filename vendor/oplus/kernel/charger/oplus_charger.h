@@ -382,6 +382,9 @@ static inline void getnstimeofday(struct timespec *ts)
 
 #define OPLUS_PDQC_5VTO9V 1
 #define OPLUS_PDQC_9VTO5V 2
+#define chg_info(fmt, ...)                                                     \
+	printk(KERN_INFO "[OPLUS_CHG][%s]" fmt, __func__, ##__VA_ARGS__)
+
 #define chg_debug(fmt, ...)                                                    \
 	printk(KERN_NOTICE "[OPLUS_CHG][%s]" fmt, __func__, ##__VA_ARGS__)
 
@@ -436,6 +439,12 @@ typedef enum {
 	CHG_STOP_VOTER__VBAT_OVP = (1 << 5),
 	CHG_STOP_VOTER_BAD_VOL_DIFF = (1 << 6),
 } OPLUS_CHG_STOP_VOTER;
+
+typedef enum {
+	CHG_CYCLE_VOTER__NONE		= 0,
+	CHG_CYCLE_VOTER__ENGINEER	= (1 << 0),
+	CHG_CYCLE_VOTER__USER		= (1 << 1),
+}OPLUS_CHG_CYCLE_VOTER;
 
 typedef enum {
 	CHARGER_STATUS__GOOD,
@@ -925,7 +934,6 @@ struct oplus_chg_full_data {
 	int clear_full_check_count;
 };
 
-struct reserve_soc_data {
 #define SMOOTH_SOC_MAX_FIFO_LEN	4
 #define SMOOTH_SOC_MIN_FIFO_LEN	1
 #define RESERVE_SOC_MIN		1
@@ -933,20 +941,16 @@ struct reserve_soc_data {
 #define RESERVE_SOC_MAX		5
 #define RESERVE_SOC_OFF		0
 #define OPLUS_FULL_SOC		100
-#define OPLUS_FULL_CNT		36 /* 180S/5 */
-
+#define SOC_JUMP_RANGE_VAL	1
+struct reserve_soc_data {
 	bool smooth_switch_v2;
-	int reserve_chg_soc;
-	int reserve_dis_soc;
+	bool is_soc_jump_range;
 	int reserve_soc;
-	int rus_chg_soc;
-	int rus_dis_soc;
+	int rus_reserve_soc;
 
 	int smooth_soc_fifo[SMOOTH_SOC_MAX_FIFO_LEN];
 	int smooth_soc_index;
 	int smooth_soc_avg_cnt;
-	int soc_jump_array[RESERVE_SOC_MAX];
-	bool is_soc_jump_range;
 };
 
 typedef enum {
@@ -1065,6 +1069,7 @@ struct oplus_chg_chip {
 	int smooth_soc;
 	int smooth_switch;
 	int soc_load;
+	int shutdown_uisoc;
 	int ui_soc_decimal;
 	int ui_soc_integer;
 	int last_decimal_ui_soc;
@@ -1403,6 +1408,7 @@ struct oplus_chg_chip {
 	int usb_present_vbus0_count;
 
 	int bms_heat_temp_compensation;
+	int chg_cycle_status;
 };
 
 #define SOFT_REST_VOL_THRESHOLD		4300

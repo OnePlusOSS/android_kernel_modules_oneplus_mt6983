@@ -932,6 +932,12 @@ static void get_current_task_mask(u32 type)
 
 		rcu_read_lock();
 		tcred = __task_cred(p);
+		if (!tcred) {
+			rcu_read_unlock();
+			put_task_struct(p);
+			pr_info("cpuload: tcred is NULL!");
+			continue;
+		}
 		uid = __kuid_val(tcred->uid);
 		rcu_read_unlock();
 

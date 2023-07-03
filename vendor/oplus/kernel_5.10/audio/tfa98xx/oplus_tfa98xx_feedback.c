@@ -165,9 +165,9 @@ tfa98xx_read_dsp(struct tfa_device *tfa,  int num_bytes, unsigned char *result_b
 #define TFA_OFFSET_BASE              3
 #define PARAM_OFFSET(pos, id)        (TFA_OFFSET_BASE + ((id) * POS_NUM + (pos)) * TFA_DATA_BYTES)
 #define GET_VALUE(pdata, offset)     ((pdata[offset] << 16) + (pdata[offset+1] << 8) + pdata[offset+2])
-#define TFA_GET_R0(pdata, id)        (GET_VALUE(pdata, PARAM_OFFSET(POS_R0, id)) * 1000 / 0x10000)
+#define TFA_GET_R0(pdata, id)        (GET_VALUE(pdata, PARAM_OFFSET(POS_R0, id)) / 65) /* 65 = 0x10000 / 1000 */
 #define TFA_GET_F0(pdata, id)        (GET_VALUE(pdata, PARAM_OFFSET(POS_F0, id)))
-#define TFA_GET_AT(pdata, id)        (GET_VALUE(pdata, PARAM_OFFSET(POS_AT, id)) * 100 / 0x400000)
+#define TFA_GET_AT(pdata, id)        (GET_VALUE(pdata, PARAM_OFFSET(POS_AT, id)) / 419430) /* 419430 = 0x400000 / 100 */
 #define TFA_MAX_RESULT_LEN           (MAX_SPK_NUM * POS_NUM * TFA_DATA_BYTES + TFA_OFFSET_BASE)
 #define TFA_RESULT_BUF_LEN           ((TFA_MAX_RESULT_LEN + 3) & (~3))
 #define TFA_ONE_ALGO_MAX_RESULT_LEN  (2 * POS_NUM * TFA_DATA_BYTES + TFA_OFFSET_BASE)
@@ -222,8 +222,8 @@ inline bool is_param_valid(struct tfa98xx *tfa98xx)
 		return false;
 	}
 
-	if ((tfa98xx->tfa->channel >= MAX_SPK_NUM) && (tfa98xx->tfa->channel != 0xff)) {
-		pr_err("channel = %d error\n", tfa98xx->tfa->channel);
+	if (tfa98xx->tfa->dev_idx >= MAX_SPK_NUM) {
+		pr_err("dev_idx = %d error\n", tfa98xx->tfa->dev_idx);
 		return false;
 	}
 
@@ -316,7 +316,7 @@ static int tfa98xx_cmd_set(struct tfa98xx *tfa98xx, int8_t *pbuf, int16_t size)
 		return -ENODEV;
 	}
 
-	if (tfa98xx->tfa->is_probus_device) {
+	if (tfa98xx && tfa98xx->tfa->is_probus_device) {
 		mutex_lock(&tfa98xx->dsp_lock);
 		err = tfa98xx_write_dsp(tfa98xx->tfa, size, pbuf);
 		mutex_unlock(&tfa98xx->dsp_lock);
@@ -341,7 +341,7 @@ static int tfa98xx_get_lib_version(struct tfa98xx *tfa98xx, unsigned int *pversi
 		return -ENODEV;
 	}
 
-	if (tfa98xx->tfa->is_probus_device) {
+	if (tfa98xx && tfa98xx->tfa->is_probus_device) {
 		mutex_lock(&tfa98xx->dsp_lock);
 		err = tfa98xx_write_dsp(tfa98xx->tfa, sizeof(tfaCmdLibVer), tfaCmdLibVer);
 		if (err == Tfa98xx_Error_Ok) {
@@ -505,7 +505,7 @@ static int tfa98xx_get_result(struct tfa98xx *tfa98xx, uint8_t *pbuf, int64_t le
 		goto exit;
 	}
 
-	if (tfa98xx->tfa->is_probus_device) {
+	if (tfa98xx && tfa98xx->tfa->is_probus_device) {
 		mutex_lock(&tfa98xx->dsp_lock);
 		err = tfa98xx_write_dsp(tfa98xx->tfa, sizeof(tfaCmdGet), tfaCmdGet);
 		if (err == Tfa98xx_Error_Ok) {
@@ -522,6 +522,12 @@ static int tfa98xx_get_result(struct tfa98xx *tfa98xx, uint8_t *pbuf, int64_t le
 	for (idx = 0; idx < len; idx += 4) {
 		pr_debug("get data: 0x%x  0x%x  0x%x  0x%x\n", \
 			*(pbuf + idx), *(pbuf + idx + 1), *(pbuf + idx + 2), *(pbuf + idx + 3));
+	}
+
+	if (0x00 == *(pbuf + 2)) {
+		pr_err("get adsp data error\n");
+		err = Tfa98xx_Error_DSP_not_running;
+		goto exit;
 	}
 
 exit:

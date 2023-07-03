@@ -73,6 +73,14 @@ int32_t kalCheckTputLoad(IN struct ADAPTER *prAdapter,
 		prAdapter->rWifiVar.u4PerfMonPendingTh / 100;
 	uint32_t usedTh = (HIF_TX_MSDU_TOKEN_NUM / 2) *
 		prAdapter->rWifiVar.u4PerfMonUsedTh / 100;
+
+	if (cnmIsMccMode(prAdapter)
+		&& prAdapter->rWifiVar.u4PerfMonTpTh[1]
+			== PERF_MON_MCC_TP_THRESHOLD
+		&& u4TarPerfLevel >= 2) {
+		return TRUE;
+	}
+
 	return u4TarPerfLevel >= 3 &&
 	       u4TarPerfLevel < prAdapter->rWifiVar.u4BoostCpuTh &&
 	       i4Pending >= pendingTh &&
