@@ -839,6 +839,7 @@ struct chip_sc8571 {
 	struct pinctrl *ucp_pinctrl;
 	struct pinctrl_state *ucp_int_active;
 	struct pinctrl_state *ucp_int_sleep;
+	struct mutex cp_enable_mutex;
 };
 
 int sc8571_master_get_ucp_flag(void);

@@ -2868,7 +2868,7 @@ static void nu1619_event_process(struct oplus_nu1619 *chip)
 				pr_err("rx UVP clear!\n");
 				temp_val.intval = false;
 				oplus_chg_mod_set_property(chip->wls_ocm, OPLUS_CHG_PROP_RX_VOUT_UVP, &temp_val);
-                        }
+			}
 		}
 
 		if (chip->debug_force_rx_err)

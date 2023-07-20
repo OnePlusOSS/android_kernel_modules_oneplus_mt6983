@@ -199,6 +199,10 @@ int cpu_freq_stratehy = CPU_CHG_FREQ_STAT_AUTO;
 EXPORT_SYMBOL(base_cpufreq_for_chg);
 EXPORT_SYMBOL(cpu_freq_stratehy);
 
+static int dbg_bid_error_type = 0;
+module_param(dbg_bid_error_type, int, 0644);
+MODULE_PARM_DESC(dbg_bid_error_type, "debug bid err type");
+
 struct irqinfo {
 	int mask;
 	char except_info[30];
@@ -327,7 +331,6 @@ int oplus_voocphy_temp_event_handle(unsigned long data);
 int oplus_voocphy_discon_event_handle(unsigned long data);
 int oplus_voocphy_btb_event_handle(unsigned long data);
 void oplus_voocphy_reset_fastchg_after_usbout(void);
-int oplus_voocphy_chg_out_check_event_handle(unsigned long data);
 int oplus_voocphy_curr_event_handle(unsigned long data);
 bool oplus_vooc_wake_voocphy_service_work(struct oplus_voocphy_manager *chip, int request);
 extern bool oplus_vooc_wake_monitor_work(struct oplus_voocphy_manager *chip);
@@ -905,10 +908,12 @@ int oplus_voocphy_print_dbg_info(struct oplus_voocphy_manager *chip)
 	bool fg_dump_reg = false;
 	bool fg_send_info = false;
 	int report_flag = 0;
+	int error_type = 0;
 	if (oplus_voocphy_get_bidirect_cp_support()) {
 		if (((bidirect_int_flag[0].mask & chip->int_column_pre[1]) == 0) && bidirect_int_flag[i].mark_except) {
 			fg_dump_reg = true;
 			fg_send_info = true;
+			error_type = 1;
 			memcpy(&chip->reg_dump[9], chip->int_column_pre, sizeof(chip->int_column_pre));
 			printk("cp int happened %s\n", bidirect_int_flag[i].except_info);
 			goto chg_exception;
@@ -917,6 +922,7 @@ int oplus_voocphy_print_dbg_info(struct oplus_voocphy_manager *chip)
 			if ((bidirect_int_flag[i].mask & chip->int_column_pre[3]) && bidirect_int_flag[i].mark_except) {
 				fg_dump_reg = true;
 				fg_send_info = true;
+				error_type = i + 1;
 				memcpy(&chip->reg_dump[9], chip->int_column_pre, sizeof(chip->int_column_pre));
 				printk("cp int happened %s\n", bidirect_int_flag[i].except_info);
 				goto chg_exception;
@@ -926,6 +932,7 @@ int oplus_voocphy_print_dbg_info(struct oplus_voocphy_manager *chip)
 			if ((bidirect_int_flag[i].mask & chip->int_column_pre[5]) && bidirect_int_flag[i].mark_except) {
 				fg_dump_reg = true;
 				fg_send_info = true;
+				error_type = i + 1;
 				memcpy(&chip->reg_dump[9], chip->int_column_pre, sizeof(chip->int_column_pre));
 				printk("cp int happened %s\n", bidirect_int_flag[i].except_info);
 				goto chg_exception;
@@ -999,8 +1006,13 @@ chg_exception:
 		if (fg_send_info) {
 			report_flag |= (1 << 4);
 			oplus_chg_sc8547_error(report_flag, NULL, 0);
+			if (oplus_voocphy_get_bidirect_cp_support())
+				oplus_voocphy_upload_cp_error(error_type);
 		}
 	}
+
+	if (dbg_bid_error_type > 0)
+		oplus_voocphy_upload_cp_error(dbg_bid_error_type);
 
 	printk(KERN_ERR "voocphydbg data[%d %d %d %d %d], status[%d, %d], init[%d, %d], set[%d, %d]"
 	       "comm[rcv:%d, 0x%0x, 0x%0x, %d, 0x%0x, 0x%0x reply:0x%0x 0x%0x], "
@@ -4086,6 +4098,9 @@ void oplus_voocphy_set_status_and_notify_ap(struct oplus_voocphy_manager *chip,
 		else if (fastchg_notify_status == FAST_NOTIFY_USER_EXIT_FASTCHG)
 			oplus_chg_track_set_fastchg_break_code(
 				TRACK_CP_VOOCPHY_USER_EXIT_FASTCHG);
+		else if (fastchg_notify_status == FAST_NOTIFY_SWITCH_TEMP_RANGE)
+			oplus_chg_track_set_fastchg_break_code(
+				TRACK_CP_VOOCPHY_SWITCH_TEMP_RANGE);
 
 		if (oplus_switching_support_parallel_chg() == PARALLEL_MOS_CTRL
 		    && fastchg_notify_status == FAST_NOTIFY_FULL)
@@ -7818,7 +7833,7 @@ bool oplus_voocphy_version_judge(void)
 	}
 
 	if (g_voocphy_chip->version_judge_support == false) {
-		return false;
+		return true;
 	}
 
 	if ((get_PCB_Version() >= PCB_VERSION_PVT_MOZI) && (get_PCB_Version() <= PCB_VERSION_MP3_MOZI)) {
@@ -7886,6 +7901,26 @@ int oplus_voocphy_set_chg_auto_mode(bool enable)
 		rc = g_voocphy_chip->ops->set_chg_auto_mode(g_voocphy_chip, enable);
 		if (rc < 0) {
 			voocphy_info("oplus_voocphy_set_chg_auto_mode fail, rc=%d.\n", rc);
+			return rc;
+		}
+	}
+
+	return rc;
+}
+
+int oplus_voocphy_upload_cp_error(int err_type)
+{
+	int rc = 0;
+
+	if (!g_voocphy_chip) {
+		voocphy_info("oplus_voocphy_manager chip null\n");
+		return rc;
+	}
+
+	if (g_voocphy_chip->ops && g_voocphy_chip->ops->upload_cp_error) {
+		rc = g_voocphy_chip->ops->upload_cp_error(g_voocphy_chip, err_type);
+		if (rc < 0) {
+			voocphy_info("upload cp error failed, rc=%d.\n", rc);
 			return rc;
 		}
 	}

@@ -3868,6 +3868,7 @@ static void mtk_charger_external_power_changed(struct power_supply *psy)
 #ifdef OPLUS_FEATURE_CHG_BASIC
 	if (!prop.intval) {
 		oplus_chg_global_event(chip->chgic_mtk.oplus_info->usb_ocm, OPLUS_CHG_EVENT_OFFLINE);
+		oplus_chg_set_charger_type_unknown();
 		if (oplus_vooc_get_fastchg_started() == false) {
 			oplus_vooc_reset_fastchg_after_usbout();
 			oplus_chg_set_chargerid_switch_val(0);
@@ -4013,6 +4014,7 @@ int chg_alg_event(struct notifier_block *notifier,
 
 #ifdef OPLUS_FEATURE_CHG_BASIC
 #define OPLUS_SVID 0x22D9
+#define SVID_NONE 0x0
 uint32_t pd_svooc_abnormal_adapter[] = {
 	0x20002,
 	0x10002,
@@ -4029,7 +4031,7 @@ int oplus_get_adapter_svid(void)
 
 	if (tcpc_dev == NULL || !g_oplus_chip) {
 		chg_err("tcpc_dev is null return\n");
-		return -1;
+		return -ENODEV;
 	}
 
 	tcpm_inquire_pd_partner_svids(tcpc_dev, &svid_list);
@@ -4053,9 +4055,9 @@ int oplus_get_adapter_svid(void)
 				break;
 			}
 		}
-	}
-
-	return 0;
+		return OPLUS_SVID;
+	} else
+		return SVID_NONE;
 }
 
 bool oplus_check_pdphy_ready(void)
@@ -4149,6 +4151,7 @@ static int pd_tcp_notifier_call(struct notifier_block *pnb,
 	union oplus_chg_mod_propval temp_val = {0, };
 	static struct charger_device *primary_charger = NULL;
 	static bool otg_flag = 0;
+	int svid = 0;
 
 	if (!primary_charger) {
 		primary_charger = get_charger_by_name("primary_chg");
@@ -4207,7 +4210,6 @@ static int pd_tcp_notifier_call(struct notifier_block *pnb,
 		switch (noti->pd_state.connected) {
 		case  PD_CONNECT_NONE:
 			pinfo->pd_type = MTK_PD_CONNECT_NONE;
-			g_oplus_chip->pd_svooc = false;
 			chr_err("PD Notify Detach\n");
 			break;
 
@@ -4219,19 +4221,25 @@ static int pd_tcp_notifier_call(struct notifier_block *pnb,
 		case PD_CONNECT_PE_READY_SNK:
 			pinfo->pd_type = MTK_PD_CONNECT_PE_READY_SNK;
 			chr_err("PD Notify fixe voltage ready\n");
-			oplus_get_adapter_svid();
+			svid = oplus_get_adapter_svid();
+			if (svid == SVID_NONE)
+				g_oplus_chip->pd_svooc = false;
 			break;
 
 		case PD_CONNECT_PE_READY_SNK_PD30:
 			pinfo->pd_type = MTK_PD_CONNECT_PE_READY_SNK_PD30;
 			chr_err("PD Notify PD30 ready\r\n");
-			oplus_get_adapter_svid();
+			svid = oplus_get_adapter_svid();
+			if (svid == SVID_NONE)
+				g_oplus_chip->pd_svooc = false;
 			break;
 
 		case PD_CONNECT_PE_READY_SNK_APDO:
 			pinfo->pd_type = MTK_PD_CONNECT_PE_READY_SNK_APDO;
 			chr_err("PD Notify APDO Ready\n");
-			oplus_get_adapter_svid();
+			svid = oplus_get_adapter_svid();
+			if (svid == SVID_NONE)
+				g_oplus_chip->pd_svooc = false;
 			oplus_chg_pps_get_source_cap(pinfo);
 			break;
 

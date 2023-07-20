@@ -142,6 +142,17 @@ int oplus_switching_set_discharge_current(int current_ma)
 	return 0;
 }
 
+int oplus_switching_set_discharge_mode(int mode)
+{
+	if (!g_switching_chip || !g_switching_chip->switch_ops ||
+		!g_switching_chip->switch_ops->switching_set_discharge_mode) {
+		chg_err("fail\n");
+		return -1;
+	} else {
+		return g_switching_chip->switch_ops->switching_set_discharge_mode(mode);
+	}
+}
+
 int oplus_switching_get_if_need_balance_bat(int vbat0_mv, int vbat1_mv)
 {
 	int diff_volt = 0;
@@ -286,36 +297,42 @@ int oplus_switching_set_balance_bat_status(int status)
 	case PARALLEL_NOT_NEED_BALANCE_BAT__START_CHARGE:
 		oplus_switching_hw_enable(1);
 		oplus_switching_set_discharge_current(2800);
+		oplus_switching_set_discharge_mode(NO_REGULATION_FULLY_ON);
 		oplus_switching_set_current(2800);
 		oplus_switching_enable_charge(1);
 		break;
 	case PARALLEL_NEED_BALANCE_BAT_STATUS1__STOP_CHARGE:
 		oplus_switching_hw_enable(1);
 		oplus_switching_set_discharge_current(500);
+		oplus_switching_set_discharge_mode(CURRENT_REGULATION);
 		oplus_switching_set_current(500);
 		oplus_switching_enable_charge(1);
 		break;
 	case PARALLEL_NEED_BALANCE_BAT_STATUS2__STOP_CHARGE:
 		oplus_switching_hw_enable(1);
 		oplus_switching_set_discharge_current(1000);
+		oplus_switching_set_discharge_mode(CURRENT_REGULATION);
 		oplus_switching_set_current(1000);
 		oplus_switching_enable_charge(1);
 		break;
 	case PARALLEL_NEED_BALANCE_BAT_STATUS3__STOP_CHARGE:
 		oplus_switching_hw_enable(1);
 		oplus_switching_set_discharge_current(2800);
+		oplus_switching_set_discharge_mode(NO_REGULATION_FULLY_ON);
 		oplus_switching_set_current(2800);
 		oplus_switching_enable_charge(1);
 		break;
 	case PARALLEL_NEED_BALANCE_BAT_STATUS4__STOP_CHARGE:
 		oplus_switching_hw_enable(1);
 		oplus_switching_set_discharge_current(2800);
+		oplus_switching_set_discharge_mode(NO_REGULATION_FULLY_ON);
 		oplus_switching_set_current(2800);
 		oplus_switching_enable_charge(1);
 		break;
 	case PARALLEL_NEED_BALANCE_BAT_STATUS5__STOP_CHARGE:
 		oplus_switching_hw_enable(1);
 		oplus_switching_set_discharge_current(200);
+		oplus_switching_set_discharge_mode(CURRENT_REGULATION);
 		oplus_switching_set_current(200);
 		oplus_switching_enable_charge(1);
 		break;

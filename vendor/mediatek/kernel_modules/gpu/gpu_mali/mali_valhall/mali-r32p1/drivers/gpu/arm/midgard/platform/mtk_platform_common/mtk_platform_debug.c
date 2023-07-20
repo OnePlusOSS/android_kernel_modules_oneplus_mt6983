@@ -695,7 +695,13 @@ void mtk_debug_csf_dump_groups_and_queues(struct kbase_device *kbdev, int pid)
 #endif
 
 							fence = cmd->info.fence.fence;
-							kbase_sync_fence_info_get(fence, &info);
+							 if (fence)
+                                  kbase_sync_fence_info_get(fence, &info);
+							else {
+								dev_info(kbdev->dev, "fence is NULL");
+								break;
+							}
+
 
 							dev_info(kbdev->dev,
 							         "[%d_%d] Queue Idx(err-mode), CMD Idx, Wait Type, Additional info",
@@ -725,7 +731,12 @@ void mtk_debug_csf_dump_groups_and_queues(struct kbase_device *kbdev, int pid)
 #endif
 
 							fence = cmd->info.fence.fence;
-							kbase_sync_fence_info_get(fence, &info);
+							 if (fence)
+								kbase_sync_fence_info_get(fence, &info);
+							else {
+								dev_info(kbdev->dev, "fence is NULL");
+                                  break;
+							}
 
 							dev_info(kbdev->dev,
 							         "[%d_%d] Queue Idx(err-mode), CMD Idx, Wait Type, Additional info",

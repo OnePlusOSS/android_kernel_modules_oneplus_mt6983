@@ -4321,9 +4321,11 @@ int mt_power_supply_type_check(void)
 	chg_debug("charger_type[%d]\n", charger_type);
 	if (g_oplus_chip) {
 		if ((g_oplus_chip->charger_type != charger_type) && g_oplus_chip->usb_psy) {
-			g_oplus_chip->charger_type = charger_type;
-			if (charger_type == POWER_SUPPLY_TYPE_USB_PD_SDP)
+			if (g_oplus_chip->charger_type == POWER_SUPPLY_TYPE_USB &&
+			    charger_type == POWER_SUPPLY_TYPE_USB_PD_SDP) {
+				g_oplus_chip->charger_type = charger_type;
 				oplus_chg_turn_on_charging(g_oplus_chip);
+			}
 			power_supply_changed(g_oplus_chip->usb_psy);
 		}
 	}

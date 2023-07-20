@@ -763,6 +763,7 @@ struct oplus_chg_wls {
 #endif
 	struct delayed_work wls_skewing_work;
 	struct delayed_work wls_bcc_curr_update_work;
+	struct delayed_work wls_vout_err_work;
 	struct wakeup_source *rx_wake_lock;
 	struct wakeup_source *trx_wake_lock;
 	struct mutex connect_lock;
@@ -860,6 +861,10 @@ struct oplus_chg_wls {
 	unsigned int wls_bcc_fcc_to_icl_factor;
 	oplus_chg_track_trigger trx_info_load_trigger;
 	struct delayed_work trx_info_load_trigger_work;
+	struct mutex track_upload_lock;
+	bool rx_err_uploading;
+	oplus_chg_track_trigger *rx_err_load_trigger;
+	struct delayed_work rx_err_load_trigger_work;
 };
 
 #ifdef OPLUS_CHG_DEBUG

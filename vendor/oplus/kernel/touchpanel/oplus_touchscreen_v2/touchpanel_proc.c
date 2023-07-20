@@ -3361,6 +3361,7 @@ static ssize_t proc_freq_hop_read(struct file *file, char __user *buffer,
 	return ret;
 }
 
+
 #if LINUX_VERSION_CODE >= KERNEL_VERSION(5, 10, 0)
 static const struct proc_ops proc_freq_hop_fops = {
 	.proc_write = proc_freq_hop_write,

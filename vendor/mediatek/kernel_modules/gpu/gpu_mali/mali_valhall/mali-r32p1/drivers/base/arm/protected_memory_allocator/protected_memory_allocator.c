@@ -306,10 +306,6 @@ static struct protected_memory_allocation *simple_pma_alloc_page(
 		dev_err(epma_dev->dev, "not enough free pages %u / %u\n",
                         num_pages_to_alloc, epma_dev->num_free_pages);
 		devm_kfree(epma_dev->dev, pma);
-		spin_unlock(&epma_dev->rmem_lock);
-		return NULL;
-	}
-
 #if MTK_PMA_DEBUG
 		show_simple_pma_recording(epma_dev);
 		/* Find the corresponding tgid and reduce the allocation page num */
@@ -322,6 +318,9 @@ static struct protected_memory_allocation *simple_pma_alloc_page(
 			}
 		}
 #endif /* MTK_PMA_DEBUG */
+		spin_unlock(&epma_dev->rmem_lock);
+		return NULL;
+	}
 
 	/*
 	 * For order 0-5 (ie, 1 to 32 pages) we always allocate within the same set of 64 pages

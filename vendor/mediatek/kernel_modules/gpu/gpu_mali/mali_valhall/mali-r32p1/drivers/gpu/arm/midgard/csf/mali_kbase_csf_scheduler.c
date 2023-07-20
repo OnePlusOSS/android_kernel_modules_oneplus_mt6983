@@ -1429,15 +1429,28 @@ static bool evaluate_sync_update(struct kbase_queue *queue)
 	struct kbase_vmap_struct *mapping;
 	bool updated = false;
 	u32 *sync_ptr;
+	u32 sync_wait_size;
+	u32 sync_wait_align_mask;
 	u32 sync_wait_cond;
 	u32 sync_current_val;
 	struct kbase_device *kbdev;
+	bool sync_wait_align_valid = false;
 
 	if (WARN_ON(!queue))
 		return false;
 
 	kbdev = queue->kctx->kbdev;
 	lockdep_assert_held(&kbdev->csf.scheduler.lock);
+
+	sync_wait_size = CS_STATUS_WAIT_SYNC_WAIT_SIZE_GET(queue->status_wait);
+	sync_wait_align_mask =
+		(sync_wait_size == 0 ? BASEP_EVENT32_ALIGN_BYTES : BASEP_EVENT64_ALIGN_BYTES) - 1;
+	sync_wait_align_valid = ((uintptr_t)queue->sync_ptr & sync_wait_align_mask) == 0;
+	if (!sync_wait_align_valid) {
+		dev_dbg(queue->kctx->kbdev->dev, "sync memory VA 0x%016llX is misaligned",
+			queue->sync_ptr);
+		goto out;
+	}
 
 	sync_ptr = kbase_phy_alloc_mapping_get(queue->kctx, queue->sync_ptr,
 					&mapping);
@@ -5422,6 +5435,8 @@ int kbase_csf_scheduler_context_init(struct kbase_context *kctx)
 	int priority;
 	int err;
 
+	kbase_ctx_sched_init_ctx(kctx);
+
 	for (priority = 0; priority < KBASE_QUEUE_GROUP_PRIORITY_COUNT;
 	     ++priority) {
 		INIT_LIST_HEAD(&kctx->csf.sched.runnable_groups[priority]);
@@ -5438,7 +5453,8 @@ int kbase_csf_scheduler_context_init(struct kbase_context *kctx)
 	if (!kctx->csf.sched.sync_update_wq) {
 		dev_err(kctx->kbdev->dev,
 			"Failed to initialize scheduler context workqueue");
-		return -ENOMEM;
+		err = -ENOMEM;
+		goto alloc_wq_failed;
 	}
 
 	INIT_WORK(&kctx->csf.sched.sync_update_work,
@@ -5449,9 +5465,15 @@ int kbase_csf_scheduler_context_init(struct kbase_context *kctx)
 	if (err) {
 		dev_err(kctx->kbdev->dev,
 			"Failed to register a sync update callback");
-		destroy_workqueue(kctx->csf.sched.sync_update_wq);
+		goto event_wait_add_failed;
 	}
 
+	return err;
+
+event_wait_add_failed:
+	destroy_workqueue(kctx->csf.sched.sync_update_wq);
+alloc_wq_failed:
+	kbase_ctx_sched_remove_ctx(kctx);
 	return err;
 }
 
@@ -5460,6 +5482,8 @@ void kbase_csf_scheduler_context_term(struct kbase_context *kctx)
 	kbase_csf_event_wait_remove(kctx, check_group_sync_update_cb, kctx);
 	cancel_work_sync(&kctx->csf.sched.sync_update_work);
 	destroy_workqueue(kctx->csf.sched.sync_update_wq);
+
+	kbase_ctx_sched_remove_ctx(kctx);
 }
 
 int kbase_csf_scheduler_init(struct kbase_device *kbdev)

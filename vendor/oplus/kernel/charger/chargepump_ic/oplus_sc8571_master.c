@@ -357,15 +357,20 @@ int sc8571_master_cp_enable(int enable)
 		pps_err("chip is NULL\n");
 		return ret;
 	}
+	mutex_lock(&chip->cp_enable_mutex);
 	if (enable && (sc8571_master_get_enable() == false)) {
 		ret = sc8571_master_i2c_masked_write(
 			SC8571_REG_0F, SC8571_CHG_EN_MASK,
 			SC8571_CHG_ENABLE << SC8571_CHG_EN_SHIFT);
-	} else if (!enable && (sc8571_master_get_enable() == true)) {
-		ret = sc8571_master_i2c_masked_write(
-			SC8571_REG_0F, SC8571_CHG_EN_MASK,
-			SC8571_CHG_DISABLE << SC8571_CHG_EN_SHIFT);
+	} else if (!enable) {
+		 if (sc8571_master_get_enable() == false)
+		 	msleep(100);
+		 if (sc8571_master_get_enable() == true)
+			ret = sc8571_master_i2c_masked_write(
+				SC8571_REG_0F, SC8571_CHG_EN_MASK,
+				SC8571_CHG_DISABLE << SC8571_CHG_EN_SHIFT);
 	}
+	mutex_unlock(&chip->cp_enable_mutex);
 	return ret;
 }
 
@@ -833,6 +838,8 @@ static int sc8571_master_probe(struct i2c_client *client,
 	sc8571_master_get_enable();
 
 	register_pps_devinfo();
+
+	mutex_init(&chip->cp_enable_mutex);
 
 	pps_err("sc8571_parse_dt successfully!\n");
 

@@ -137,6 +137,8 @@ struct kbase_context *kbase_create_context(struct kbase_device *kbdev,
 	kctx->filp = filp;
 	kctx->create_flags = flags;
 
+	memcpy(kctx->comm, current->comm, sizeof(current->comm));
+
 	if (is_compat)
 		kbase_ctx_flag_set(kctx, KCTX_COMPAT);
 #if defined(CONFIG_64BIT)

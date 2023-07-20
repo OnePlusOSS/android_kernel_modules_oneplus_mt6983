@@ -469,8 +469,8 @@ static int nu1619_get_aes_data6(struct oplus_nu1619_ic *chip)
 	nu1619_write_reg(chip, 0x0000, 0x48);
 	nu1619_write_reg(chip, 0x0001, P9221_CMD_GET_AES_DATA6);
 	nu1619_write_reg(chip, 0x0002, chip->nu1619_chg_status.aes_verfith_data.aes_encode_num[15]);
-	nu1619_write_reg(chip, 0x0003, chip->nu1619_chg_status.aes_verfith_data.aes_encode_num[16]);
-	nu1619_write_reg(chip, 0x0004, chip->nu1619_chg_status.aes_verfith_data.aes_encode_num[17]);
+	nu1619_write_reg(chip, 0x0003, 0xFF);
+	nu1619_write_reg(chip, 0x0004, 0xFF);
 	nu1619_write_cmd_D(chip, 0x01);
 
 	return 0;
@@ -819,13 +819,36 @@ static int nu1619_set_tx_Q_value(struct oplus_nu1619_ic *chip)
 {
 	int q_value = 0x41;
 
-	if (chip->nu1619_chg_status.dock_version == 0x00
-			|| chip->nu1619_chg_status.dock_version == 0x01)
+	switch (chip->nu1619_chg_status.dock_version) {
+	case DOCK_OAWV00:
+	case DOCK_OAWV01:
 		q_value = 0x41;
-	else if ((chip->nu1619_chg_status.dock_version == 0x02) || (chip->nu1619_chg_status.dock_version == DOCK_THIRD))
+		break;
+	case DOCK_OAWV02:
+	case DOCK_OAWV03:
+	case DOCK_THIRD:
 		q_value = 0x46;
-	chg_err("<~WPC~>nu1619_set_tx_Q_value[0x%x]----------->\n", q_value);
+		break;
+	case DOCK_OAWV04:
+	case DOCK_OAWV05:
+	case DOCK_OAWV06:
+	case DOCK_OAWV07:
+	case DOCK_OAWV08:
+	case DOCK_OAWV09:
+	case DOCK_OAWV10:
+	case DOCK_OAWV11:
+	case DOCK_OAWV16:
+	case DOCK_OAWV17:
+	case DOCK_OAWV18:
+	case DOCK_OAWV19:
+		q_value = 0x46;
+		break;
+	default:
+		q_value = 0x41;
+		break;
+	}
 
+	chg_err("<~WPC~>nu1619_set_tx_Q_value[0x%x]----------->\n", q_value);
 	nu1619_write_reg(chip, 0x0000, 0x38);
 	nu1619_write_reg(chip, 0x0001, 0x48);
 	nu1619_write_reg(chip, 0x0002, 0x00);
@@ -11419,7 +11442,22 @@ static int nu1619_wpc_get_max_wireless_power_ower(void)
 		base_wireless_power = 40;
 		break;
 	case DOCK_OAWV02:
+	case DOCK_OAWV03:
+	case DOCK_OAWV04:
+	case DOCK_OAWV05:
+	case DOCK_OAWV06:
+	case DOCK_OAWV07:
+	case DOCK_OAWV08:
+	case DOCK_OAWV09:
 		base_wireless_power = 50;
+		break;
+	case DOCK_OAWV10:
+	case DOCK_OAWV11:
+	case DOCK_OAWV16:
+	case DOCK_OAWV17:
+	case DOCK_OAWV18:
+	case DOCK_OAWV19:
+		base_wireless_power = 100;
 		break;
 	default:
 		base_wireless_power = 15;

@@ -3122,6 +3122,8 @@ static void oplus_pps_master_enable_check(struct oplus_pps_chip *chip)
 static void oplus_pps_slave_enable_check(struct oplus_pps_chip *chip)
 {
 	int ret = 0, cnt_fail = 0;
+	if (!chip || !chip->ops || !chip->pps_support_type)
+		return;
 	if (oplus_pps_get_support_type() != PPS_SUPPORT_2CP &&
 	    oplus_pps_get_support_type() != PPS_SUPPORT_3CP)
 		return;
@@ -3212,9 +3214,22 @@ static void oplus_pps_slave_enable_check(struct oplus_pps_chip *chip)
 			chip->ilimit.cp_ibus_down = OPLUS_PPS_CURRENT_LIMIT_2A *
 					     oplus_pps_get_icurr_ratio();
 	}
+}
+
+static void oplus_pps_slave_disable_check(struct oplus_pps_chip *chip)
+{
+	if (!chip || !chip->ops || !chip->pps_support_type)
+		return;
+
+	if (oplus_pps_get_support_type() != PPS_SUPPORT_2CP &&
+	    oplus_pps_get_support_type() != PPS_SUPPORT_3CP)
+		return;
+	if (chip->pps_status <= OPLUS_PPS_STATUS_OPEN_MOS)
+		return;
 
 	if ((chip->cp.master_enable) && (chip->ask_charger_current <=
-	     (PPS_IBUS_SLAVE_DISABLE_MIN * oplus_pps_get_icurr_ratio()))) {
+	     (PPS_IBUS_SLAVE_DISABLE_MIN * oplus_pps_get_icurr_ratio())) &&
+	     (chip->data.ap_input_current <= (PPS_IBUS_SLAVE_DISABLE_MIN + PPS_IBUS_SLAVE_ENABLE_MIN))) {
 		oplus_pps_charging_enable_slave(chip, false);
 		oplus_pps_charging_enable_slave_b(chip, false);
 		chip->cp.slave_enable = false;
@@ -3411,6 +3426,10 @@ static int oplus_pps_action_status_start(struct oplus_pps_chip *chip)
 		} else {
 			vbus_err_times = 0;
 		}
+		if (chip->pps_adapter_type == PPS_ADAPTER_THIRD)
+			chip->pps_fastchg_started = false;
+		else
+			chip->pps_fastchg_started = true;
 	} else if (chip->data.ap_input_volt >
 		   (chip->target_charger_volt + OPLUS_PPS_VOLT_UPDATE_V1 +
 		    OPLUS_PPS_VOLT_UPDATE_V2)) {
@@ -3667,6 +3686,10 @@ static int oplus_pps_set_pdo(struct oplus_pps_chip *chip)
 			chip->pps_stop_status = PPS_STOP_VOTER_PDO_ERROR;
 			return -EINVAL;
 		}
+		pps_err(" ask_volt, ask_cur: %d, %d\n", chip->ask_charger_volt,
+		chip->ask_charger_current);
+
+		oplus_pps_slave_disable_check(chip);
 		chip->timer.set_pdo_flag = 0;
 	}
 
@@ -3676,9 +3699,6 @@ static int oplus_pps_set_pdo(struct oplus_pps_chip *chip)
 		/*chip->ops->pps_cp_pmid2vout_enable(true);*/
 		chip->cp.pmid2vout_enable = true;
 	}
-
-	pps_err(" ask_volt, ask_cur: %d, %d\n", chip->ask_charger_volt,
-		chip->ask_charger_current);
 
 	return ret;
 }

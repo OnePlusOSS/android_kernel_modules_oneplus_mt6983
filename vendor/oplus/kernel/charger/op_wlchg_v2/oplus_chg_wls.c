@@ -48,6 +48,9 @@ struct oplus_chg_wls_state_handler {
 
 #define OPLUS_CHG_WLS_BREAK_DETECT_DELAY 6000
 #define OPLUS_CHG_WLS_START_DETECT_DELAY 3000
+#define OPLUS_WLS_BCC_MAX_CURR_INIT 5000
+#define OPLUS_WLS_BCC_MIN_CURR_INIT 4000
+#define OPLUS_WLS_BCC_STOP_CURR_INIT 1000
 
 #define BCC_TO_ICL 100
 #define OPLUS_WLS_BCC_UPDATE_TIME	500
@@ -57,6 +60,10 @@ struct oplus_chg_wls_state_handler {
 static int wls_dbg_fcc_ma = 0;
 module_param(wls_dbg_fcc_ma, int, 0644);
 MODULE_PARM_DESC(wls_dbg_fcc_ma, "debug wls fcc ma");
+
+static int wls_dbg_vout_mv = 0;
+module_param(wls_dbg_vout_mv, int, 0644);
+MODULE_PARM_DESC(wls_dbg_vout_mv, "debug wls vout mv");
 #endif
 
 static ATOMIC_NOTIFIER_HEAD(wls_ocm_notifier);
@@ -1788,6 +1795,12 @@ static void oplus_chg_wls_reset_variables(struct oplus_chg_wls *wls_dev) {
 #ifndef CONFIG_OPLUS_CHG_OOS
 	wls_status->cool_down = 0;
 #endif
+	wls_status->wls_bcc_max_curr = OPLUS_WLS_BCC_MAX_CURR_INIT;
+	wls_status->wls_bcc_min_curr = OPLUS_WLS_BCC_MIN_CURR_INIT;
+	wls_status->wls_bcc_stop_curr = OPLUS_WLS_BCC_STOP_CURR_INIT;
+	wls_status->bcc_curve_idx = 0;
+	wls_status->bcc_true_idx = 0;
+	wls_status->bcc_temp_range = 0;
 
 	wls_status->cep_ok_wait_timeout = jiffies;
 	wls_status->fastchg_retry_timer = jiffies;
@@ -2009,6 +2022,60 @@ static int oplus_chg_wls_track_upload_trx_general_info(
 	return 0;
 }
 
+static int oplus_chg_wls_track_upload_rx_err_info(struct oplus_chg_wls *wls_dev, int err_type)
+{
+	int index = 0;
+	char err_reason[OPLUS_CHG_TRACK_DEVICE_ERR_NAME_LEN] = { 0 };
+	char *rx_crux_info;
+
+	if (wls_dev->rx_err_uploading) {
+		pr_info("rx_err_uploading now, should return\n");
+		return 0;
+	}
+
+	mutex_lock(&wls_dev->track_upload_lock);
+	wls_dev->rx_err_load_trigger = kzalloc(sizeof(oplus_chg_track_trigger), GFP_KERNEL);
+	if (!wls_dev->rx_err_load_trigger) {
+		pr_err("rx_err_load_trigger memery alloc fail\n");
+		mutex_unlock(&wls_dev->track_upload_lock);
+		return -ENOMEM;
+	}
+	rx_crux_info = kzalloc(OPLUS_CHG_TRACK_CURX_INFO_LEN, GFP_KERNEL);
+	if (!rx_crux_info) {
+		pr_err("rx_crux_info memery alloc fail\n");
+		kfree(wls_dev->rx_err_load_trigger);
+		wls_dev->rx_err_load_trigger = NULL;
+		mutex_unlock(&wls_dev->track_upload_lock);
+		return -ENOMEM;
+	}
+
+	wls_dev->rx_err_load_trigger->type_reason = TRACK_NOTIFY_TYPE_DEVICE_ABNORMAL;
+	wls_dev->rx_err_load_trigger->flag_reason = TRACK_NOTIFY_FLAG_WLS_TRX_ABNORMAL;
+
+	wls_dev->rx_err_uploading = true;
+
+	index += snprintf(&(wls_dev->rx_err_load_trigger->crux_info[index]),
+		OPLUS_CHG_TRACK_CURX_INFO_LEN - index, "$$device_id@@%s", "wls");
+	index += snprintf(&(wls_dev->rx_err_load_trigger->crux_info[index]),
+		OPLUS_CHG_TRACK_CURX_INFO_LEN - index, "$$err_scene@@%s",
+		OPLUS_CHG_TRACK_SCENE_WLS_RX_ERR);
+
+	oplus_chg_track_get_wls_trx_err_reason(err_type, err_reason, sizeof(err_reason));
+	index += snprintf(&(wls_dev->rx_err_load_trigger->crux_info[index]),
+		OPLUS_CHG_TRACK_CURX_INFO_LEN - index, "$$err_reason@@%s", err_reason);
+
+	oplus_chg_wls_update_track_info(wls_dev, rx_crux_info, false);
+	index += snprintf(&(wls_dev->rx_err_load_trigger->crux_info[index]),
+		OPLUS_CHG_TRACK_CURX_INFO_LEN - index, "%s", rx_crux_info);
+	kfree(rx_crux_info);
+
+	schedule_delayed_work(&wls_dev->rx_err_load_trigger_work, 0);
+	mutex_unlock(&wls_dev->track_upload_lock);
+	pr_info("%s\n", wls_dev->rx_err_load_trigger->crux_info);
+
+	return 0;
+}
+
 static int oplus_chg_wls_set_trx_enable(struct oplus_chg_wls *wls_dev, bool en)
 {
 	char trx_crux_info[OPLUS_CHG_TRACK_CURX_INFO_LEN] = {0};
@@ -2179,7 +2246,7 @@ static void oplus_chg_wls_set_bcc_current_iout(struct oplus_chg_wls *wls_dev)
 	struct oplus_chg_wls_status *wls_status = &wls_dev->wls_status;
 	int bcc_icl = 0;
 
-	if (!wls_dev->support_wls_chg_bcc)
+	if (oplus_wls_check_bcc_support(wls_dev) != true)
 		return;
 
 	bcc_icl = wls_status->bcc_current / wls_dev->wls_bcc_fcc_to_icl_factor;
@@ -2489,9 +2556,6 @@ static void oplus_wls_cancel_bcc_update_work(struct oplus_chg_wls *wls_dev)
 	cancel_delayed_work_sync(&wls_dev->wls_bcc_curr_update_work);
 }
 
-#define OPLUS_WLS_BCC_MAX_CURR_INIT 5000
-#define OPLUS_WLS_BCC_MIN_CURR_INIT 4000
-#define OPLUS_WLS_BCC_STOP_CURR_INIT 1000
 static void oplus_wls_bcc_parms_init(struct oplus_chg_wls *wls_dev)
 {
 	struct oplus_chg_wls_status *wls_status = &wls_dev->wls_status;
@@ -3930,6 +3994,7 @@ static void oplus_chg_wls_connect_work(struct work_struct *work)
 		oplus_vote(wls_dev->nor_out_disable_votable, USER_VOTER, true, 1, false);
 		oplus_vote(wls_dev->nor_out_disable_votable, USER_VOTER, false, 0, false);
 		schedule_delayed_work(&wls_dev->wls_data_update_work, 0);
+		schedule_delayed_work(&wls_dev->wls_vout_err_work, 0);
 		queue_delayed_work(wls_dev->wls_wq, &wls_dev->wls_rx_sm_work, 0);
 		rc = oplus_chg_wls_get_skin_temp(wls_dev, &skin_temp);
 		if (rc < 0) {
@@ -3960,6 +4025,7 @@ static void oplus_chg_wls_connect_work(struct work_struct *work)
 		cancel_delayed_work_sync(&wls_dev->wls_trx_sm_work);
 		cancel_delayed_work_sync(&wls_dev->wls_verity_work);
 		cancel_delayed_work_sync(&wls_dev->wls_skewing_work);
+		cancel_delayed_work_sync(&wls_dev->wls_vout_err_work);
 		oplus_wls_cancel_bcc_update_work(wls_dev);
 		if (wls_dev->support_fastchg) {
 			(void)oplus_chg_wls_rx_set_dcdc_enable(wls_dev->wls_rx, false);
@@ -7387,6 +7453,47 @@ static void oplus_chg_wls_verity_state_remove_work(struct work_struct *work)
 	wls_dev->wls_status.verity_state_keep = false;
 }
 
+#define VOUT_ERR_CHECK_TIME	500
+#define VOUT_ERR_CHECK_COUNT	5
+#define VOUT_ERR_THRESHOLD_MV	3000
+static void oplus_chg_wls_vout_err_work(struct work_struct *work)
+{
+	struct delayed_work *dwork = to_delayed_work(work);
+	struct oplus_chg_wls *wls_dev = container_of(dwork, struct oplus_chg_wls, wls_vout_err_work);
+	struct oplus_chg_wls_status *wls_status = &wls_dev->wls_status;
+	int vout_mv;
+	static int vout_err_count = 0;
+
+	if (!wls_dev->support_fastchg || !wls_status->rx_online) {
+		vout_err_count = 0;
+		pr_err("wireless charge is offline or not support fastchg\n");
+		return;
+	}
+
+	vout_mv = wls_status->vout_mv;
+
+#ifdef WLS_QI_DEBUG
+	if (wls_dbg_vout_mv != 0)
+		vout_mv = wls_dbg_vout_mv;
+#endif
+
+	if (vout_mv < VOUT_ERR_THRESHOLD_MV)
+		vout_err_count++;
+	else
+		vout_err_count = 0;
+	if (vout_err_count > VOUT_ERR_CHECK_COUNT) {
+		vout_err_count = 0;
+		pr_err("vout is err, disable ext pwr!\n");
+		oplus_chg_wls_track_upload_rx_err_info(wls_dev, TRACK_WLS_TRX_VOUT_ABNORMAL);
+		(void)oplus_chg_wls_rx_set_dcdc_enable(wls_dev->wls_rx, false);
+		msleep(10);
+		(void)oplus_chg_wls_set_ext_pwr_enable(wls_dev, false);
+		return;
+	}
+
+	schedule_delayed_work(&wls_dev->wls_vout_err_work, msecs_to_jiffies(VOUT_ERR_CHECK_TIME));
+}
+
 static int oplus_chg_wls_dev_open(struct inode *inode, struct file *filp)
 {
 	struct oplus_chg_wls *wls_dev = container_of(filp->private_data,
@@ -9195,6 +9302,22 @@ static void oplus_chg_wls_track_trx_info_load_trigger_work(
 	oplus_chg_track_upload_trigger_data(wls_dev->trx_info_load_trigger);
 }
 
+static void oplus_chg_wls_track_rx_err_load_trigger_work(struct work_struct *work)
+{
+	struct delayed_work *dwork = to_delayed_work(work);
+	struct oplus_chg_wls *wls_dev =
+		container_of(dwork, struct oplus_chg_wls, rx_err_load_trigger_work);
+
+	if (!wls_dev->rx_err_load_trigger)
+		return;
+	oplus_chg_track_upload_trigger_data(*(wls_dev->rx_err_load_trigger));
+	if (wls_dev->rx_err_load_trigger) {
+		kfree(wls_dev->rx_err_load_trigger);
+		wls_dev->rx_err_load_trigger = NULL;
+	}
+	wls_dev->rx_err_uploading = false;
+}
+
 static int oplus_chg_wls_track_init(struct oplus_chg_wls *wls_dev)
 {
 	wls_dev->trx_info_load_trigger.type_reason =
@@ -9202,8 +9325,15 @@ static int oplus_chg_wls_track_init(struct oplus_chg_wls *wls_dev)
 	wls_dev->trx_info_load_trigger.flag_reason =
 		TRACK_NOTIFY_FLAG_WLS_TRX_INFO;
 
+	wls_dev->rx_err_uploading = false;
+	wls_dev->rx_err_load_trigger = NULL;
+
+	mutex_init(&wls_dev->track_upload_lock);
+
 	INIT_DELAYED_WORK(&wls_dev->trx_info_load_trigger_work,
 		oplus_chg_wls_track_trx_info_load_trigger_work);
+	INIT_DELAYED_WORK(&wls_dev->rx_err_load_trigger_work,
+		oplus_chg_wls_track_rx_err_load_trigger_work);
 
 	return 0;
 }
@@ -9398,6 +9528,7 @@ static int oplus_chg_wls_driver_probe(struct platform_device *pdev)
 #endif
 	INIT_DELAYED_WORK(&wls_dev->wls_skewing_work, oplus_chg_wls_skewing_work);
 	INIT_DELAYED_WORK(&wls_dev->wls_bcc_curr_update_work, oplus_wls_bcc_curr_update_work);
+	INIT_DELAYED_WORK(&wls_dev->wls_vout_err_work, oplus_chg_wls_vout_err_work);
 	init_completion(&wls_dev->msg_ack);
 	mutex_init(&wls_dev->connect_lock);
 	mutex_init(&wls_dev->read_lock);

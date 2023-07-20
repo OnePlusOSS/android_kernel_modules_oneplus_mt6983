@@ -1151,6 +1151,19 @@ struct kbase_csf_hwcnt {
 	bool enable_pending;
 };
 
+/*
+ * struct kbase_csf_mcu_fw - Object containing device loaded MCU firmware data.
+ *
+ * @size:                    Loaded firmware data size. Meaningful only when the
+ *                           other field @p data is not NULL.
+ * @data:                    Pointer to the device retained firmware data. If NULL
+ *                           means not loaded yet or error in loading stage.
+ */
+struct kbase_csf_mcu_fw {
+	size_t size;
+	u8 *data;
+};
+
 /**
  * struct kbase_csf_user_reg - Object containing members to manage the mapping
  *                             of USER Register page for all contexts
@@ -1317,6 +1330,7 @@ struct kbase_csf_device {
 	unsigned int fw_timeout_ms;
 	struct kbase_csf_hwcnt hwcnt;
 	struct kbase_csf_user_reg user_reg;
+	struct kbase_csf_mcu_fw fw;
 #if IS_ENABLED(CONFIG_MALI_MTK_IRQ_DEBUG)
 	ktime_t glb_start_tm;
 	ktime_t glb_end_tm;

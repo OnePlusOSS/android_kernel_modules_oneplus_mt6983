@@ -278,7 +278,6 @@ void oplus_replace_next_task_fair(struct rq *rq, struct task_struct **p, struct 
 		if (unlikely(!test_task_ux(temp))) {
 			list_del_init(&ots->ux_entry);
 			put_task_struct(temp);
-
 			WARN_ON(1);
 			continue;
 		}

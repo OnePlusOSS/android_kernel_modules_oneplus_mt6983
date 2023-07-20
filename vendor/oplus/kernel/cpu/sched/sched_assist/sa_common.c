@@ -170,6 +170,7 @@ void update_ux_sched_cputopo(void)
 		prev_cap = cpu_cap;
 	}
 }
+EXPORT_SYMBOL(update_ux_sched_cputopo);
 
 void oplus_set_ux_state(struct task_struct *t, int ux_state) {
 	oplus_set_ux_state_lock(t, ux_state, false);

@@ -121,6 +121,21 @@ static int horae_shell_remove(struct platform_device *pdev)
 	return 0;
 }
 
+int get_current_shell_temp(void)
+{
+	int temp = 0, index;
+	unsigned long flags;
+
+	spin_lock_irqsave(&horae_lock, flags);
+	for (index = 0; index < SHELL_MAX; index++) {
+		if (shell_temp[index] > temp)
+			temp = shell_temp[index];
+	}
+	spin_unlock_irqrestore(&horae_lock, flags);
+	return temp;
+}
+EXPORT_SYMBOL_GPL(get_current_shell_temp);
+
 static struct platform_driver horae_shell_platdrv = {
 	.driver = {
 		.name		= "horae-shell-temp",

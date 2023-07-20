@@ -260,7 +260,8 @@ static int write_cmd(struct kbase_device *kbdev, int as_nr, u32 cmd)
 #if MALI_USE_CSF && !IS_ENABLED(CONFIG_MALI_NO_MALI)
 static int wait_cores_power_trans_complete(struct kbase_device *kbdev)
 {
-#define WAIT_TIMEOUT 1000 /* 1ms timeout */
+//#define WAIT_TIMEOUT 1000 /* 1ms timeout */
+#define WAIT_TIMEOUT 100000 /* 100ms timeout */
 #define DELAY_TIME_IN_US 1
 	const int max_iterations = WAIT_TIMEOUT;
 	int loop;

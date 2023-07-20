@@ -343,9 +343,6 @@ static void oplus_chg_det_typec_testkit_work(struct work_struct *work)
 		g_det_typec_count++;
 		pr_err("detect test kit module not ready, redetect! count:%d\n", g_det_typec_count);
 		schedule_delayed_work(&det_typec_testkit_work, msecs_to_jiffies(DET_DELAY_TIME * 1000));
-	} else {
-		pr_err("detect test kit module ready! cancel work\n");
-		cancel_delayed_work_sync(&det_typec_testkit_work);
 	}
 }
 
@@ -496,9 +493,6 @@ static void oplus_chg_det_gpio_testkit_work(struct work_struct *work)
 		g_det_gpio_count++;
 		pr_info("detect test kit module not ready, redetect! count:%d\n", g_det_gpio_count);
 		schedule_delayed_work(&det_gpio_testkit_work, msecs_to_jiffies(DETECT_DELAY_TIME * 1000));
-	} else {
-		pr_info("detect test kit module ready! cancel work\n");
-		cancel_delayed_work_sync(&det_gpio_testkit_work);
 	}
 }
 #endif /* CONFIG_OPLUS_CHG_TEST_KIT */
@@ -1061,7 +1055,7 @@ int oplus_battery_get_property(struct power_supply *psy, enum power_supply_prope
 			if (oplus_chg_show_vooc_logo_ornot()) {
 				if (oplus_vooc_get_fastchg_started() || oplus_vooc_get_fastchg_to_normal() ||
 				    oplus_vooc_get_fastchg_to_warm() || oplus_vooc_get_fastchg_dummy_started()) {
-					if (chip->prop_status != POWER_SUPPLY_STATUS_FULL)
+					if (chip->prop_status != POWER_SUPPLY_STATUS_FULL && chip->mmi_chg)
 						val->intval = POWER_SUPPLY_STATUS_CHARGING;
 					else
 						val->intval = chip->prop_status;
@@ -2433,7 +2427,10 @@ static ssize_t proc_start_test_external_write(struct file *filp, const char __us
 		chg_err("%s:  error.\n", __func__);
 		return -EFAULT;
 	}
+
+	buffer[31] = '\0';
 	chg_err("count : %s\n", buffer);
+
 	if (kstrtoint(buffer, 10, &count)) {
 		return -EINVAL;
 	}
@@ -3727,6 +3724,10 @@ power_psy_reg_failed:
 	if (chip->batt_psy)
 		power_supply_unregister(chip->batt_psy);
 	charger_xlog_printk(CHG_LOG_CRTI, " Failed, rc = %d\n", rc);
+
+	if (oplus_switching_support_parallel_chg()) {
+		parallel_chg_check_balance_bat_status();
+	}
 	return rc;
 }
 EXPORT_SYMBOL(oplus_chg_init);
@@ -7478,8 +7479,16 @@ void oplus_chg_variables_reset(struct oplus_chg_chip *chip, bool in)
 			chip->calculate_decimal_time = 0;
 			chip->bms_heat_temp_compensation = 0;
 		}
-		if (chip->mmi_fastchg == 1)
+
+		if ((chip->mmi_fastchg == 1) && (chip->chg_cycle_status & CHG_CYCLE_VOTER__USER)) {
 			chip->chg_cycle_status &= ~(int)CHG_CYCLE_VOTER__USER;
+			if (!chip->chg_cycle_status) {
+				chip->stop_chg = 1;
+				if (oplus_chg_get_voocphy_support() == ADSP_VOOCPHY)
+					oplus_adsp_voocphy_turn_on();
+			}
+		}
+
 		chip->unwakelock_chg = 0;
 		chip->allow_swtich_to_fastchg = 1;
 		chip->charger_exist = false;
@@ -8106,14 +8115,14 @@ void oplus_charger_detect_check(struct oplus_chg_chip *chip)
 			return;
 		}
 
-		if (oplus_switching_support_parallel_chg()) {
-			parallel_chg_check_balance_bat_status();
-		}
 		if (chip->charger_type == POWER_SUPPLY_TYPE_UNKNOWN) {
 			noplug_temperature = oplus_get_report_batt_temp();
 			noplug_batt_volt_max = chip->batt_volt_max;
 			noplug_batt_volt_min = chip->batt_volt_min;
 			oplus_chg_variables_reset(chip, true);
+			if (oplus_switching_support_parallel_chg()) {
+				parallel_chg_check_balance_bat_status();
+			}
 #ifdef CONFIG_OPLUS_CHARGER_MTK
 			if (is_meta_mode() == true) {
 				chip->charger_type = POWER_SUPPLY_TYPE_USB;
@@ -8223,6 +8232,9 @@ void oplus_charger_detect_check(struct oplus_chg_chip *chip)
 
 		unknow_type_check = 0;
 		oplus_chg_variables_reset(chip, false);
+		if (oplus_switching_support_parallel_chg()) {
+			parallel_chg_check_balance_bat_status();
+		}
 		if (!chip->mmi_fastchg) {
 			oplus_mmi_fastchg_in(chip);
 		}
@@ -9785,7 +9797,7 @@ static void oplus_chg_fast_switch_check(struct oplus_chg_chip *chip)
 		return;
 	}
 
-	if (chip->pd_wait_svid && !chip->pd_svooc && chip->chg_ops->get_charger_subtype() == CHARGER_SUBTYPE_PD) {
+	if (chip->pd_wait_svid && chip->chg_ops->get_charger_subtype() == CHARGER_SUBTYPE_PD) {
 		charger_xlog_printk(CHG_LOG_CRTI, "voocphy use PD, wait 50ms\n");
 		msleep(50);
 		chip->pd_wait_svid = false;
@@ -9964,6 +9976,10 @@ static void oplus_chg_fast_switch_check(struct oplus_chg_chip *chip)
 				    chip->chg_ops->oplus_chg_get_pd_type() != PD_PPS_ACTIVE) {
 					oplus_vooc_reset_fastchg_after_usbout();
 					chip->chg_ops->set_chargerid_switch_val(0);
+					if (oplus_chg_get_voocphy_support() == AP_SINGLE_CP_VOOCPHY ||
+						oplus_chg_get_voocphy_support() == AP_DUAL_CP_VOOCPHY) {
+						oplus_voocphy_reset_voocphy();
+					}
 					if (chip->chg_ops->enable_qc_detect) {
 						chg_err("enable_qc_detect");
 						chip->chg_ops->enable_qc_detect();
@@ -13776,7 +13792,7 @@ int oplus_chg_match_temp_for_chging(void)
 				if (g_charger_chip->subboard_temp > 690)
 					g_charger_chip->subboard_temp = 690;
 			}
-			if ((gauge_dbg_tbat != 0) || (sub_gauge_dbg_tbat != 0) || (batt_temp == -400))
+			if ((gauge_dbg_tbat != 0) || (sub_gauge_dbg_tbat != 0) || (batt_temp <= -400))
 				g_charger_chip->subboard_temp = batt_temp;
 		} else if (oplus_chg_get_voocphy_support() == NO_VOOCPHY && oplus_vooc_get_fastchg_started() == true) {
 			batt_temp = oplus_gauge_get_prev_batt_temperature();
@@ -14087,11 +14103,12 @@ static int parallel_chg_check_balance_bat_status(void)
 	}
 	chg_err("balancing_bat_status:%d, current_status:%d", chip->balancing_bat_status, status);
 
-	if (chip->balancing_bat_status == PARALLEL_NOT_NEED_BALANCE_BAT__START_CHARGE &&
+	if (chip->charger_exist && chip->balancing_bat_status == PARALLEL_NOT_NEED_BALANCE_BAT__START_CHARGE &&
 	    status != PARALLEL_BAT_BALANCE_ERROR_STATUS8 && status != PARALLEL_BAT_BALANCE_ERROR_STATUS9) {
 		return 0;
 	}
 	if (chip->balancing_bat_status == PARALLEL_BAT_BALANCE_ERROR_STATUS8) {
+		parallel_chg_set_balance_bat_status(chip->balancing_bat_status);
 		return 0;
 	}
 

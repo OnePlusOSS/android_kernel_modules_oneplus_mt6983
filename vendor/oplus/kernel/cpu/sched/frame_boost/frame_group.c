@@ -15,6 +15,7 @@
 #include <trace/hooks/sched.h>
 #include <trace/events/sched.h>
 #include <trace/events/task.h>
+#include <trace/events/power.h>
 
 #include <../kernel/oplus_cpu/sched/sched_assist/sa_common.h>
 #include "frame_boost.h"
@@ -663,6 +664,8 @@ bool add_task_to_game_frame_group(int tid, int add)
 	unsigned long flags;
 	struct task_struct *tsk = NULL;
 	struct frame_group *grp = NULL;
+	struct oplus_task_struct *ots = NULL;
+	raw_spinlock_t *lock;
 	bool success = false;
 
 	rcu_read_lock();
@@ -670,6 +673,19 @@ bool add_task_to_game_frame_group(int tid, int add)
 	/* game_frame_boost_group not add binder task */
 	if (!tsk || strstr(tsk->comm, "binder:") || strstr(tsk->comm, "HwBinder:"))
 		goto out;
+
+	ots = get_oplus_task_struct(tsk);
+	lock = fbg_list_entry_lock(tsk);
+	/*
+	 * only the task which not belonged to any group can be added to game_frame_boost_group in this func,
+	 * only the task which belonged to game_frame_boost_group can be removed in this func.
+	 */
+	if ((add && ots->fbg_state)
+		|| (!add && !(ots->fbg_state & FRAME_GAME))) {
+		fbg_list_entry_unlock(lock);
+		goto out;
+	}
+	fbg_list_entry_unlock(lock);
 
 	grp = &game_frame_boost_group;
 	raw_spin_lock_irqsave(&game_fbg_lock, flags);
@@ -2278,6 +2294,19 @@ static void fbg_try_to_wake_up(void *unused, struct task_struct *p)
 }
 #endif
 
+static void fbg_update_suspend_resume(void *unused, const char *action, int val, bool start)
+{
+	if (!__frame_boost_enabled())
+		return;
+
+	if (!strncmp(action, "timekeeping_freeze", 18)) {
+		if (start)
+			fbg_suspend();
+		else
+			fbg_resume();
+	}
+}
+
 void register_frame_group_vendor_hooks(void)
 {
 	/* Register vender hook in driver/android/binder.c */
@@ -2303,6 +2332,7 @@ void register_frame_group_vendor_hooks(void)
 	register_trace_android_rvh_try_to_wake_up(fbg_try_to_wake_up, NULL);
 	register_trace_android_rvh_new_task_stats(fbg_new_task_stats, NULL);
 #endif
+	register_trace_suspend_resume(fbg_update_suspend_resume, NULL);
 }
 
 int info_show(struct seq_file *m, void *v)

@@ -265,6 +265,7 @@ static void check_charger_out_work_func(struct work_struct *work)
 		oplus_vooc_reset_temp_range(chip);
 		vooc_xlog_printk(CHG_LOG_CRTI, "charger out, chg_vol:%d\n", chg_vol);
 		oplus_chg_set_icon_debounce(false);
+		oplus_vooc_set_awake(chip, false);
 	}
 }
 
@@ -966,6 +967,7 @@ static void oplus_vooc_recv_errcode(struct oplus_vooc_chip *chip, int data)
 	oplus_chg_set_charger_type_unknown();
 	oplus_vooc_check_charger_out(chip);
 	chip->vops->eint_regist(chip);
+	oplus_vooc_set_awake(chip, false);
 }
 
 int oplus_vooc_get_smaller_battemp_cooldown(int ret_batt, int ret_cool)
@@ -1874,6 +1876,7 @@ static void oplus_vooc_fastchg_func(struct work_struct *work)
 			chip->fastchg_to_warm = false;
 			chip->fastchg_dummy_started = true;
 		}
+		oplus_chg_unsuspend_charger();
 	}
 	if (data == VOOC_NOTIFY_NORMAL_TEMP_FULL || data == VOOC_NOTIFY_BAD_CONNECTED ||
 	    (chip->support_fake_vooc_check && data == VOOC_NOTIFY_DATA_UNKNOWN)) {
