@@ -273,7 +273,7 @@ void kbase_csf_firmware_cfg_term(struct kbase_device *kbdev)
 }
 
 int kbase_csf_firmware_cfg_option_entry_parse(struct kbase_device *kbdev,
-					      const struct firmware *fw,
+					      const struct kbase_csf_mcu_fw *const fw,
 					      const u32 *entry,
 					      unsigned int size, bool updatable)
 {
@@ -319,7 +319,7 @@ void kbase_csf_firmware_cfg_term(struct kbase_device *kbdev)
 }
 
 int kbase_csf_firmware_cfg_option_entry_parse(struct kbase_device *kbdev,
-		const struct firmware *fw,
+		const struct kbase_csf_mcu_fw *const fw,
 		const u32 *entry, unsigned int size)
 {
 	return 0;

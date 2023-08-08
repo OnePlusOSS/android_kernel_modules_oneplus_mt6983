@@ -9087,6 +9087,83 @@ read_parameter:
 	return 0;
 }
 
+static bool fg_zy0603_check_rc_sfr(void)
+{
+	int rc = 0;
+	struct battery_chg_dev *bcdev = NULL;
+	struct psy_state *pst = NULL;
+	struct oplus_chg_chip *chip = g_oplus_chip;
+
+	if (!chip) {
+		return false;
+	}
+
+	bcdev = chip->pmic_spmi.bcdev_chip;
+	pst = &bcdev->psy_list[PSY_TYPE_BATTERY];
+
+	rc = read_property_id(bcdev, pst, BATT_ZY0603_CHECK_RC_SFR);
+	if (rc < 0) {
+		chg_err("read sfr fail, rc=%d\n", rc);
+		return false;
+	}
+	chg_err("read sfr success, sfr err=%d\n", pst->prop[BATT_ZY0603_CHECK_RC_SFR]);
+
+	if(pst->prop[BATT_ZY0603_CHECK_RC_SFR]) {
+		return true;
+	} else {
+		return false;
+	}
+}
+
+static int fg_zy0603_soft_reset(void)
+{
+	int rc = 0;
+	struct battery_chg_dev *bcdev = NULL;
+	struct psy_state *pst = NULL;
+
+	if (!g_oplus_chip) {
+		chg_err("g_oplus_chip is NULL!\n");
+		return -1;
+	}
+	bcdev = g_oplus_chip->pmic_spmi.bcdev_chip;
+	pst = &bcdev->psy_list[PSY_TYPE_BATTERY];
+
+	rc = write_property_id(bcdev, pst, BATT_ZY0603_SOFT_RESET, 1);
+	if (rc) {
+		chg_err("soft reset fail, rc=%d\n", rc);
+		return -1;
+	}
+
+	return 0;
+}
+
+static bool fg_zy0603_get_afi_update_done(void)
+{
+	int rc = 0;
+	struct battery_chg_dev *bcdev = NULL;
+	struct psy_state *pst = NULL;
+	struct oplus_chg_chip *chip = g_oplus_chip;
+
+	if (!chip) {
+		return false;
+	}
+
+	bcdev = chip->pmic_spmi.bcdev_chip;
+	pst = &bcdev->psy_list[PSY_TYPE_BATTERY];
+
+	rc = read_property_id(bcdev, pst, BATT_AFI_UPDATE_DONE);
+	if (rc < 0) {
+		chg_err("read afi update fail, rc=%d\n", rc);
+		return false;
+	}
+	chg_err("read afi update success, afi update done=%d\n", pst->prop[BATT_AFI_UPDATE_DONE]);
+	if(pst->prop[BATT_AFI_UPDATE_DONE]) {
+		return true;
+	} else {
+		return false;
+	}
+}
+
 static int fg_bq28z610_get_battery_balancing_status(void)
 {
 	return 0;
@@ -9119,6 +9196,9 @@ static struct oplus_gauge_operations battery_gauge_ops = {
 	.get_battery_cb_status = fg_bq28z610_get_battery_balancing_status,
 	.get_bcc_parameters = oplus_get_bcc_parameters_from_adsp,
 	.set_bcc_parameters = oplus_set_bcc_debug_parameters,
+	.check_rc_sfr = fg_zy0603_check_rc_sfr,
+	.soft_reset_rc_sfr = fg_zy0603_soft_reset,
+	.afi_update_done = fg_zy0603_get_afi_update_done,
 };
 #endif /* OPLUS_FEATURE_CHG_BASIC */
 

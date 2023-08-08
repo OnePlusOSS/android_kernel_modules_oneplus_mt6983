@@ -396,7 +396,7 @@ static int parse_shr_info(struct sensor_fb_cxt *sensor_fb_cxt)
 	int fb_len = 0;
 	unsigned char detail_buff[128] = {0x00};
 
-	for (count = 0; count < sensor_fb_cxt->adsp_event_counts; count ++) {
+	for (count = 0; count < sensor_fb_cxt->adsp_event_counts && count < EVNET_NUM_MAX; count ++) {
 		event_id = sensor_fb_cxt->fb_smem.event[count].event_id;
 		pr_info("event_id =%d, count =%d\n", event_id, count);
 

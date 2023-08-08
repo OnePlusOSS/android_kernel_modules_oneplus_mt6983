@@ -2427,7 +2427,10 @@ static ssize_t proc_start_test_external_write(struct file *filp, const char __us
 		chg_err("%s:  error.\n", __func__);
 		return -EFAULT;
 	}
+
+	buffer[31] = '\0';
 	chg_err("count : %s\n", buffer);
+
 	if (kstrtoint(buffer, 10, &count)) {
 		return -EINVAL;
 	}

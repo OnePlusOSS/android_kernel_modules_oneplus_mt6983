@@ -15,6 +15,7 @@
 #include <trace/hooks/sched.h>
 #include <trace/events/sched.h>
 #include <trace/events/task.h>
+#include <trace/events/power.h>
 
 #include <../kernel/oplus_cpu/sched/sched_assist/sa_common.h>
 #include "frame_boost.h"
@@ -2293,6 +2294,19 @@ static void fbg_try_to_wake_up(void *unused, struct task_struct *p)
 }
 #endif
 
+static void fbg_update_suspend_resume(void *unused, const char *action, int val, bool start)
+{
+	if (!__frame_boost_enabled())
+		return;
+
+	if (!strncmp(action, "timekeeping_freeze", 18)) {
+		if (start)
+			fbg_suspend();
+		else
+			fbg_resume();
+	}
+}
+
 void register_frame_group_vendor_hooks(void)
 {
 	/* Register vender hook in driver/android/binder.c */
@@ -2318,6 +2332,7 @@ void register_frame_group_vendor_hooks(void)
 	register_trace_android_rvh_try_to_wake_up(fbg_try_to_wake_up, NULL);
 	register_trace_android_rvh_new_task_stats(fbg_new_task_stats, NULL);
 #endif
+	register_trace_suspend_resume(fbg_update_suspend_resume, NULL);
 }
 
 int info_show(struct seq_file *m, void *v)
