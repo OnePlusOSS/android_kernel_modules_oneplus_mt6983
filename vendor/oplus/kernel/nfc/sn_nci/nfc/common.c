@@ -38,6 +38,7 @@ int nfc_parse_dt(struct device *dev, struct platform_configs *nfc_configs,
 	nfc_gpio->irq = -EINVAL;
 	nfc_gpio->dwl_req = -EINVAL;
 	nfc_gpio->ven = -EINVAL;
+	nfc_gpio->clkreq = -EINVAL;
 
 	/* irq required for i2c based chips only */
 	if (interface == PLATFORM_IF_I2C) {
@@ -60,8 +61,13 @@ int nfc_parse_dt(struct device *dev, struct platform_configs *nfc_configs,
 		pr_warn("%s: dwl_req gpio invalid %d\n", __func__,
 			nfc_gpio->dwl_req);
 
-	pr_info("%s: %d, %d, %d\n", __func__, nfc_gpio->irq, nfc_gpio->ven,
-		nfc_gpio->dwl_req);
+	nfc_gpio->clkreq = of_get_named_gpio(np, DTS_CLKREQ_GPIO_STR, 0);
+	if ((!gpio_is_valid(nfc_gpio->clkreq)))
+		pr_warn("%s: clkreq gpio invalid %d\n", __func__,
+			nfc_gpio->clkreq);
+
+	pr_info("%s: %d, %d, %d, %d\n", __func__, nfc_gpio->irq, nfc_gpio->ven,
+		nfc_gpio->dwl_req, nfc_gpio->clkreq);
 	return 0;
 }
 

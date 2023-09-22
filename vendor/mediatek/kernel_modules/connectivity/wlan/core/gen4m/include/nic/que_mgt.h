@@ -348,6 +348,7 @@ enum ENUM_MAC_TX_QUEUE_INDEX {
 	MAC_TX_QUEUE_NUM
 };
 
+#define SEQ_ADD(_SEQ, _INC) (((_SEQ) + (_INC)) & MAX_SEQ_NO)
 #define SEQ_SMALLER(_SEQ1, _SEQ2) (((_SEQ1-_SEQ2) & ((MAX_SEQ_NO_COUNT) >> 1)))
 #define BAR_SSN_IS_VALID   BIT(15)
 #define IS_BAR_SSN_VALID(_prBaSsnEntry)  ((_prBaSsnEntry) & BAR_SSN_IS_VALID)

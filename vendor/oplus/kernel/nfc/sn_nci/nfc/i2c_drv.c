@@ -470,6 +470,7 @@ int nfc_i2c_dev_suspend(struct device *device)
 	struct i2c_client *client = to_i2c_client(device);
 	struct nfc_dev *nfc_dev = i2c_get_clientdata(client);
 	struct i2c_dev *i2c_dev = NULL;
+	struct platform_gpio *nfc_gpio = &nfc_dev->configs.gpio;
 	if (!nfc_dev) {
 		pr_err("%s: device doesn't exist anymore\n", __func__);
 		return -ENODEV;
@@ -481,6 +482,11 @@ int nfc_i2c_dev_suspend(struct device *device)
 			i2c_dev->irq_wake_up = true;
 	}
 	pr_debug("%s: irq_wake_up = %d", __func__, i2c_dev->irq_wake_up);
+
+	if(gpio_is_valid(nfc_gpio->clkreq)){
+		pr_debug("%s: clkreq = %d \n",__func__ ,gpio_get_value(nfc_gpio->clkreq));
+	}
+
 	return 0;
 }
 
@@ -489,6 +495,7 @@ int nfc_i2c_dev_resume(struct device *device)
 	struct i2c_client *client = to_i2c_client(device);
 	struct nfc_dev *nfc_dev = i2c_get_clientdata(client);
 	struct i2c_dev *i2c_dev = NULL;
+	struct platform_gpio *nfc_gpio = &nfc_dev->configs.gpio;
 	if (!nfc_dev) {
 		pr_err("%s: device doesn't exist anymore\n", __func__);
 		return -ENODEV;
@@ -500,6 +507,11 @@ int nfc_i2c_dev_resume(struct device *device)
 			i2c_dev->irq_wake_up = false;
 	}
 	pr_debug("%s: irq_wake_up = %d", __func__, i2c_dev->irq_wake_up);
+
+	if(gpio_is_valid(nfc_gpio->clkreq)){
+		pr_debug("%s: clkreq = %d \n",__func__ ,gpio_get_value(nfc_gpio->clkreq));
+	}
+
 	return 0;
 }
 

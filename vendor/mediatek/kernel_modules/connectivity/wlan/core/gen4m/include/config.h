@@ -286,6 +286,8 @@
 
 #define CFG_SUPPORT_DROP_INVALID_MSDUINFO	0
 
+#define CFG_SUPPORT_DHCP_RESET_BA_WINDOW	1
+
 #define CFG_SUPPORT_SKB_CLONED_COPY		1
 
 /*------------------------------------------------------------------------------

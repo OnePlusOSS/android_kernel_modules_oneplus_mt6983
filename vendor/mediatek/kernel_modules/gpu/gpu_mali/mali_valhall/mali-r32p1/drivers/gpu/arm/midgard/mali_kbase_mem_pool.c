@@ -126,8 +126,15 @@ static void kbase_mem_pool_sync_page(struct kbase_mem_pool *pool,
 		struct page *p)
 {
 	struct device *dev = pool->kbdev->dev;
-	dma_sync_single_for_device(dev, kbase_dma_addr(p),
-			(PAGE_SIZE << pool->order), DMA_BIDIRECTIONAL);
+	dma_addr_t dma_addr = kbase_dma_addr(p);
+
+	if(dma_addr) {
+		dma_sync_single_for_device(dev, dma_addr,
+				(PAGE_SIZE << pool->order), DMA_BIDIRECTIONAL);
+	} else {
+		dev_err(dev, "%s : skip sync, page = %p, dma_addr = %lx", __func__, p,dma_addr);
+	}
+
 }
 
 static void kbase_mem_pool_zero_page(struct kbase_mem_pool *pool,

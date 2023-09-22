@@ -3973,6 +3973,169 @@ static void qmLogDropFallBehind(IN struct ADAPTER *prAdapter,
 		       u4BarSSN, u8Count);
 }
 
+uint8_t *qmGetUdpPkt(uint8_t *pucData, uint16_t u2PacketLen,
+	uint32_t *pUdpLen)
+{
+	uint16_t u2EtherType = 0;
+	uint8_t *pucEthBody = NULL;
+	uint8_t *pucUdpPkt = NULL;
+	uint32_t ipHLen = 0;
+	uint32_t udpLen = 0;
+
+	/* check if pkt at least have eth/ip/udp header to read */
+	if (u2PacketLen < (ETHER_HEADER_LEN + IP_HEADER_LEN + UDP_HDR_LEN) ||
+		u2PacketLen > ETHER_MAX_PKT_SZ)
+		goto end;
+
+	u2EtherType = (pucData[ETH_TYPE_LEN_OFFSET] << 8) |
+		(pucData[ETH_TYPE_LEN_OFFSET + 1]);
+	if (u2EtherType != ETH_P_IPV4)
+		goto end;
+
+	/* check ip version and ip proto */
+	pucEthBody = &pucData[ETHER_HEADER_LEN];
+	if (((pucEthBody[0] & IPVH_VERSION_MASK) >>
+		IPVH_VERSION_OFFSET) != IPVERSION)
+		goto end;
+	if (pucEthBody[IP_PROTO_HLEN] != IP_PRO_UDP)
+		goto end;
+
+	/* get actual ip header len and check if udp header safe to read */
+	ipHLen = (pucEthBody[0] & 0x0F) << 2;
+	if (unlikely(u2PacketLen < ETHER_HEADER_LEN + ipHLen + UDP_HDR_LEN))
+		goto end;
+
+	/* check if udp payload safe to read */
+	pucUdpPkt = &pucEthBody[ipHLen];
+	udpLen = pucUdpPkt[4] << 8 | pucUdpPkt[5];
+	if (unlikely(u2PacketLen < ETHER_HEADER_LEN + ipHLen + udpLen)) {
+		pucUdpPkt = NULL;
+		udpLen = 0;
+		goto end;
+	}
+end:
+	if (pUdpLen)
+		*pUdpLen = udpLen;
+	return pucUdpPkt;
+}
+
+uint8_t *qmGetDhcpPkt(uint8_t *pucData, uint16_t u2PacketLen,
+	u_int8_t fgFromServer, uint32_t *pDhcpLen)
+{
+	uint8_t *pucUdpPkt = NULL;
+	uint32_t udpLen = 0;
+	uint32_t dhcpLen = 0;
+	uint16_t u2UdpDstPort;
+	uint16_t u2UdpSrcPort;
+	uint8_t *pucDhcpPkt = NULL;
+	struct BOOTP_PROTOCOL *prBootp = NULL;
+	uint32_t u4DhcpMagicCode = 0;
+
+	pucUdpPkt = qmGetUdpPkt(pucData, u2PacketLen, &udpLen);
+	if (!pucUdpPkt)
+		goto end;
+
+	/* check udp port is dhcp */
+	u2UdpDstPort = (pucUdpPkt[2] << 8) | pucUdpPkt[3];
+	u2UdpSrcPort = (pucUdpPkt[0] << 8) | pucUdpPkt[1];
+	if (fgFromServer) {
+		if (u2UdpSrcPort != UDP_PORT_DHCPS ||
+			u2UdpDstPort != UDP_PORT_DHCPC)
+			goto end;
+	} else {
+		if (u2UdpSrcPort != UDP_PORT_DHCPC ||
+			u2UdpDstPort != UDP_PORT_DHCPS)
+			goto end;
+	}
+
+	if (udpLen < (UDP_HDR_LEN + sizeof(struct BOOTP_PROTOCOL) +
+		DHCP_OPTIONS_SZ_MIN))
+		goto end;
+
+	prBootp = (struct BOOTP_PROTOCOL *) &pucUdpPkt[UDP_HDR_LEN];
+	WLAN_GET_FIELD_BE32(&prBootp->aucOptions[0],
+		&u4DhcpMagicCode);
+	if (u4DhcpMagicCode != DHCP_MAGIC_NUMBER) {
+		DBGLOG(INIT, WARN,
+			"dhcp wrong magic number, magic code: %d\n",
+			u4DhcpMagicCode);
+		goto end;
+	}
+
+	dhcpLen = udpLen - UDP_HDR_LEN;
+	pucDhcpPkt = (uint8_t *) prBootp;
+
+	DBGLOG(QM, LOUD, "Len:%u dhcpLen:%u\n", u2PacketLen, dhcpLen);
+end:
+	if (pDhcpLen)
+		*pDhcpLen = dhcpLen;
+	return pucDhcpPkt;
+}
+
+#if CFG_SUPPORT_DHCP_RESET_BA_WINDOW
+u_int8_t qmIsBaNeedReset(struct ADAPTER *prAdapter, struct SW_RFB *prSwRfb)
+{
+	u_int8_t fgRet = FALSE;
+	uint8_t *pucData;
+	struct BOOTP_PROTOCOL *prBootp;
+
+	pucData = (uint8_t *)prSwRfb->pvHeader;
+	if (!pucData)
+		goto end;
+
+	/* check if pkt is dhcp from server */
+	prBootp = (struct BOOTP_PROTOCOL *) qmGetDhcpPkt(pucData,
+			prSwRfb->u2PacketLen, TRUE, NULL);
+	if (prBootp && prSwRfb->u2SSN == 0)
+		fgRet = TRUE;
+
+end:
+	return fgRet;
+}
+
+void qmBaResetCheck(struct ADAPTER *prAdapter,
+	struct SW_RFB *prSwRfb,
+	struct RX_BA_ENTRY *prReorderQueParm,
+	struct QUE *prReturnedQue)
+{
+	struct WIFI_VAR *prWifiVar = &prAdapter->rWifiVar;
+	uint16_t u2WinStart;
+	uint16_t u2WinEnd;
+
+	if (IS_FEATURE_DISABLED(prWifiVar->fgDhcpResetBaWindow))
+		return;
+
+	if (!qmIsBaNeedReset(prAdapter, prSwRfb))
+		return;
+
+	/* Stop rReorderBubbleTimer and dequeue all pkt */
+	if (prReorderQueParm->fgHasBubble) {
+		prReorderQueParm->fgHasBubble = FALSE;
+		cnmTimerStopTimer(prAdapter,
+			&prReorderQueParm->rReorderBubbleTimer);
+
+		QUEUE_CONCATENATE_QUEUES(prReturnedQue,
+			&(prReorderQueParm->rReOrderQue));
+	}
+
+	/* Reset BA Windows */
+	u2WinStart = prReorderQueParm->u2WinStart;
+	u2WinEnd = prReorderQueParm->u2WinEnd;
+	prReorderQueParm->u2WinStart = SEQ_ADD(prSwRfb->u2SSN, 1);
+	prReorderQueParm->u2WinEnd =
+		SEQ_ADD(prReorderQueParm->u2WinStart,
+			prReorderQueParm->u2WinSize - 1);
+#if CFG_SUPPORT_RX_AMSDU
+	prReorderQueParm->u8LastAmsduSubIdx = RX_PAYLOAD_FORMAT_MSDU;
+#endif
+
+	DBGLOG(QM, INFO, "BA Win Shift STA[%u] TID[%u] {%u,%u} => {%u,%u}\n",
+		prReorderQueParm->ucStaRecIdx, prReorderQueParm->ucTid,
+		u2WinStart, u2WinEnd, prReorderQueParm->u2WinStart,
+		prReorderQueParm->u2WinEnd);
+}
+#endif /* CFG_SUPPORT_DHCP_RESET_BA_WINDOW */
+
 void qmInsertReorderPkt(IN struct ADAPTER *prAdapter,
 	IN struct SW_RFB *prSwRfb,
 	IN struct RX_BA_ENTRY *prReorderQueParm,
@@ -4161,6 +4324,10 @@ void qmInsertReorderPkt(IN struct ADAPTER *prAdapter,
 				prSwRfb->ucTid, u4SeqNo, u4WinStart, u4WinEnd,
 				RX_GET_CNT(&prAdapter->rRxCtrl,
 					RX_DATA_REORDER_BEHIND_COUNT));
+#if CFG_SUPPORT_DHCP_RESET_BA_WINDOW
+			qmBaResetCheck(prAdapter, prSwRfb, prReorderQueParm,
+				prReturnedQue);
+#endif /* CFG_SUPPORT_DHCP_RESET_BA_WINDOW */
 			return;
 		}
 #endif /* CFG_SUPPORT_LOWLATENCY_MODE */
@@ -8304,13 +8471,9 @@ void qmHandleRxDhcpPackets(struct ADAPTER *prAdapter,
 	struct SW_RFB *prSwRfb)
 {
 	uint8_t *pucData = NULL;
-	uint8_t *pucEthBody = NULL;
-	uint8_t *pucUdpBody = NULL;
-	uint32_t ipHLen = 0;
-	uint32_t udpLen = 0;
+	uint32_t dhcpLen = 0;
 	uint32_t i = 0;
 	struct BOOTP_PROTOCOL *prBootp = NULL;
-	uint32_t u4DhcpMagicCode = 0;
 	uint8_t dhcpTypeGot = 0;
 	uint8_t dhcpGatewayGot = 0;
 
@@ -8321,52 +8484,17 @@ void qmHandleRxDhcpPackets(struct ADAPTER *prAdapter,
 	pucData = (uint8_t *)prSwRfb->pvHeader;
 	if (!pucData)
 		return;
-	if (((pucData[ETH_TYPE_LEN_OFFSET] << 8) |
-		pucData[ETH_TYPE_LEN_OFFSET + 1]) != ETH_P_IPV4)
-		return;
 
-	/* check ip version and ip proto */
-	pucEthBody = &pucData[ETHER_HEADER_LEN];
-	if (((pucEthBody[0] & IPVH_VERSION_MASK) >>
-		IPVH_VERSION_OFFSET) != IPVERSION)
+	prBootp = (struct BOOTP_PROTOCOL *) qmGetDhcpPkt(pucData,
+			prSwRfb->u2PacketLen, TRUE, &dhcpLen);
+	if (!prBootp)
 		return;
-	if (pucEthBody[9] != IP_PRO_UDP)
-		return;
-
-	/* check ip header len and if udp header safe to read */
-	ipHLen = (pucEthBody[0] & 0x0F) * 4;
-	if (unlikely(prSwRfb->u2PacketLen <
-		ETHER_HEADER_LEN + ipHLen + UDP_HDR_LEN))
-		return;
-
-	/* check udp port is dhcp */
-	pucUdpBody = &pucEthBody[ipHLen];
-	if ((pucUdpBody[0] << 8 | pucUdpBody[1]) != UDP_PORT_DHCPS ||
-		(pucUdpBody[2] << 8 | pucUdpBody[3]) != UDP_PORT_DHCPC)
-		return;
-
-	udpLen = pucUdpBody[4] << 8 | pucUdpBody[5];
-	/* check if udp payload safe to read */
-	if (unlikely(prSwRfb->u2PacketLen <
-		ETHER_HEADER_LEN + ipHLen + udpLen))
-		return;
-
-	prBootp = (struct BOOTP_PROTOCOL *) &pucUdpBody[8];
-
-	WLAN_GET_FIELD_BE32(&prBootp->aucOptions[0],
-		&u4DhcpMagicCode);
-	if (u4DhcpMagicCode != DHCP_MAGIC_NUMBER) {
-		DBGLOG(INIT, WARN,
-			"dhcp wrong magic number, magic code: %d\n",
-			u4DhcpMagicCode);
-		return;
-	}
 
 	/* 1. 248 is from udp header to the beginning of dhcp option
 	 * 2. not sure the dhcp option always usd 255 as a end mark?
 	 *    if so, while condition should be removed?
 	 */
-	while (i < udpLen - 248) {
+	while (sizeof(struct BOOTP_PROTOCOL) + i < dhcpLen) {
 		/* bcz of the strange struct BOOTP_PROTOCOL *,
 		 * the dhcp magic code was count in dhcp options
 		 * so need to [i + 4] to skip it

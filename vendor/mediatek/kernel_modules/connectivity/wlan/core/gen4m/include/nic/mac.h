@@ -180,6 +180,7 @@
 #define IP_PORT_BOOTP_SERVER                    67
 #define IP_PORT_BOOTP_CLIENT                    68
 
+#define DHCP_OPTIONS_SZ_MIN                     4
 #define DHCP_MAGIC_NUMBER                       0x63825363
 
 #define ARP_OPERATION_OFFSET                    6

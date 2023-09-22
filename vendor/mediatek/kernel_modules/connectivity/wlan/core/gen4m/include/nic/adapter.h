@@ -1346,6 +1346,9 @@ struct WIFI_VAR {
 #if CFG_SUPPORT_BAR_DELAY_INDICATION
 	u_int8_t fgBARDelayIndicationEn;
 #endif /* CFG_SUPPORT_BAR_DELAY_INDICATION */
+#if CFG_SUPPORT_DHCP_RESET_BA_WINDOW
+	u_int8_t fgDhcpResetBaWindow;
+#endif /* CFG_SUPPORT_DHCP_RESET_BA_WINDOW */
 	uint32_t u4MultiStaPrimaryQuoteTime;
 	uint32_t u4MultiStaSecondaryQuoteTime;
 #if CFG_SUPPORT_LIMITED_PKT_PID

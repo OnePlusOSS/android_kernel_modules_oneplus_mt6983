@@ -564,6 +564,9 @@
 #define COUNTRY_CODE_DF (((uint16_t) 'D' << 8) | (uint16_t) 'F')
 /* World Wide */
 #define COUNTRY_CODE_WW (((uint16_t) '0' << 8) | (uint16_t) '0')
+//Add Kosovo country code definition KV
+/* Kosovo */
+#define COUNTRY_CODE_KV (((uint16_t) 'K' << 8) | (uint16_t) 'V')
 
 
 /* dot11RegDomainsSupportValue */

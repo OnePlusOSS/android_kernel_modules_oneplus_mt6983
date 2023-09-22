@@ -80,6 +80,7 @@
 #define DTS_IRQ_GPIO_STR		"nxp,sn-irq"
 #define DTS_VEN_GPIO_STR		"nxp,sn-ven-rstn"
 #define DTS_FWDN_GPIO_STR		"nxp,sn-dwl-req"
+#define DTS_CLKREQ_GPIO_STR		"nxp,sn-clkreq"
 
 enum nfcc_ioctl_request {
 	/* NFC disable request with VEN LOW */
@@ -139,6 +140,7 @@ struct platform_gpio {
 	unsigned int irq;
 	unsigned int ven;
 	unsigned int dwl_req;
+	unsigned int clkreq;
 };
 
 /* NFC Struct to get all the required configs from DTS */

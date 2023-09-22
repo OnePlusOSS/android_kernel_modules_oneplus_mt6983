@@ -7153,8 +7153,6 @@ void wlanCfgLoadIotApRule(IN struct ADAPTER *prAdapter)
 		if (prIotApRule->ucDataMaskLen &&
 			prIotApRule->ucDataMaskLen != prIotApRule->ucDataLen)
 			prIotApRule->u2MatchFlag = 0;
-		if (prIotApRule->ucAction >= WLAN_IOT_AP_ACT_MAX)
-			prIotApRule->u2MatchFlag = 0;
 		if (prIotApRule->u2MatchFlag == 0)
 			DBGLOG(INIT, INFO, "Invalid Rule IOTAP%d\n", ucCnt);
 	}
@@ -8368,6 +8366,12 @@ void wlanInitFeatureOption(IN struct ADAPTER *prAdapter)
 	prWifiVar->fgBARDelayIndicationEn = (uint8_t) wlanCfgGetUint32(
 		prAdapter, "BARDelayIndicationEn", FEATURE_ENABLED);
 #endif /* CFG_SUPPORT_BAR_DELAY_INDICATION */
+
+#if CFG_SUPPORT_DHCP_RESET_BA_WINDOW
+	prWifiVar->fgDhcpResetBaWindow = (uint8_t) wlanCfgGetUint32(
+		prAdapter, "DhcpResetBaWindow", FEATURE_ENABLED);
+#endif /* CFG_SUPPORT_DHCP_RESET_BA_WINDOW */
+
 	prWifiVar->u4MultiStaPrimaryQuoteTime = (uint32_t) wlanCfgGetUint32(
 		prAdapter, "MultiStaPrimaryQuoteTime", 300000);
 	prWifiVar->u4MultiStaSecondaryQuoteTime = (uint32_t) wlanCfgGetUint32(
