@@ -1,0 +1,43 @@
+#
+# oplus extend audio codec configuration
+#
+config SND_SOC_SIA81XX
+	tristate "SoC Audio for  SIA81XX PA"
+	help
+	This option enables support for SIA81XX  K PA.
+
+config SND_SOC_OPLUS_PA_MANAGER
+	tristate "SoC Audio for PA MANAGER"
+	help
+	This option enables support for PA MANAGER.
+
+config SIA_PA_ALGO
+	bool "Use SIA PA ALGO"
+	default n
+
+config OPLUS_MTK_PLATFORM
+	bool "Use MTK PLATFORM"
+	default n
+
+config HSKEY_BLOCK
+	bool "Block hskey for 1s"
+	default n
+
+config SND_SOC_OPLUS_TYPEC_SWITCH
+	tristate "TypeC Switch for DIO 448x or WAS 7483"
+	depends on I2C
+	help
+	  Config of 4480 or 4483. It is a USB type-C Analog Audio
+	  Switch.
+
+config SND_SMARTPA_AW883XX
+	tristate "SoC Audio for awinic aw883xx series"
+	depends on I2C
+	help
+	  This option enables support for aw883xx series Smart PA.
+
+config SND_SOC_CODEC_AW882XX
+	tristate "SoC Audio for awinic aw882xx series"
+	depends on I2C
+	help
+	  This option enables support for aw882xx series Smart PA.
