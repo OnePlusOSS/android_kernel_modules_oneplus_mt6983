@@ -79,15 +79,15 @@ static int get_ovnet_if_by_org(u32 org_if, u32 *ovnet_if)
 		return -1;
 	}
 
-	spin_lock(&s_if_lock);
+	spin_lock_bh(&s_if_lock);
 	for (i = 0; i < VIRTUAL_NET_MAX; i++) {
 		if (s_if_map[i].org_if == org_if) {
 			*ovnet_if = s_if_map[i].ovnet_if;
-			spin_unlock(&s_if_lock);
+			spin_unlock_bh(&s_if_lock);
 			return 0;
 		}
 	}
-	spin_unlock(&s_if_lock);
+	spin_unlock_bh(&s_if_lock);
 
 	return -1;
 }
@@ -101,15 +101,15 @@ static int __attribute__((unused)) get_org_if_by_ovnet_if(u32 ovnet_if, u32 *org
 		return -1;
 	}
 
-	spin_lock(&s_if_lock);
+	spin_lock_bh(&s_if_lock);
 	for (i = 0; i < VIRTUAL_NET_MAX; i++) {
 		if (s_if_map[i].ovnet_if == ovnet_if) {
 			*org_if = s_if_map[i].org_if;
-			spin_unlock(&s_if_lock);
+			spin_unlock_bh(&s_if_lock);
 			return 0;
 		}
 	}
-	spin_unlock(&s_if_lock);
+	spin_unlock_bh(&s_if_lock);
 
 	return -1;
 }
@@ -120,7 +120,7 @@ static int update_ovnet_org_if(u32 org_if, u32 ovnet_if)
 	int i = 0;
 	int first_usable = -1;
 
-	spin_lock(&s_if_lock);
+	spin_lock_bh(&s_if_lock);
 	for (i = 0; i < VIRTUAL_NET_MAX; i++) {
 		if (s_if_map[i].ovnet_if == 0) {
 			if (first_usable == -1) {
@@ -133,7 +133,7 @@ static int update_ovnet_org_if(u32 org_if, u32 ovnet_if)
 			} else {
 				logk("ifmap not update!!! ");
 			}
-			spin_unlock(&s_if_lock);
+			spin_unlock_bh(&s_if_lock);
 			return 0;
 		} else if (s_if_map[i].org_if == org_if) {
 			if (s_if_map[i].ovnet_if != ovnet_if) {
@@ -142,7 +142,7 @@ static int update_ovnet_org_if(u32 org_if, u32 ovnet_if)
 			} else {
 				logk("ifmap 2 not update!!! ");
 			}
-			spin_unlock(&s_if_lock);
+			spin_unlock_bh(&s_if_lock);
 			return 0;
 		}
 	}
@@ -156,7 +156,7 @@ static int update_ovnet_org_if(u32 org_if, u32 ovnet_if)
 		logk("unavailable position for new key-value");
 	}
 
-	spin_unlock(&s_if_lock);
+	spin_unlock_bh(&s_if_lock);
 	return ret;
 }
 
@@ -164,7 +164,7 @@ static int __attribute__((unused)) del_if_map_by_org(u32 org_if)
 {
 	int i = 0;
 
-	spin_lock(&s_if_lock);
+	spin_lock_bh(&s_if_lock);
 	for (i = 0; i < VIRTUAL_NET_MAX; i++) {
 		if (s_if_map[i].org_if == org_if) {
 			s_if_map[i].org_if = 0;
@@ -174,7 +174,7 @@ static int __attribute__((unused)) del_if_map_by_org(u32 org_if)
 		}
 	}
 
-	spin_unlock(&s_if_lock);
+	spin_unlock_bh(&s_if_lock);
 	return 0;
 }
 
@@ -183,7 +183,7 @@ static int del_if_map_by_ovnet(u32 ovnet_if)
 {
 	int i = 0;
 
-	spin_lock(&s_if_lock);
+	spin_lock_bh(&s_if_lock);
 	for (i = 0; i < VIRTUAL_NET_MAX; i++) {
 		if (s_if_map[i].ovnet_if == ovnet_if) {
 			s_if_map[i].org_if = 0;
@@ -193,7 +193,7 @@ static int del_if_map_by_ovnet(u32 ovnet_if)
 		}
 	}
 
-	spin_unlock(&s_if_lock);
+	spin_unlock_bh(&s_if_lock);
 	return 0;
 }
 

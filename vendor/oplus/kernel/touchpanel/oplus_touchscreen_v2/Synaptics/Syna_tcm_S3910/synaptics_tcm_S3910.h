@@ -376,6 +376,16 @@ enum stretch_status {
 	EDGE_STRETCH_LEFT,
 };
 
+<<<<<<< HEAD
+=======
+enum smart_mode {
+	DIAPHRAGM_DEFAULT_MODE = 0,
+	DIAPHRAGM_FILM_MODE = 1,
+	DIAPHRAGM_WATERPROO_MODE = 2,
+	DIAPHRAGM_FILM_WATERPROO_MODE = 3,
+};
+
+>>>>>>> 7dc81fc9123c744e8cb33bb47b1b3dcfa68d18e7
 struct syna_tcm_buffer {
 	bool clone;
 	unsigned char *buf;

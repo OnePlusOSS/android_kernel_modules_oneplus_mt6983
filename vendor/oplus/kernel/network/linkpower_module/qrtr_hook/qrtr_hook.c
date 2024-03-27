@@ -5,6 +5,7 @@
 
 #include <linux/kprobes.h>
 #include <linux/module.h>
+#include <linux/version.h>
 #include "../linkpower_netlink/linkpower_netlink.h"
 
 /* Netlink */
@@ -12,8 +13,9 @@ extern int netlink_send_to_user(int msg_type, char *data, int data_len);
 
 /* Kprobe */
 #define QRTR_PRINT_WAKEUP_REASON_NAME "qrtr_print_wakeup_reason"
-#define QRTR_PRINT_WAKEUP_REASON_OFFSET_V1 0x134
-#define QRTR_PRINT_WAKEUP_REASON_OFFSET_V2 0x184
+#define QRTR_PRINT_WAKEUP_REASON_OFFSET_RELEASE_V510 0x184
+#define QRTR_PRINT_WAKEUP_REASON_OFFSET_RELEASE_V515 0x134
+#define QRTR_PRINT_WAKEUP_REASON_OFFSET_RELEASE_V610 0x12C
 #define QRTR_PRINT_SERVICE_ID_REGS_INDEX 24
 #define QRTR_PRINT_MSG_ID_REGS_INDEX 6
 #define QRTR_MSG_ID_MASK 0xFF000000
@@ -22,16 +24,18 @@ extern int netlink_send_to_user(int msg_type, char *data, int data_len);
 
 static int handler_qrtr_print_wakeup_reason(struct kprobe *kp, struct pt_regs *regs);
 
-static struct kprobe kp_qrtr_print_wakeup_reason_v1 = {
+static struct kprobe kp_qrtr_print_wakeup_reason = {
 	.symbol_name = QRTR_PRINT_WAKEUP_REASON_NAME,
 	.pre_handler = handler_qrtr_print_wakeup_reason,
-	.offset = QRTR_PRINT_WAKEUP_REASON_OFFSET_V1,
-};
-
-static struct kprobe kp_qrtr_print_wakeup_reason_v2 = {
-	.symbol_name = QRTR_PRINT_WAKEUP_REASON_NAME,
-	.pre_handler = handler_qrtr_print_wakeup_reason,
-	.offset = QRTR_PRINT_WAKEUP_REASON_OFFSET_V2,
+#if ((LINUX_VERSION_CODE >= KERNEL_VERSION(5, 10, 0)) && (LINUX_VERSION_CODE < KERNEL_VERSION(5, 11, 0)))
+	.offset = QRTR_PRINT_WAKEUP_REASON_OFFSET_RELEASE_V510,
+#elif ((LINUX_VERSION_CODE >= KERNEL_VERSION(5, 15, 0)) && (LINUX_VERSION_CODE < KERNEL_VERSION(5, 16, 0)))
+	.offset = QRTR_PRINT_WAKEUP_REASON_OFFSET_RELEASE_V515,
+#elif ((LINUX_VERSION_CODE >= KERNEL_VERSION(6, 1, 0)) && (LINUX_VERSION_CODE < KERNEL_VERSION(6, 2, 0)))
+	.offset = QRTR_PRINT_WAKEUP_REASON_OFFSET_RELEASE_V610,
+#else
+	.offset = 0,
+#endif
 };
 
 /* Statistics */
@@ -154,14 +158,9 @@ int qrtr_hook_init(void)
 {
 	int ret = 0;
 
-	ret = register_kprobe(&kp_qrtr_print_wakeup_reason_v1);
+	ret = register_kprobe(&kp_qrtr_print_wakeup_reason);
 	if (ret < 0) {
-		printk("[qrtr_hook] register qrtr kprobe v1 failed with %d", ret);
-	}
-
-	ret = register_kprobe(&kp_qrtr_print_wakeup_reason_v2);
-	if (ret < 0) {
-		printk("[qrtr_hook] register qrtr kprobe v2 failed with %d", ret);
+		printk("[qrtr_hook] register qrtr kprobe failed with %d", ret);
 	}
 
 	memset(qrtr_wakeup_array, 0x0, sizeof(struct qrtr_wakeup_st) * QRTR_WAKEUP_ARRAY_LEN);
@@ -175,6 +174,5 @@ int qrtr_hook_init(void)
  */
 void qrtr_hook_fini(void)
 {
-	unregister_kprobe(&kp_qrtr_print_wakeup_reason_v1);
-	unregister_kprobe(&kp_qrtr_print_wakeup_reason_v2);
+	unregister_kprobe(&kp_qrtr_print_wakeup_reason);
 }

@@ -323,7 +323,9 @@ void operate_mode_switch(struct touchpanel_data *ts)
 		if (ts->sensitive_level_array_support && ts->ts_ops->sensitive_lv_set) {
 			ts->ts_ops->sensitive_lv_set(ts->chip_data, ts->sensitive_level_used_array[ts->sensitive_level_chosen]);
 		}
-
+		if (ts->diaphragm_touch_support && ts->ts_ops->diaphragm_touch_lv_set) {
+			ts->ts_ops->diaphragm_touch_lv_set(ts->chip_data, ts->diaphragm_touch_level_chosen);
+		}
 		if (ts->lcd_tp_refresh_support && ts->ts_ops->tp_refresh_switch) {
 			ts->ts_ops->tp_refresh_switch(ts->chip_data, ts->lcd_fps);
 		}
@@ -515,6 +517,7 @@ static inline void tp_touch_up(struct touchpanel_data *ts)
 
 	input_report_key(ts->input_dev, BTN_TOUCH, 0);
 	input_report_key(ts->input_dev, BTN_TOOL_FINGER, 0);
+	ts->pen_mode_tp_state = DEFAULT;				/*need reset tp state, IC may report times palm, but common driver just report and clear once */
 }
 
 void notify_pen_state(int state, unsigned int index)
@@ -2177,6 +2180,10 @@ static int init_parse_dts(struct device *dev, struct touchpanel_data *ts)
 	ts->suspend_work_support = of_property_read_bool(np, "suspend_work_support");
 	ts->fp_disable_after_resume = of_property_read_bool(np, "fp_disable_after_resume");
 	ts->edge_pull_out_support = of_property_read_bool(np, "edge_pull_out_support");
+<<<<<<< HEAD
+=======
+	ts->diaphragm_touch_support = of_property_read_bool(np, "diaphragm_touch_support");
+>>>>>>> 7dc81fc9123c744e8cb33bb47b1b3dcfa68d18e7
 
 #ifdef CONFIG_TOUCHPANEL_TRUSTED_TOUCH
 	ts->trusted_touch_support = of_property_read_bool(np, "trusted_touch_support");
@@ -3563,6 +3570,11 @@ static void tp_get_temperature_work(struct work_struct *work)
 
 	if (ts->old_temp == result)
 		goto End;
+
+	if (result > MAX_TEMPERATURE || result < MIN_TEMPERATURE) {
+		ts->monitor_data.abnormal_temperature_count++;
+		goto End;
+	}
 
 	if (ts->is_suspended == 0 && (ts->temperature_detect_support || ts->temperature_detect_shellback_support)) {
 		mutex_lock(&ts->mutex);

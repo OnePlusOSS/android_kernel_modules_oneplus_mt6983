@@ -135,6 +135,7 @@ static void fts_read_fod_info(struct chip_data_ft3681 *ts_data);
 static void fts_read_aod_info(struct chip_data_ft3681 *ts_data);
 static void fts_get_rawdata_snr(struct chip_data_ft3681 *ts_data);
 static int fts_get_gesture_info(void *chip_data, struct gesture_info *gesture);
+static void fts_rate_white_list_ctrl(void *chip_data, int value);
 
 /* spi interface */
 static int fts_spi_transfer(struct spi_device *spi, u8 *tx_buf, u8 *rx_buf,
@@ -2079,6 +2080,24 @@ static int fts_enable_game_mode(struct chip_data_ft3681 *ts_data, int enable)
 	struct touchpanel_data *ts = spi_get_drvdata(ts_data->ft_spi);
 
 	if (enable) {
+		if (ts_data->extreme_game_report_rate) {
+			switch (ts->noise_level) {
+			case INTELLIGENT_GAME_MODE:
+				ts_data->extreme_game_flag = false;
+				fts_rate_white_list_ctrl(ts_data, ts->rate_ctrl_level);
+				break;
+			case EXTREME_GAME_MODE:
+				TPD_INFO("%s:extreme_game_report_rate:%d", __func__, ts_data->extreme_game_report_rate);
+				fts_rate_white_list_ctrl(ts_data, ts_data->extreme_game_report_rate);
+				ts_data->extreme_game_flag = true;
+				break;
+			default:
+				ts_data->extreme_game_flag = false;
+				fts_rate_white_list_ctrl(ts_data, ts->rate_ctrl_level);
+				break;
+			}
+			return ret;
+		}
 		if (ts_data->switch_game_rate_support) {/*ts_data->switch_game_rate_support*/
 			switch (ts->noise_level) {
 			case FTS_GET_RATE_120:
@@ -2112,8 +2131,14 @@ static int fts_enable_game_mode(struct chip_data_ft3681 *ts_data, int enable)
 			report_rate = FTS_240HZ_REPORT_RATE;
 		}
 	} else {
-		game_mode = FTS_NOT_GAME_MODE;
-		report_rate = FTS_120HZ_REPORT_RATE;
+		if (ts_data->extreme_game_report_rate) {
+			ts_data->extreme_game_flag = false;
+			fts_rate_white_list_ctrl(ts_data, ts->rate_ctrl_level);
+			return ret;
+		} else {
+			game_mode = FTS_NOT_GAME_MODE;
+			report_rate = FTS_120HZ_REPORT_RATE;
+		}
 	}
 
 	SET_REG(FTS_REG_GAME_MODE_EN_BIT, game_mode);
@@ -2275,7 +2300,11 @@ static int get_now_temp(struct chip_data_ft3681 *ts_data)
 	result = result / 1000;
 	TPD_INFO("%s : temp is %d\n", __func__, result);
 
-	fts_send_temperature(ts->chip_data, result, true);
+	if (result <= MAX_TEMPERATURE && result >= MIN_TEMPERATURE) {
+		fts_send_temperature(ts->chip_data, result, true);
+	} else {
+		ts->monitor_data.abnormal_temperature_count++;
+	}
 
 	return ret;
 }
@@ -3318,6 +3347,7 @@ static int ft3681_parse_dts(struct chip_data_ft3681 *ts_data,
 	struct device *dev;
 	struct device_node *np;
 	struct device_node *chip_np;
+	int rc = 0;
 
 	dev = &spi->dev;
 	np = dev->of_node;
@@ -3338,8 +3368,14 @@ static int ft3681_parse_dts(struct chip_data_ft3681 *ts_data,
 		ts_data->switch_game_rate_support = 0;
 	} else {
 		ts_data->switch_game_rate_support = of_property_read_bool(chip_np, "switch_report_rate");
-		TPD_INFO("%s:switch_report_rate is:%d\n", __func__,
-			ts_data->switch_game_rate_support);
+		TPD_INFO("%s:switch_report_rate is:%d\n", __func__, ts_data->switch_game_rate_support);
+		rc = of_property_read_u32(chip_np, "extreme_game_report_rate", &ts_data->extreme_game_report_rate);
+		if (rc < 0) {
+			/*default :0 disable feature*/
+			ts_data->extreme_game_report_rate = 0;
+		}
+		ts_data->extreme_game_flag = false;
+		TPD_INFO("extreme_game_report_rate %d\n", ts_data->extreme_game_report_rate);
 	}
 
 	return 0;
@@ -3889,6 +3925,10 @@ static void fts_rate_white_list_ctrl(void *chip_data, int value)
 		return;
 	}
 
+	if (ts_data->extreme_game_flag) {
+		return;
+	}
+
 	switch (value) {
 		/* TP RATE */
 	case FTS_WRITE_RATE_120:
@@ -4001,6 +4041,37 @@ struct focal_debug_func focal_debug_ops = {
 	.dump_reg_sate          = focal_dump_reg_state,
 };
 
+static void ft3681_start_aging_test(void *chip_data)
+{
+	int ret = -1;
+
+	TPD_INFO("%s: start aging test \n", __func__);
+	ret = ft3681_fts_write_reg(FTS_REG_GAME_MODE_EN, 2);
+	if (ret < 0) {
+		TPD_INFO("%s: enable(%x=%x) fail", __func__, FTS_REG_GAME_MODE_EN, 2);
+	}
+	ret = ft3681_fts_write_reg(FTS_REG_POWER_MODE, 0);
+	if (ret < 0) {
+		TPD_INFO("%s: enable(%x=%x) fail", __func__, FTS_REG_POWER_MODE, 0);
+	}
+}
+static void ft3681_finish_aging_test(void *chip_data)
+{
+	int ret = -1;
+
+	TPD_INFO("%s: finish aging test \n", __func__);
+	ret = ft3681_fts_write_reg(FTS_REG_GAME_MODE_EN, 1);
+	if (ret < 0) {
+		TPD_INFO("%s: enable(%x=%x) fail", __func__, FTS_REG_GAME_MODE_EN, 1);
+	}
+}
+
+static struct aging_test_proc_operations ft3681_aging_test_ops = {
+	.start_aging_test   = ft3681_start_aging_test,
+	.finish_aging_test  = ft3681_finish_aging_test,
+};
+
+
 static int fts_tp_probe(struct spi_device *spi)
 {
 	struct chip_data_ft3681 *ts_data = NULL;
@@ -4079,6 +4150,7 @@ static int fts_tp_probe(struct spi_device *spi)
 	ts->com_test_data.chip_test_ops = &ft3681_test_ops;
 
 	ts->private_data = &focal_debug_ops;
+	ts->aging_test_ops = &ft3681_aging_test_ops;
 	ft3681_parse_dts(ts_data, spi);
 
 	/*step5:register common touch*/
@@ -4121,6 +4193,15 @@ ts_malloc_failed:
 	TPD_INFO("%s, probe error\n", __func__);
 
 	return ret;
+}
+
+static void fts_spi_tp_shutdown(struct spi_device *spi)
+{
+	struct touchpanel_data *ts = spi_get_drvdata(spi);
+
+	TPD_INFO("%s fts_spi_tp_shutdown is call.\n", __func__);
+
+	tp_shutdown(ts);
 }
 
 static int fts_tp_remove(struct spi_device *spi)
@@ -4196,6 +4277,7 @@ static struct spi_driver fts_ts_driver = {
 	.probe          = fts_tp_probe,
 	.remove         = fts_tp_remove,
 	.id_table   = tp_id,
+	.shutdown	= fts_spi_tp_shutdown,
 	.driver         = {
 		.name   = TPD_DEVICE,
 		.of_match_table =  tp_match_table,

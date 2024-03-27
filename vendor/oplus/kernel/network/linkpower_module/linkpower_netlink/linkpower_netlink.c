@@ -11,6 +11,7 @@
 #define LINKPOWER_NETLINK_FAMILY_VERSION 1
 
 extern int sk_pid_hook_netlink_nlmsg_handle(struct sk_buff *skb, struct genl_info *info);
+extern int data_wakeup_hook_netlink_nlmsg_handle(struct sk_buff *skb, struct genl_info *info);
 #if defined MTK_PLATFORM
 extern int hba_netlink_nlmsg_handle(struct sk_buff *skb, struct genl_info *info);
 extern int ccci_wakeup_hook_netlink_nlmsg_handle(struct sk_buff *skb, struct genl_info *info);
@@ -183,6 +184,8 @@ static int linkpower_netlink_nlmsg_handle(struct sk_buff *skb, struct genl_info 
 	} else if ((nla_type > NETLINK_ID_QRTR_HOOK_BEGIN) && (nla_type < NETLINK_ID_QRTR_HOOK_END)) {
 		return qrtr_hook_netlink_nlmsg_handle(skb, info);
 #endif
+	} else if ((nla_type > NETLINK_ID_DATA_WAKEUP_HOOK_BEGIN) && (nla_type < NETLINK_ID_DATA_WAKEUP_HOOK_END)) {
+		return data_wakeup_hook_netlink_nlmsg_handle(skb, info);
 	} else {
 		printk("[linkpower_netlink] linkpower_netlink_nlmsg_handle failed, unknown nla type=%d.\n", nla_type);
 		ret = -EINVAL;

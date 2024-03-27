@@ -897,6 +897,10 @@ struct touchpanel_data {
 	int noise_level;                                     /*save ps status, ps near = 1, ps far = 0*/
 	int lcd_fps;                                         /*save lcd refresh*/
 
+	/******For smooth report_threshold area********/
+	bool diaphragm_touch_support;
+	u32 diaphragm_touch_level_chosen;
+
 #if defined(TPD_USE_EINT)
 	struct hrtimer         timer;                       /*using polling instead of IRQ*/
 #endif
@@ -1089,6 +1093,7 @@ struct oplus_touchpanel_operations {
 	void (*set_gesture_state)(void *chip_data, int state);
 	int (*send_temperature)(void *chip_data, int value, bool status);
 	int (*set_high_frame_rate)(void *chip_data, int value, int time);
+	int (*diaphragm_touch_lv_set)(void *chip_data, int level);
 };
 
 struct aging_test_proc_operations {

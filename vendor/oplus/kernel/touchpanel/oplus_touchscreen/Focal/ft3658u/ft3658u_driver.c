@@ -1763,7 +1763,7 @@ static int ft3658u_enable_edge_limit(struct chip_data_ft3658u *ts_data, int enab
 	}
 
 	TPD_INFO("MODE_EDGE, write 0x8B|45=0x%x", ts_data->ctrl_reg_state);
-	return ft3658u_write_reg(FT3658U_REG_CTRL, ts_data->ctrl_reg_state);
+	return ft3658u_write_reg(FT3658U_REG_EDGE_LIMIT, edge_mode);
 }
 
 static int ft3658u_enable_charge_mode(struct chip_data_ft3658u *ts_data, int enable)
@@ -2272,10 +2272,7 @@ static u32 ft3658u_u32_trigger_reason(void *chip_data, int gesture_enable,
 	if (val && val != 0xFB && val != 0xFF) {
 		SET_BIT(result_event, IRQ_FW_HEALTH);
 	}
-	/*report palm event*/
-	if (val & 0x02) {
-		SET_BIT(result_event, IRQ_PALM);
-	}
+
 
 	ts_data->irq_type = touch_buf[0];
 

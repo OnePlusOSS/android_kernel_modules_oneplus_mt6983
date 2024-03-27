@@ -2997,6 +2997,21 @@ static int ilitek_reset_gpio_control(void *chip_data, bool enable)
     return 0;
 }
 
+static int ilitek_diaphragm_touch_lv_set(void *chip_data, int level)
+{
+	struct ilitek_ts_data *chip_info = (struct ilitek_ts_data *)chip_data;
+	int ret = 0;
+	uint8_t temp[3] = {0x01, 0x31, 0x00};
+
+	mutex_lock(&chip_info->touch_mutex);
+	temp[2] = level;
+	ILI_INFO("write 0x01, 0x0B, 0x01, 0x%X(level)\n", level);
+	ret = ilits7807s->wrapper(temp, 3, NULL, 0, OFF, OFF);
+	mutex_unlock(&chip_info->touch_mutex);
+	return ret;
+
+}
+
 static struct oplus_touchpanel_operations ilitek_ops = {
     .ftm_process                = ilitek_ftm_process,
     .ftm_process_extra          = ilitek_ftm_process_extra,
@@ -3017,6 +3032,7 @@ static struct oplus_touchpanel_operations ilitek_ops = {
     .get_touch_direction        = ilitek_get_touch_direction,
 	.smooth_lv_set				= ilitek_smooth_lv_set,
 	.sensitive_lv_set			= ilitek_sensitive_lv_set,
+    .diaphragm_touch_lv_set		= ilitek_diaphragm_touch_lv_set,
     .tp_queue_work_prepare      = ilitek_reset_queue_work_prepare,
     .tp_irq_throw_away          = ilitek_irq_throw_away,
 };

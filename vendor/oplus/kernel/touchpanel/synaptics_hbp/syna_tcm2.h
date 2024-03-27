@@ -86,6 +86,11 @@
 #define TX_NUM 17
 #define RX_NUM 38
 
+#define IRQ_COST_TIME_OVER_5MS 5000
+#define IRQ_COST_TIME_OVER_10MS 10000
+#define IRQ_COST_TIME_OVER_20MS 20000
+#define IRQ_COST_TIME_OVER_50MS 50000
+
 #define FW_UPDATE_COMPLETE_TIMEOUT  msecs_to_jiffies(40*1000)
 /**
  * @section: Driver Configurations
@@ -288,6 +293,15 @@ typedef enum debug_level {
 	LEVEL_DEBUG,    /printk all tp debug info/
 } tp_debug_level;
 */
+
+enum fingerprint_err_type {
+	FOD_ENABLE_NO_ERROR = 0,
+	/* reserved 1-6 */
+	FINGERPRINT_AREA_NOT_MATCH = 7,
+	ANOTHER_FINGER_ON_NON_FP_ZONE = 8,
+	FINGERPRINT_DOWN_BEFORE_FP_ENABLE = 9,
+};
+
 /**
  * @brief: Power States
  *

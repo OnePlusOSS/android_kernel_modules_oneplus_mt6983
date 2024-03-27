@@ -944,19 +944,29 @@ static int request_set_match_all_uid_eable(u32 eventid, Netlink__Proto__RequestM
 	return COMM_NETLINK_SUCC;
 }
 
+<<<<<<< HEAD
 
 static int dpi_stats_valid(u64 cur_time, u64 expire, dpi_stats_t *pstats, u64 speed_size)
+=======
+static int dpi_stats_valid(u64 cur_time, u64 expire, dpi_stats_t *pstats, u64 speed_size, u64 dpi_id, u64 *limited_uid_set, size_t n_limited_uid_set)
+>>>>>>> edd9e29361cd5a87aca0b42eeb89076f9c40938f
 {
+	int i;
 	if (((cur_time - pstats->rx_stats.speed_uptime) > expire * 1000000) && ((cur_time - pstats->tx_stats.speed_uptime) > expire * 1000000)) {
 		return 0;
 	}
-	if (speed_size) {
-		if ((pstats->rx_stats.speed < speed_size) && (pstats->tx_stats.speed < speed_size)) {
-			return 0;
-		}
-	}
 	if ((pstats->rx_stats.speed / 1000 == 0) && (pstats->tx_stats.speed / 1000 == 0)) {
 		return 0;
+	}
+	for(i = 0; i < n_limited_uid_set; i++) {
+		if(limited_uid_set[i] == dpi_id) {
+			return 1;
+		}
+	}
+	if (speed_size) {
+		if ((pstats->rx_stats.speed < speed_size * 1000) && (pstats->tx_stats.speed < speed_size * 1000)) {
+			return 0;
+		}
 	}
 	return 1;
 }
@@ -1015,6 +1025,7 @@ static int get_dpi_stream_speed_uid_request(u32 eventid, Netlink__Proto__Request
 	u32 buf_len = 0;
 	int i = 0, j = 0, k = 0;
 	int ifidx_count = 0;
+	int limited_stream_count = 0;
 	u64 cur_time = 0;
 	u64 expire = s_speed_expire;
 	u64 speed_size = 0;
@@ -1022,6 +1033,7 @@ static int get_dpi_stream_speed_uid_request(u32 eventid, Netlink__Proto__Request
 	dpi_result_node *pos_app = NULL;
 	dpi_result_node *pos_func = NULL;
 	dpi_result_node *pos_stream = NULL;
+	uint64_t *limited_stream_set = NULL;
 	Netlink__Proto__ResponseGetDpiStreamSpeed speedRsp = NETLINK__PROTO__RESPONSE_GET_DPI_STREAM_SPEED__INIT;
 
 	if ((requestMsg->request_data_case != NETLINK__PROTO__REQUEST_MESSAGE__REQUEST_DATA_REQUEST_GET_DPI_STREAM_SPEED)
@@ -1032,6 +1044,8 @@ static int get_dpi_stream_speed_uid_request(u32 eventid, Netlink__Proto__Request
 	uid_size = requestMsg->requestgetdpistreamspeed->n_uid;
 	ifidx_count = requestMsg->requestgetdpistreamspeed->n_ifidx;
 	speed_size = requestMsg->requestgetdpistreamspeed->speed_size;
+	limited_stream_count = requestMsg->requestgetdpistreamspeed->n_limited_stream_set;
+	limited_stream_set = requestMsg->requestgetdpistreamspeed->limited_stream_set;
 	ktime_get_raw_ts64(&time);
 	cur_time = time.tv_sec * NS_PER_SEC + time.tv_nsec;
 
@@ -1042,7 +1056,7 @@ static int get_dpi_stream_speed_uid_request(u32 eventid, Netlink__Proto__Request
 			hlist_for_each_entry(pos_func, &pos_app->child_list, node) {
 				hlist_for_each_entry(pos_stream, &pos_func->child_list, node) {
 					if (ifidx_count == 0) {
-						if (dpi_stats_valid(cur_time, expire, &pos_stream->hash_stats.total_stats, speed_size)) {
+						if (dpi_stats_valid(cur_time, expire, &pos_stream->hash_stats.total_stats, speed_size, pos_stream->dpi_id, limited_stream_set, limited_stream_count)) {
 							stream_count++;
 						}
 					} else {
@@ -1050,7 +1064,7 @@ static int get_dpi_stream_speed_uid_request(u32 eventid, Netlink__Proto__Request
 						for(i = 0; i < ifidx_count; i++) {
 							hash_for_each_possible(pos_stream->hash_stats.stats_map, stats_pos, node, requestMsg->requestgetdpistreamspeed->ifidx[i]) {
 								if (stats_pos->if_idx == requestMsg->requestgetdpistreamspeed->ifidx[i]) {
-									if (dpi_stats_valid(cur_time, expire, stats_pos, speed_size)) {
+									if (dpi_stats_valid(cur_time, expire, stats_pos, speed_size, pos_stream->dpi_id, limited_stream_set, limited_stream_count)) {
 										stream_count++;
 									}
 									break;
@@ -1090,7 +1104,7 @@ static int get_dpi_stream_speed_uid_request(u32 eventid, Netlink__Proto__Request
 				hlist_for_each_entry(pos_func, &pos_app->child_list, node) {
 					hlist_for_each_entry(pos_stream, &pos_func->child_list, node) {
 						if (ifidx_count == 0) {
-							if (dpi_stats_valid(cur_time, expire, &pos_stream->hash_stats.total_stats, speed_size)) {
+							if (dpi_stats_valid(cur_time, expire, &pos_stream->hash_stats.total_stats, speed_size, pos_stream->dpi_id, limited_stream_set, limited_stream_count)) {
 								if (stream_added >= stream_count) {
 									logt("get_dpi_stream_speed: stream_added >= stream_count, stream_added=%d, stream_count=%d ", stream_added, stream_count);
 									break;
@@ -1103,7 +1117,7 @@ static int get_dpi_stream_speed_uid_request(u32 eventid, Netlink__Proto__Request
 							for(j = 0; j < ifidx_count; j++) {
 								hash_for_each_possible(pos_stream->hash_stats.stats_map, stats_pos, node, requestMsg->requestgetdpistreamspeed->ifidx[j]) {
 									if (stats_pos->if_idx == requestMsg->requestgetdpistreamspeed->ifidx[j]) {
-										if (dpi_stats_valid(cur_time, expire, stats_pos, speed_size)) {
+										if (dpi_stats_valid(cur_time, expire, stats_pos, speed_size, pos_stream->dpi_id, limited_stream_set, limited_stream_count)) {
 											if (stream_added >= stream_count) {
 												logt("get_dpi_stream_speed: stream_added >= stream_count, stream_added=%d, stream_count=%d ", stream_added, stream_count);
 												break;
@@ -1167,13 +1181,18 @@ static int get_all_uid_dpi_speed_request(u32 eventid, Netlink__Proto__RequestMes
 	u32 stream_count = 0;
 	u32 buf_len = 0;
 	int i = 0, j = 0, k = 0;
+	int limited_stream_count = 0;
 	int ifidx_count = 0;
 	u64 cur_time = 0;
 	u64 expire = s_speed_expire;
 	u64 speed_size = 0;
 	struct timespec64 time;
 	dpi_result_node *pos_all_uid = NULL;
+<<<<<<< HEAD
 	dpi_result_node *pos_app = NULL;
+=======
+	uint64_t *limited_stream_set = NULL;
+>>>>>>> edd9e29361cd5a87aca0b42eeb89076f9c40938f
 	Netlink__Proto__ResponseGetDpiStreamSpeed speedRsp = NETLINK__PROTO__RESPONSE_GET_DPI_STREAM_SPEED__INIT;
 	if ((requestMsg->request_data_case != NETLINK__PROTO__REQUEST_MESSAGE__REQUEST_DATA_REQUEST_GET_ALL_UID_SPEED)
 		|| (!requestMsg->requestgetalluidspeed)) {
@@ -1181,13 +1200,15 @@ static int get_all_uid_dpi_speed_request(u32 eventid, Netlink__Proto__RequestMes
 	}
 	ifidx_count = requestMsg->requestgetalluidspeed->n_ifidx;
 	speed_size = requestMsg->requestgetalluidspeed->speed_size;
+	limited_stream_count = requestMsg->requestgetalluidspeed->n_limited_uid_set;
+	limited_stream_set = requestMsg->requestgetalluidspeed->limited_uid_set;
 	ktime_get_raw_ts64(&time);
 	cur_time = time.tv_sec * NS_PER_SEC + time.tv_nsec;
 
 	spin_lock_bh(&s_dpi_lock);
 	hlist_for_each_entry(pos_all_uid, &s_match_uid_result_head, node) {
 		if (ifidx_count == 0) {
-			if (dpi_stats_valid(cur_time, expire, &pos_all_uid->hash_stats.total_stats, speed_size)) {
+			if (dpi_stats_valid(cur_time, expire, &pos_all_uid->hash_stats.total_stats, speed_size, pos_all_uid->dpi_id, limited_stream_set, limited_stream_count)) {
 				stream_count++;
 			}
 		}
@@ -1196,7 +1217,7 @@ static int get_all_uid_dpi_speed_request(u32 eventid, Netlink__Proto__RequestMes
 			for(i = 0; i < ifidx_count; i++) {
 				hash_for_each_possible(pos_all_uid->hash_stats.stats_map, stats_pos, node, requestMsg->requestgetalluidspeed->ifidx[i]) {
 					if (stats_pos->if_idx == requestMsg->requestgetalluidspeed->ifidx[i]) {
-						if (dpi_stats_valid(cur_time, expire, stats_pos, speed_size)) {
+						if (dpi_stats_valid(cur_time, expire, stats_pos, speed_size, pos_all_uid->dpi_id, limited_stream_set, limited_stream_count)) {
 							stream_count++;
 						}
 						break;
@@ -1242,7 +1263,7 @@ static int get_all_uid_dpi_speed_request(u32 eventid, Netlink__Proto__RequestMes
 		}
 		hlist_for_each_entry(pos_all_uid, &s_match_uid_result_head, node) {
 			if (ifidx_count == 0) {
-				if (dpi_stats_valid(cur_time, expire, &pos_all_uid->hash_stats.total_stats, speed_size)) {
+				if (dpi_stats_valid(cur_time, expire, &pos_all_uid->hash_stats.total_stats, speed_size, pos_all_uid->dpi_id, limited_stream_set, limited_stream_count)) {
 					if (stream_added >= stream_count) {
 						logt("get_dpi_stream_speed: stream_added >= stream_count, stream_added=%d, stream_count=%d ", stream_added, stream_count);
 						break;
@@ -1255,7 +1276,7 @@ static int get_all_uid_dpi_speed_request(u32 eventid, Netlink__Proto__RequestMes
 				for(j = 0; j < ifidx_count; j++) {
 					hash_for_each_possible(pos_all_uid->hash_stats.stats_map, stats_pos, node, requestMsg->requestgetalluidspeed->ifidx[j]) {
 						if (stats_pos->if_idx == requestMsg->requestgetalluidspeed->ifidx[j]) {
-							if (dpi_stats_valid(cur_time, expire, stats_pos, speed_size)) {
+							if (dpi_stats_valid(cur_time, expire, stats_pos, speed_size, pos_all_uid->dpi_id, limited_stream_set, limited_stream_count)) {
 								if (stream_added >= stream_count) {
 									logt("get_dpi_stream_speed: stream_added >= stream_count, stream_added=%d, stream_count=%d ", stream_added, stream_count);
 									break;

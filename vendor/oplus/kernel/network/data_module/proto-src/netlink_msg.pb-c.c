@@ -855,7 +855,370 @@ const ProtobufCMessageDescriptor netlink__proto__request_set_dpi_uid__descriptor
   (ProtobufCMessageInit) netlink__proto__request_set_dpi_uid__init,
   NULL,NULL,NULL    /* reserved[123] */
 };
+<<<<<<< HEAD
 static const ProtobufCFieldDescriptor netlink__proto__request_get_dpi_stream_speed__field_descriptors[3] =
+=======
+static const ProtobufCFieldDescriptor netlink__proto__request_set_scene__field_descriptors[3] =
+{
+  {
+    "uid",
+    1,
+    PROTOBUF_C_LABEL_REQUIRED,
+    PROTOBUF_C_TYPE_UINT32,
+    0,   /* quantifier_offset */
+    offsetof(Netlink__Proto__RequestSetScene, uid),
+    NULL,
+    NULL,
+    0,             /* flags */
+    0,NULL,NULL    /* reserved1,reserved2, etc */
+  },
+  {
+    "scene",
+    2,
+    PROTOBUF_C_LABEL_REQUIRED,
+    PROTOBUF_C_TYPE_UINT32,
+    0,   /* quantifier_offset */
+    offsetof(Netlink__Proto__RequestSetScene, scene),
+    NULL,
+    NULL,
+    0,             /* flags */
+    0,NULL,NULL    /* reserved1,reserved2, etc */
+  },
+  {
+    "enterType",
+    3,
+    PROTOBUF_C_LABEL_REQUIRED,
+    PROTOBUF_C_TYPE_UINT32,
+    0,   /* quantifier_offset */
+    offsetof(Netlink__Proto__RequestSetScene, entertype),
+    NULL,
+    NULL,
+    0,             /* flags */
+    0,NULL,NULL    /* reserved1,reserved2, etc */
+  },
+};
+static const unsigned netlink__proto__request_set_scene__field_indices_by_name[] = {
+  2,   /* field[2] = enterType */
+  1,   /* field[1] = scene */
+  0,   /* field[0] = uid */
+};
+static const ProtobufCIntRange netlink__proto__request_set_scene__number_ranges[1 + 1] =
+{
+  { 1, 0 },
+  { 0, 3 }
+};
+const ProtobufCMessageDescriptor netlink__proto__request_set_scene__descriptor =
+{
+  PROTOBUF_C__MESSAGE_DESCRIPTOR_MAGIC,
+  "netlink.proto.RequestSetScene",
+  "RequestSetScene",
+  "Netlink__Proto__RequestSetScene",
+  "netlink.proto",
+  sizeof(Netlink__Proto__RequestSetScene),
+  3,
+  netlink__proto__request_set_scene__field_descriptors,
+  netlink__proto__request_set_scene__field_indices_by_name,
+  1,  netlink__proto__request_set_scene__number_ranges,
+  (ProtobufCMessageInit) netlink__proto__request_set_scene__init,
+  NULL,NULL,NULL    /* reserved[123] */
+};
+static const ProtobufCFieldDescriptor netlink__proto__request_set_charater__field_descriptors[10] =
+{
+  {
+    "streamId",
+    1,
+    PROTOBUF_C_LABEL_REQUIRED,
+    PROTOBUF_C_TYPE_UINT64,
+    0,   /* quantifier_offset */
+    offsetof(Netlink__Proto__RequestSetCharater, streamid),
+    NULL,
+    NULL,
+    0,             /* flags */
+    0,NULL,NULL    /* reserved1,reserved2, etc */
+  },
+  {
+    "transportProtocol",
+    2,
+    PROTOBUF_C_LABEL_OPTIONAL,
+    PROTOBUF_C_TYPE_STRING,
+    0,   /* quantifier_offset */
+    offsetof(Netlink__Proto__RequestSetCharater, transportprotocol),
+    NULL,
+    NULL,
+    0,             /* flags */
+    0,NULL,NULL    /* reserved1,reserved2, etc */
+  },
+  {
+    "dstPort",
+    3,
+    PROTOBUF_C_LABEL_OPTIONAL,
+    PROTOBUF_C_TYPE_STRING,
+    0,   /* quantifier_offset */
+    offsetof(Netlink__Proto__RequestSetCharater, dstport),
+    NULL,
+    NULL,
+    0,             /* flags */
+    0,NULL,NULL    /* reserved1,reserved2, etc */
+  },
+  {
+    "url",
+    4,
+    PROTOBUF_C_LABEL_OPTIONAL,
+    PROTOBUF_C_TYPE_STRING,
+    0,   /* quantifier_offset */
+    offsetof(Netlink__Proto__RequestSetCharater, url),
+    NULL,
+    NULL,
+    0,             /* flags */
+    0,NULL,NULL    /* reserved1,reserved2, etc */
+  },
+  {
+    "httptype",
+    5,
+    PROTOBUF_C_LABEL_OPTIONAL,
+    PROTOBUF_C_TYPE_STRING,
+    0,   /* quantifier_offset */
+    offsetof(Netlink__Proto__RequestSetCharater, httptype),
+    NULL,
+    NULL,
+    0,             /* flags */
+    0,NULL,NULL    /* reserved1,reserved2, etc */
+  },
+  {
+    "httpField",
+    6,
+    PROTOBUF_C_LABEL_OPTIONAL,
+    PROTOBUF_C_TYPE_STRING,
+    0,   /* quantifier_offset */
+    offsetof(Netlink__Proto__RequestSetCharater, httpfield),
+    NULL,
+    NULL,
+    0,             /* flags */
+    0,NULL,NULL    /* reserved1,reserved2, etc */
+  },
+  {
+    "downPkgTh",
+    7,
+    PROTOBUF_C_LABEL_OPTIONAL,
+    PROTOBUF_C_TYPE_STRING,
+    0,   /* quantifier_offset */
+    offsetof(Netlink__Proto__RequestSetCharater, downpkgth),
+    NULL,
+    NULL,
+    0,             /* flags */
+    0,NULL,NULL    /* reserved1,reserved2, etc */
+  },
+  {
+    "upPkgTh",
+    8,
+    PROTOBUF_C_LABEL_OPTIONAL,
+    PROTOBUF_C_TYPE_STRING,
+    0,   /* quantifier_offset */
+    offsetof(Netlink__Proto__RequestSetCharater, uppkgth),
+    NULL,
+    NULL,
+    0,             /* flags */
+    0,NULL,NULL    /* reserved1,reserved2, etc */
+  },
+  {
+    "upPkgMagic",
+    9,
+    PROTOBUF_C_LABEL_OPTIONAL,
+    PROTOBUF_C_TYPE_STRING,
+    0,   /* quantifier_offset */
+    offsetof(Netlink__Proto__RequestSetCharater, uppkgmagic),
+    NULL,
+    NULL,
+    0,             /* flags */
+    0,NULL,NULL    /* reserved1,reserved2, etc */
+  },
+  {
+    "pkgTh",
+    10,
+    PROTOBUF_C_LABEL_OPTIONAL,
+    PROTOBUF_C_TYPE_STRING,
+    0,   /* quantifier_offset */
+    offsetof(Netlink__Proto__RequestSetCharater, pkgth),
+    NULL,
+    NULL,
+    0,             /* flags */
+    0,NULL,NULL    /* reserved1,reserved2, etc */
+  },
+};
+static const unsigned netlink__proto__request_set_charater__field_indices_by_name[] = {
+  6,   /* field[6] = downPkgTh */
+  2,   /* field[2] = dstPort */
+  5,   /* field[5] = httpField */
+  4,   /* field[4] = httptype */
+  9,   /* field[9] = pkgTh */
+  0,   /* field[0] = streamId */
+  1,   /* field[1] = transportProtocol */
+  8,   /* field[8] = upPkgMagic */
+  7,   /* field[7] = upPkgTh */
+  3,   /* field[3] = url */
+};
+static const ProtobufCIntRange netlink__proto__request_set_charater__number_ranges[1 + 1] =
+{
+  { 1, 0 },
+  { 0, 10 }
+};
+const ProtobufCMessageDescriptor netlink__proto__request_set_charater__descriptor =
+{
+  PROTOBUF_C__MESSAGE_DESCRIPTOR_MAGIC,
+  "netlink.proto.RequestSetCharater",
+  "RequestSetCharater",
+  "Netlink__Proto__RequestSetCharater",
+  "netlink.proto",
+  sizeof(Netlink__Proto__RequestSetCharater),
+  10,
+  netlink__proto__request_set_charater__field_descriptors,
+  netlink__proto__request_set_charater__field_indices_by_name,
+  1,  netlink__proto__request_set_charater__number_ranges,
+  (ProtobufCMessageInit) netlink__proto__request_set_charater__init,
+  NULL,NULL,NULL    /* reserved[123] */
+};
+static const ProtobufCFieldDescriptor netlink__proto__request_set_game_main_stream_uid__field_descriptors[1] =
+{
+  {
+    "gameUid",
+    1,
+    PROTOBUF_C_LABEL_REPEATED,
+    PROTOBUF_C_TYPE_UINT32,
+    offsetof(Netlink__Proto__RequestSetGameMainStreamUid, n_gameuid),
+    offsetof(Netlink__Proto__RequestSetGameMainStreamUid, gameuid),
+    NULL,
+    NULL,
+    0,             /* flags */
+    0,NULL,NULL    /* reserved1,reserved2, etc */
+  },
+};
+static const unsigned netlink__proto__request_set_game_main_stream_uid__field_indices_by_name[] = {
+  0,   /* field[0] = gameUid */
+};
+static const ProtobufCIntRange netlink__proto__request_set_game_main_stream_uid__number_ranges[1 + 1] =
+{
+  { 1, 0 },
+  { 0, 1 }
+};
+const ProtobufCMessageDescriptor netlink__proto__request_set_game_main_stream_uid__descriptor =
+{
+  PROTOBUF_C__MESSAGE_DESCRIPTOR_MAGIC,
+  "netlink.proto.RequestSetGameMainStreamUid",
+  "RequestSetGameMainStreamUid",
+  "Netlink__Proto__RequestSetGameMainStreamUid",
+  "netlink.proto",
+  sizeof(Netlink__Proto__RequestSetGameMainStreamUid),
+  1,
+  netlink__proto__request_set_game_main_stream_uid__field_descriptors,
+  netlink__proto__request_set_game_main_stream_uid__field_indices_by_name,
+  1,  netlink__proto__request_set_game_main_stream_uid__number_ranges,
+  (ProtobufCMessageInit) netlink__proto__request_set_game_main_stream_uid__init,
+  NULL,NULL,NULL    /* reserved[123] */
+};
+static const ProtobufCFieldDescriptor netlink__proto__request_set_wechat_scene__field_descriptors[2] =
+{
+  {
+    "wechatScene",
+    1,
+    PROTOBUF_C_LABEL_REQUIRED,
+    PROTOBUF_C_TYPE_UINT64,
+    0,   /* quantifier_offset */
+    offsetof(Netlink__Proto__RequestSetWechatScene, wechatscene),
+    NULL,
+    NULL,
+    0 | PROTOBUF_C_FIELD_FLAG_DEPRECATED,             /* flags */
+    0,NULL,NULL    /* reserved1,reserved2, etc */
+  },
+  {
+    "isEnter",
+    2,
+    PROTOBUF_C_LABEL_REQUIRED,
+    PROTOBUF_C_TYPE_UINT32,
+    0,   /* quantifier_offset */
+    offsetof(Netlink__Proto__RequestSetWechatScene, isenter),
+    NULL,
+    NULL,
+    0 | PROTOBUF_C_FIELD_FLAG_DEPRECATED,             /* flags */
+    0,NULL,NULL    /* reserved1,reserved2, etc */
+  },
+};
+static const unsigned netlink__proto__request_set_wechat_scene__field_indices_by_name[] = {
+  1,   /* field[1] = isEnter */
+  0,   /* field[0] = wechatScene */
+};
+static const ProtobufCIntRange netlink__proto__request_set_wechat_scene__number_ranges[1 + 1] =
+{
+  { 1, 0 },
+  { 0, 2 }
+};
+const ProtobufCMessageDescriptor netlink__proto__request_set_wechat_scene__descriptor =
+{
+  PROTOBUF_C__MESSAGE_DESCRIPTOR_MAGIC,
+  "netlink.proto.RequestSetWechatScene",
+  "RequestSetWechatScene",
+  "Netlink__Proto__RequestSetWechatScene",
+  "netlink.proto",
+  sizeof(Netlink__Proto__RequestSetWechatScene),
+  2,
+  netlink__proto__request_set_wechat_scene__field_descriptors,
+  netlink__proto__request_set_wechat_scene__field_indices_by_name,
+  1,  netlink__proto__request_set_wechat_scene__number_ranges,
+  (ProtobufCMessageInit) netlink__proto__request_set_wechat_scene__init,
+  NULL,NULL,NULL    /* reserved[123] */
+};
+static const ProtobufCFieldDescriptor netlink__proto__request_set_activity_scene__field_descriptors[2] =
+{
+  {
+    "douyinStreamId",
+    1,
+    PROTOBUF_C_LABEL_OPTIONAL,
+    PROTOBUF_C_TYPE_UINT64,
+    offsetof(Netlink__Proto__RequestSetActivityScene, has_douyinstreamid),
+    offsetof(Netlink__Proto__RequestSetActivityScene, douyinstreamid),
+    NULL,
+    NULL,
+    0,             /* flags */
+    0,NULL,NULL    /* reserved1,reserved2, etc */
+  },
+  {
+    "kuaishouStreamId",
+    2,
+    PROTOBUF_C_LABEL_OPTIONAL,
+    PROTOBUF_C_TYPE_UINT64,
+    offsetof(Netlink__Proto__RequestSetActivityScene, has_kuaishoustreamid),
+    offsetof(Netlink__Proto__RequestSetActivityScene, kuaishoustreamid),
+    NULL,
+    NULL,
+    0,             /* flags */
+    0,NULL,NULL    /* reserved1,reserved2, etc */
+  },
+};
+static const unsigned netlink__proto__request_set_activity_scene__field_indices_by_name[] = {
+  0,   /* field[0] = douyinStreamId */
+  1,   /* field[1] = kuaishouStreamId */
+};
+static const ProtobufCIntRange netlink__proto__request_set_activity_scene__number_ranges[1 + 1] =
+{
+  { 1, 0 },
+  { 0, 2 }
+};
+const ProtobufCMessageDescriptor netlink__proto__request_set_activity_scene__descriptor =
+{
+  PROTOBUF_C__MESSAGE_DESCRIPTOR_MAGIC,
+  "netlink.proto.RequestSetActivityScene",
+  "RequestSetActivityScene",
+  "Netlink__Proto__RequestSetActivityScene",
+  "netlink.proto",
+  sizeof(Netlink__Proto__RequestSetActivityScene),
+  2,
+  netlink__proto__request_set_activity_scene__field_descriptors,
+  netlink__proto__request_set_activity_scene__field_indices_by_name,
+  1,  netlink__proto__request_set_activity_scene__number_ranges,
+  (ProtobufCMessageInit) netlink__proto__request_set_activity_scene__init,
+  NULL,NULL,NULL    /* reserved[123] */
+};
+static const ProtobufCFieldDescriptor netlink__proto__request_get_dpi_stream_speed__field_descriptors[4] =
+>>>>>>> edd9e29361cd5a87aca0b42eeb89076f9c40938f
 {
   {
     "ifidx",
@@ -893,16 +1256,29 @@ static const ProtobufCFieldDescriptor netlink__proto__request_get_dpi_stream_spe
     0,             /* flags */
     0,NULL,NULL    /* reserved1,reserved2, etc */
   },
+  {
+    "limited_stream_set",
+    4,
+    PROTOBUF_C_LABEL_REPEATED,
+    PROTOBUF_C_TYPE_UINT64,
+    offsetof(Netlink__Proto__RequestGetDpiStreamSpeed, n_limited_stream_set),
+    offsetof(Netlink__Proto__RequestGetDpiStreamSpeed, limited_stream_set),
+    NULL,
+    NULL,
+    0,             /* flags */
+    0,NULL,NULL    /* reserved1,reserved2, etc */
+  },
 };
 static const unsigned netlink__proto__request_get_dpi_stream_speed__field_indices_by_name[] = {
   0,   /* field[0] = ifidx */
+  3,   /* field[3] = limited_stream_set */
   2,   /* field[2] = speed_size */
   1,   /* field[1] = uid */
 };
 static const ProtobufCIntRange netlink__proto__request_get_dpi_stream_speed__number_ranges[1 + 1] =
 {
   { 1, 0 },
-  { 0, 3 }
+  { 0, 4 }
 };
 const ProtobufCMessageDescriptor netlink__proto__request_get_dpi_stream_speed__descriptor =
 {
@@ -912,7 +1288,7 @@ const ProtobufCMessageDescriptor netlink__proto__request_get_dpi_stream_speed__d
   "Netlink__Proto__RequestGetDpiStreamSpeed",
   "netlink.proto",
   sizeof(Netlink__Proto__RequestGetDpiStreamSpeed),
-  3,
+  4,
   netlink__proto__request_get_dpi_stream_speed__field_descriptors,
   netlink__proto__request_get_dpi_stream_speed__field_indices_by_name,
   1,  netlink__proto__request_get_dpi_stream_speed__number_ranges,
@@ -970,7 +1346,7 @@ const ProtobufCMessageDescriptor netlink__proto__request_set_log_steam_ip__descr
   (ProtobufCMessageInit) netlink__proto__request_set_log_steam_ip__init,
   NULL,NULL,NULL    /* reserved[123] */
 };
-static const ProtobufCFieldDescriptor netlink__proto__request_get_all_uid_speed__field_descriptors[2] =
+static const ProtobufCFieldDescriptor netlink__proto__request_get_all_uid_speed__field_descriptors[3] =
 {
   {
     "ifidx",
@@ -996,15 +1372,28 @@ static const ProtobufCFieldDescriptor netlink__proto__request_get_all_uid_speed_
     0,             /* flags */
     0,NULL,NULL    /* reserved1,reserved2, etc */
   },
+  {
+    "limited_uid_set",
+    3,
+    PROTOBUF_C_LABEL_REPEATED,
+    PROTOBUF_C_TYPE_UINT64,
+    offsetof(Netlink__Proto__RequestGetAllUidSpeed, n_limited_uid_set),
+    offsetof(Netlink__Proto__RequestGetAllUidSpeed, limited_uid_set),
+    NULL,
+    NULL,
+    0,             /* flags */
+    0,NULL,NULL    /* reserved1,reserved2, etc */
+  },
 };
 static const unsigned netlink__proto__request_get_all_uid_speed__field_indices_by_name[] = {
   0,   /* field[0] = ifidx */
+  2,   /* field[2] = limited_uid_set */
   1,   /* field[1] = speed_size */
 };
 static const ProtobufCIntRange netlink__proto__request_get_all_uid_speed__number_ranges[1 + 1] =
 {
   { 1, 0 },
-  { 0, 2 }
+  { 0, 3 }
 };
 const ProtobufCMessageDescriptor netlink__proto__request_get_all_uid_speed__descriptor =
 {
@@ -1014,7 +1403,7 @@ const ProtobufCMessageDescriptor netlink__proto__request_get_all_uid_speed__desc
   "Netlink__Proto__RequestGetAllUidSpeed",
   "netlink.proto",
   sizeof(Netlink__Proto__RequestGetAllUidSpeed),
-  2,
+  3,
   netlink__proto__request_get_all_uid_speed__field_descriptors,
   netlink__proto__request_get_all_uid_speed__field_indices_by_name,
   1,  netlink__proto__request_get_all_uid_speed__number_ranges,

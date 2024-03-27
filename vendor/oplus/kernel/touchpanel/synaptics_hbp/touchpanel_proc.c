@@ -631,6 +631,7 @@ static ssize_t proc_algo_version_write(struct file *file,
 
 	tp_copy_from_user(tcm->algo_version, sizeof(tcm->algo_version), buffer, count, MAX_DEVICE_VERSION_LENGTH);
 	tcm->algo_version[MAX_DEVICE_VERSION_LENGTH - 1] = '\0';
+	strreplace(tcm->algo_version, ':', '-');
 
 	TP_INFO(tcm->tp_index, "%s:algo_version=%s\n", __func__,  tcm->algo_version);
 

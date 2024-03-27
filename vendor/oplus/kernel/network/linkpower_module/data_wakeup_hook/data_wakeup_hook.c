@@ -11,6 +11,10 @@
 #include <linux/netfilter.h>
 #include <linux/netfilter_ipv4.h>
 #include <net/tcp.h>
+#include "../linkpower_netlink/linkpower_netlink.h"
+
+/* Netlink */
+extern int netlink_send_to_user(int msg_type, char *data, int data_len);
 
 static unsigned int my_input_hook_v4(void *priv, struct sk_buff *skb, const struct nf_hook_state *state);
 static unsigned int my_input_hook_v6(void *priv, struct sk_buff *skb, const struct nf_hook_state *state);
@@ -51,6 +55,20 @@ static struct kprobe kp_pm_system_irq_wakeup = {
 
 static atomic_t my_pm_wakeup = ATOMIC_INIT(0);
 static DEFINE_SPINLOCK(pm_wakeup_lock);
+
+struct irq_data_wakeup_st
+{
+	uint32_t udp_in_count;
+	uint32_t udp_out_count;
+	uint32_t udp_closed_count;
+	uint32_t tcp_in_count;
+	uint32_t tcp_out_count;
+	uint32_t tcp_keepalive_count;
+	uint32_t tcp_closed_rst_count;
+	uint32_t tcp_closed_fin_count;
+	uint32_t tcp_closed_other_count;
+};
+static struct irq_data_wakeup_st s_irq_data_wakeup;
 
 static uint64_t current_kernel_time(void)
 {
@@ -170,6 +188,8 @@ static void my_wakeup_hook(struct sk_buff *skb, bool is_ipv6, bool is_output)
 	struct sock *sk = NULL;
 	struct tcphdr *tcph = NULL;
 	struct udphdr *udph = NULL;
+	struct tcp_sock *tp = NULL;
+	bool is_keepalive = false;
 	bool is_tcp = is_tcp_skb(skb, is_ipv6);
 	bool is_udp = is_udp_skb(skb, is_ipv6);
 
@@ -197,18 +217,47 @@ static void my_wakeup_hook(struct sk_buff *skb, bool is_ipv6, bool is_output)
 		tcph = tcp_hdr(skb);
 		sport = ntohs(tcph->source);
 		dport = ntohs(tcph->dest);
+		if (is_output) {
+			++s_irq_data_wakeup.tcp_out_count;
+		} else {
+			++s_irq_data_wakeup.tcp_in_count;
+			if (sk) {
+				tp = tcp_sk(sk);
+				if ((sk->sk_state == TCP_ESTABLISHED) && (ntohl(tcph->seq) == (tp->rcv_nxt - 1))) {
+					is_keepalive = true;
+					++s_irq_data_wakeup.tcp_keepalive_count;
+				}
+			} else {
+				if (tcph->rst) {
+					++s_irq_data_wakeup.tcp_closed_rst_count;
+				} else if (tcph->fin) {
+					++s_irq_data_wakeup.tcp_closed_fin_count;
+				} else {
+					++s_irq_data_wakeup.tcp_closed_other_count;
+				}
+			}
+		}
 	} else {
 		udph = udp_hdr(skb);
 		sport = ntohs(udph->source);
 		dport = ntohs(udph->dest);
+		if (is_output) {
+			++s_irq_data_wakeup.udp_out_count;
+		} else {
+			++s_irq_data_wakeup.udp_in_count;
+			if (!sk) {
+				++s_irq_data_wakeup.udp_closed_count;
+			}
+		}
 	}
 
-	printk("[data_wakeup_hook] stamp:%llu in:%u protocol:%u port:[%u:%u] uid:[%d:%d] flag:[%u:%u]\n",
+	printk("[data_wakeup_hook] stamp:%llu in:%u protocol:%u port:[%u:%u] uid:[%d:%d] flag:[%u:%u:%u]\n",
 	       current_kernel_time(), is_output ? 0 : 1,
 	       is_tcp ? IPPROTO_TCP : IPPROTO_UDP,
 	       sport, dport, sk_uid, sk_pid,
 	       is_tcp ? tcph->fin : 0,
-	       is_tcp ? tcph->rst : 0);
+	       is_tcp ? tcph->rst : 0,
+	       is_keepalive ? 1 : 0);
 }
 
 static unsigned int my_input_hook_v4(void *priv, struct sk_buff *skb, const struct nf_hook_state *state)
@@ -235,6 +284,48 @@ static unsigned int my_output_hook_v6(void *priv, struct sk_buff *skb, const str
 	return NF_ACCEPT;
 }
 
+static int request_irq_data_wakeup(void)
+{
+	int ret = 0;
+	char msg_buf[sizeof(struct irq_data_wakeup_st)] = { 0 };
+
+	memcpy(msg_buf, &s_irq_data_wakeup, sizeof(struct irq_data_wakeup_st));
+	memset(&s_irq_data_wakeup, 0x0, sizeof(struct irq_data_wakeup_st));
+
+	ret = netlink_send_to_user(NETLINK_RESPONSE_IRQ_DATA_WAKEUP, (char *)msg_buf, sizeof(msg_buf));
+	if (ret < 0) {
+		printk("[data_wakeup_hook] request_irq_data_wakeup failed, netlink_send_to_user ret=%d.\n", ret);
+	}
+
+	printk("[data_wakeup_hook] request_irq_data_wakeup successfully!");
+	return ret;
+}
+
+int data_wakeup_hook_netlink_nlmsg_handle(struct sk_buff *skb, struct genl_info *info)
+{
+	int ret = 0;
+
+	struct nlmsghdr *nlhdr;
+	struct genlmsghdr *genlhdr;
+	struct nlattr *nla;
+
+	nlhdr = nlmsg_hdr(skb);
+	genlhdr = nlmsg_data(nlhdr);
+	nla = genlmsg_data(genlhdr);
+
+	switch (nla->nla_type) {
+	case NETLINK_REQUEST_IRQ_DATA_WAKEUP:
+		ret = request_irq_data_wakeup();
+		break;
+	default:
+		printk("[data_wakeup_hook] data_wakeup_hook_netlink_nlmsg_handle failed, unknown nla type=%d.\n", nla->nla_type);
+		ret = -EINVAL;
+		break;
+	}
+
+	return ret;
+}
+
 int data_wakeup_hook_init(void)
 {
 	int ret = 0;
@@ -251,6 +342,8 @@ int data_wakeup_hook_init(void)
 		unregister_kprobe(&kp_pm_system_irq_wakeup);
 		return ret;
 	}
+
+	printk("[data_wakeup_hook] module init successfully!");
 	return 0;
 }
 

@@ -192,6 +192,9 @@
 #define FTS_WRITE_RATE_360                      360
 #define FTS_WRITE_RATE_720                      720
 
+#define INTELLIGENT_GAME_MODE   11
+#define EXTREME_GAME_MODE       12
+
 #define SPI_RETRY_NUMBER          				3
 #define CS_HIGH_DELAY             				150 /* unit: us */
 #define SPI_BUF_LENGTH          			    4096
@@ -440,6 +443,8 @@ struct chip_data_ft3681 {
 
 	bool charger_connected;
 	u32 spi_speed;
+	int extreme_game_report_rate;
+	bool extreme_game_flag;
 };
 
 

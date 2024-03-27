@@ -18,14 +18,28 @@ extern void oplus_dpi_module_fini(void);
 extern int cls_dpi_mod_init(void);
 extern void cls_dpi_mod_exit(void);
 
+<<<<<<< HEAD
 extern int tmgp_sgame_init(void);
 extern void tmgp_sgame_fini(void);
+=======
+extern int dpi_main_init(void);
+extern void dpi_main_fini(void);
+>>>>>>> edd9e29361cd5a87aca0b42eeb89076f9c40938f
 
 extern int wzry_stats_init(void);
 extern void wzry_stats_fini(void);
 
+<<<<<<< HEAD
 extern int log_stream_init(void);
 extern void log_stream_fini(void);
+=======
+static module_init_st data_init[] = {
+	{.init = comm_netlink_module_init, .exit = comm_netlink_module_exit},
+	{.init = oplus_dpi_module_init, .exit = oplus_dpi_module_fini},
+	{.init = cls_dpi_mod_init, .exit = cls_dpi_mod_exit},
+	{.init = dpi_main_init, .exit = dpi_main_fini},
+};
+>>>>>>> edd9e29361cd5a87aca0b42eeb89076f9c40938f
 
 static int __init data_modules_init(void)
 {

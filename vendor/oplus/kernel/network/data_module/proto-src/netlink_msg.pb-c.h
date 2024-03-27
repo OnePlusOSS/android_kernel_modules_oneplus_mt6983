@@ -95,10 +95,12 @@ struct  Netlink__Proto__RequestGetDpiStreamSpeed
   size_t n_uid;
   uint32_t *uid;
   uint64_t speed_size;
+  size_t n_limited_stream_set;
+  uint64_t *limited_stream_set;
 };
 #define NETLINK__PROTO__REQUEST_GET_DPI_STREAM_SPEED__INIT \
  { PROTOBUF_C_MESSAGE_INIT (&netlink__proto__request_get_dpi_stream_speed__descriptor) \
-    , 0,NULL, 0,NULL, 0 }
+    , 0,NULL, 0,NULL, 0, 0,NULL }
 
 
 struct  Netlink__Proto__RequestSetLogSteamIp
@@ -119,10 +121,12 @@ struct  Netlink__Proto__RequestGetAllUidSpeed
   size_t n_ifidx;
   uint32_t *ifidx;
   uint64_t speed_size;
+  size_t n_limited_uid_set;
+  uint64_t *limited_uid_set;
 };
 #define NETLINK__PROTO__REQUEST_GET_ALL_UID_SPEED__INIT \
  { PROTOBUF_C_MESSAGE_INIT (&netlink__proto__request_get_all_uid_speed__descriptor) \
-    , 0,NULL, 0 }
+    , 0,NULL, 0, 0,NULL }
 
 
 struct  Netlink__Proto__RequestSetDpiMatchAllUidEable
