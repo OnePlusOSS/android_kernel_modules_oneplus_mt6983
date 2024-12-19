@@ -1,0 +1,31 @@
+$(warning "AUDIO_ROOT value is $(AUDIO_ROOT)")
+
+ifneq ($(findstring audio-kernel,$(AUDIO_ROOT)),)
+#Qcom Platform
+$(warning "Build audio driver for Qcom plaform")
+obj-y += qcom/ codecs/
+obj-y += codecs/tfa98xx-v6/
+#add for aw882xx bringup
+obj-y += codecs/aw882xx/
+#add for sipa
+obj-y += codecs/sipa/
+#add for aw87xxx pa
+obj-y += codecs/aw87xxx/
+obj-y += qcom/oplus_speaker_manager/
+obj-y += codecs/usbc_switch/
+
+else
+#MTK Platform
+$(warning "Build audio driver for mtk plaform")
+
+obj-$(CONFIG_OPLUS_MTK_AUDIO_EXT) += mtk/
+obj-$(CONFIG_SND_SOC_TFA9873) += codecs/tfa98xx/
+obj-$(CONFIG_SND_SOC_TFA9874) += codecs/tfa98xx/
+obj-$(CONFIG_SND_SOC_FSA) += codecs/fsa44xx/
+obj-$(CONFIG_SND_SOC_TFA_HAPTIC) += codecs/tfa_haptic/
+obj-$(CONFIG_SND_SOC_SIA81XX) += codecs/sia81xx/
+obj-$(CONFIG_SND_SOC_OPLUS_PA_MANAGER) += mtk/oplus_speaker_manager/
+obj-$(CONFIG_SND_SOC_OPLUS_TYPEC_SWITCH) += codecs/oplus_typec_switch/
+obj-$(CONFIG_SND_SOC_SIA91XX_V3_1_0) += codecs/sia91xx_v3.1.0/
+obj-$(CONFIG_SND_SOC_AW87XXX_2_X_0) += codecs/aw87xxx_2.x.0/
+endif

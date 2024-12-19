@@ -1,0 +1,110 @@
+#
+# oplus extend audio codec configuration
+#
+config SND_SOC_SIA81XX
+	tristate "SoC Audio for  SIA81XX PA"
+	default n
+	help
+	  This option enables support for SIA81XX  K PA.
+
+config SND_SOC_OPLUS_PA_MANAGER
+	tristate "SoC Audio for PA MANAGER"
+	default n
+	help
+	  This option enables support for PA MANAGER.
+
+config SIA_PA_ALGO
+	tristate "Use SIA PA ALGO"
+	default n
+
+config HSKEY_BLOCK
+	tristate "Block hskey for 1s"
+	default n
+
+config OPLUS_MTK_AUDIO_EXT
+	tristate "Support oplus audio drv ext"
+	default n
+	help
+	  This adds sipa driver for Mediatek boards
+	  that can be used with other platforms
+	  Select m if you have such device.
+	  If unsure select "N".
+
+config SND_SOC_TFA9873
+	tristate "NXP TFA9873 speaker amplifier"
+	depends on I2C
+	help
+	  Config of TFA9873. It is a Smart power
+	  amplifier which contain speaker protection,
+	  multi-band DRC, equalizer function. It would
+	  be set to yes if device with TFA9873 on it.
+
+config SND_SOC_TFA9874
+	tristate "NXP TFA9874 speaker amplifier"
+	depends on I2C
+	help
+	  Config of TFA9874. It is a Smart power
+	  amplifier which contain speaker protection,
+	  multi-band DRC, equalizer function. It would
+	  be set to yes if device with TFA9874 on it.
+
+config SND_SOC_AW87XXX_2_X_0
+        tristate "SoC Audio for awinic AW87XXX Smart K PA"
+        depends on I2C
+        help
+          This option enables support for AW87XXX Smart K PA.
+
+config OPLUS_MT6835_USE_FSA4480
+	tristate "No Support mt6338_accdet_irq_check_and_set"
+	default n
+	help
+	  This adds for fsa4480/dio4480 audio switch driver
+	  that can be used with other platforms
+	  Select m if you have such device.
+	  If unsure select "N"
+
+config SND_SOC_AW882XX
+	tristate "Support AW882XX speaker amplifier"
+	depends on I2C
+	help
+	  Config of AW882XX. It is a Smart power
+	  amplifier which contain speaker protection,
+	  multi-band DRC, equalizer function. It would
+	  be set to yes if device with AW882XX on it.
+
+config SND_SOC_OPLUS_TYPEC_SWITCH
+	tristate "TypeC Switch for DIO 448x or WAS 7483"
+	depends on I2C
+	help
+	  Config of 4480 or 4483. It is a USB type-C Analog Audio
+	  Switch.
+
+config OPLUS_MTK_HEADSET_RECHECK
+	tristate "recheck headset plug in/out after accdet gpio irq 1s"
+	depends on SND_SOC_MT6989_MT6681
+	default n
+	help
+	  This adds for Mediatek boards
+	  that can be used with other platforms
+	  Select m if you have such device.
+	  If unsure select "N".
+
+config OPLUS_MTK_ACCDET_CHECK_RESET
+	tristate "check and reset accdet reg when plug in"
+	# depends on SND_SOC_MT6989_MT6681
+	default n
+	help
+	  This adds for Mediatek boards
+	  that can be used with other platforms
+	  Select m if you have such device.
+	  If unsure select "N".
+
+# add for SIA SmartPA sia91xxseries
+config SND_SOC_SIA91XX_V3_1_0
+	tristate "SIA91XX speaker amplifier"
+	depends on I2C
+	help
+	  Config of SIA98xxx. It is a Smart power
+	  amplifier which contain speaker protection,
+	  multi-band DRC, equalizer function. It would
+	  be set to yes if device with SIA91xxx on it.

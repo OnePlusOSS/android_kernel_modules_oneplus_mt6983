@@ -1,0 +1,4 @@
+config TOUCHPANEL_FOCAL_FT8057P
+	bool "TP Focal_FT8057P IC enable or not for OPLUS"
+	---help---
+	say Y to enable driver for Touchpanel using Focal FT8057P
