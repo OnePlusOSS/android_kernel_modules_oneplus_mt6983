@@ -287,6 +287,33 @@ static int bright_fb_notifier_callback(struct notifier_block *self,
 
 	return 0;
 }
+#if IS_ENABLED(CONFIG_OPLUS_MTK_DRM_SUB_NOTIFY)
+static int bright_fb_notifier_sub_callback(struct notifier_block *self,
+	unsigned long event, void *data)
+{
+	switch (event) {
+	case THEIA_PANEL_BLANK_EVENT:
+		g_bright_data.blank = *(int *)data;
+		if (g_bright_data.status != BLACK_STATUS_CHECK_DEBUG) {
+			if (g_bright_data.blank == THEIA_PANEL_BLANK_VALUE) {
+				delete_timer_bright("FINISH_FB", true);
+				del_timer(&g_recovery_data.timer);
+				BRIGHT_DEBUG_PRINTK("bright_fb_notifier_sub_callback: del_timer g_recovery_data del in mtk\n");
+				BRIGHT_DEBUG_PRINTK("bright_fb_notifier_sub_callback: del timer, status:%d blank:%d\n",
+					g_bright_data.status, g_bright_data.blank);
+			}
+		} else {
+			BRIGHT_DEBUG_PRINTK("bright_fb_notifier_sub_callback debug: status:%d blank:%d\n",
+				g_bright_data.status, g_bright_data.blank);
+		}
+		break;
+	default:
+		break;
+	}
+
+	return 0;
+}
+#endif
 #endif
 
 static int bright_screen_cancel_proc_show(struct seq_file *seq_file, void *data)
@@ -391,7 +418,8 @@ void bright_screen_check_init(void)
 		return;
 	}
 #if IS_ENABLED(CONFIG_OPLUS_MTK_DRM_SUB_NOTIFY)
-	if (mtk_disp_sub_notifier_register("oplus_theia_sub", &g_bright_data.fb_notif)) {
+	g_bright_data.fb_notif_sub.notifier_call = bright_fb_notifier_sub_callback;
+	if (mtk_disp_sub_notifier_register("oplus_theia_sub", &g_bright_data.fb_notif_sub)) {
 		g_bright_data.status = BRIGHT_STATUS_INIT_FAIL;
 		BRIGHT_DEBUG_PRINTK("bright_screen_check_init, register sub fb notifier fail\n");
 		return;
@@ -426,7 +454,7 @@ void bright_screen_exit(void)
 #elif IS_ENABLED(CONFIG_OPLUS_MTK_DRM_GKI_NOTIFY)
 	mtk_disp_notifier_unregister(&g_bright_data.fb_notif);
 	#if IS_ENABLED(CONFIG_OPLUS_MTK_DRM_SUB_NOTIFY)
-	mtk_disp_sub_notifier_unregister(&g_bright_data.fb_notif);
+	mtk_disp_sub_notifier_unregister(&g_bright_data.fb_notif_sub);
 	#endif
 #endif
 }

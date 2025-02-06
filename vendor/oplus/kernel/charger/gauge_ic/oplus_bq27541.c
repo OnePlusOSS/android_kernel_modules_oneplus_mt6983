@@ -1530,7 +1530,7 @@ static int bq27541_get_battery_cc(void) /*  sjc20150105  */
 			ret = gauge_read_i2c(gauge_ic, gauge_ic->cmd_addr.reg_cc, &cc);
 			if (ret) {
 				dev_err(gauge_ic->dev, "error reading cc.\n");
-				return ret;
+				return 0;
 			}
 			if (normal_range_judge(CC_MAX, CC_MIN, cc))
 				break;
@@ -1569,7 +1569,7 @@ static int bq27541_get_sub_battery_cc(void)
 			ret = gauge_read_i2c(sub_gauge_ic, sub_gauge_ic->cmd_addr.reg_cc, &cc);
 			if (ret) {
 				dev_err(sub_gauge_ic->dev, "error reading cc.\n");
-				return ret;
+				return 0;
 			}
 			if (normal_range_judge(CC_MAX, CC_MIN, cc))
 				break;
@@ -2893,7 +2893,7 @@ static int bq27541_get_battery_soh(void) /*  sjc20150105  */
 				ret_q = zy602_soh_hardware_defect_avoidance_scheme(gauge_ic, &soh);
 			if (ret || (ret_q < 0)) {
 				dev_err(gauge_ic->dev, "error reading soh.\n");
-				return ret;
+				return 0;
 			}
 			if (normal_range_judge(SOH_MAX, SOH_MIN, soh))
 				break;
@@ -2939,7 +2939,7 @@ static int bq27541_get_sub_battery_soh(void)
 				ret_q = zy602_soh_hardware_defect_avoidance_scheme(sub_gauge_ic, &soh);
 			if (ret || (ret_q < 0)) {
 				dev_err(sub_gauge_ic->dev, "error reading soh.\n");
-				return ret;
+				return 0;
 			}
 
 			if (normal_range_judge(SOH_MAX, SOH_MIN, soh))

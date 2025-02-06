@@ -4660,6 +4660,13 @@ static int oplus_pps_parse_charge_strategy(struct oplus_pps *chip)
 		 low_curr_temp_tmp[0], low_curr_temp_tmp[1],
 		 low_curr_temp_tmp[2], low_curr_temp_tmp[3]);
 
+	rc = of_property_read_u32(node, "oplus,pps_low_temp", &chip->limits.pps_low_temp);
+	if (rc < 0) {
+		chip->limits.pps_low_temp = rang_temp_tmp[0];
+	} else {
+		chip->limits.pps_batt_over_low_temp = chip->limits.pps_low_temp - PPS_COLD_TEMP_RANGE_THD;
+		chg_info("oplus,pps_low_temp is %d %d\n", chip->limits.pps_low_temp, chip->limits.pps_batt_over_low_temp);
+	}
 	return rc;
 }
 

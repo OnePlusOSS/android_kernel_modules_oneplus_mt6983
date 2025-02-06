@@ -234,6 +234,7 @@ static int __protocol_identify_request(struct oplus_cpa *cpa, enum oplus_chg_pro
 
 	current_protocol_type = READ_ONCE(cpa->current_protocol_type);
 	if (current_protocol_type != CHG_PROTOCOL_INVALID &&
+	    current_protocol_type != CHG_PROTOCOL_BC12 &&
 	    !oplus_cpa_is_allow_switch(current_protocol_type, BIT(type)))
 		return -EBUSY;
 
@@ -261,6 +262,7 @@ static int protocol_identify_request(struct oplus_cpa *cpa, uint32_t protocol)
 
 	current_protocol_type = READ_ONCE(cpa->current_protocol_type);
 	if (current_protocol_type != CHG_PROTOCOL_INVALID &&
+	    current_protocol_type != CHG_PROTOCOL_BC12 &&
 	    !oplus_cpa_is_allow_switch(current_protocol_type, protocol))
 		return -EBUSY;
 

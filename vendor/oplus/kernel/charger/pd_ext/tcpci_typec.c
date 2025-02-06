@@ -2741,6 +2741,7 @@ int tcpc_typec_swap_role(struct tcpc_device *tcpc)
 		TYPEC_INFO("TypeC Role Swap Start\n");
 		tcpci_set_cc(tcpc, TYPEC_CC_OPEN);
 		tcpc_enable_timer(tcpc, TYPEC_RT_TIMER_ROLE_SWAP_START);
+		tcpc_typec_handle_cc_change(tcpc);
 		return TCPM_SUCCESS;
 	}
 

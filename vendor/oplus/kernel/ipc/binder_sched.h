@@ -21,7 +21,6 @@
 #define CURRENT_TASK_PID				-1
 #define SYSTEM_SERVER_NAME              "system_server"
 #ifdef CONFIG_OPLUS_BINDER_REF_OPT
-#define BINDER_NAME                     "binder"
 #define MAX_SYSTEM_SERVER_DESC          10048
 #define SYSTEM_SERVER_UID               1000
 #endif
@@ -29,6 +28,19 @@
 #define BD_INHERIT_UX_ENABLE            (1 << 16)
 #define BD_INHERIT_ASYNC_UX_ENABLE      (1 << 17)
 #define BD_BINDER_REF_OPT_ENABLE        (1 << 18)
+
+#define BINDER_NAME                     "binder"
+#define HWBINDER_NAME			"hwbinder"
+#define VNDBINDER_NAME			"vndbinder"
+
+#define BINDER_THREAD_NAME		"binder:"
+#define HWBINDER_THREAD_NAME		"HwBinder:"
+#define VNDBINER_THREAD_NAME		"vndbinder:"
+enum {
+	PROC_CONTEXT_BINDER,
+	PROC_CONTEXT_HWBINDER,
+	PROC_CONTEXT_VNDBINDER,
+};
 
 enum OBS_STATUS {
 	 OBS_INVALID,
@@ -79,6 +91,7 @@ enum {
 	LOG_TRACK_LAST_ASYNC	= 1U << 7,
 	LOG_SET_ASYNC_AFTER_PENDING	= 1U << 8,
 	LOG_SET_SF_UX	= 1U << 9,
+	LOG_TRACK_ASYNC_NODE = 1U << 13,
 };
 
 enum {
@@ -101,6 +114,8 @@ enum {
 	STATE_SF_ASYNC_IS_UX = 16,
 	STATE_THREAD_WAS_ASYNC_UX = 17,
 	STATE_ASYNC_HAS_THREAD = 18,
+	STATE_PENDING_ASYNC = 30,
+	STATE_TASK_STRUCT_STATE = 100,
 	STATE_SYNC_SET_UX = 50,
 	STATE_SYNC_RESET_UX = 51,
 	STATE_SYNC_RT_SET_UX = 52,

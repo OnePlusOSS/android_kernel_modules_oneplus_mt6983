@@ -6757,6 +6757,23 @@ oplus_sm8350_get_battery_gauge_type_for_bcc(struct oplus_chg_ic_dev *ic_dev,
 	return 0;
 }
 
+static int
+oplus_sm8350_get_real_time_current(struct oplus_chg_ic_dev *ic_dev,
+				       int *val)
+{
+	struct battery_chg_dev *bcdev;
+
+	if ((ic_dev == NULL) || (val == NULL)) {
+		chg_err("!!!ic_dev null\n");
+		return -ENODEV;
+	}
+
+	bcdev = oplus_chg_ic_get_drvdata(ic_dev);
+	*val = bcdev->bcc_read_buffer_dump.data_buffer[8];
+
+	return 0;
+}
+
 static int oplus_chg_8350_get_afi_update_done(struct oplus_chg_ic_dev *ic_dev,
 					      bool *status)
 {
@@ -6871,6 +6888,11 @@ static void *oplus_chg_8350_gauge_get_func(struct oplus_chg_ic_dev *ic_dev,
 		func = OPLUS_CHG_IC_FUNC_CHECK(
 			OPLUS_IC_FUNC_GAUGE_GET_BATT_CURR,
 			oplus_sm8350_get_batt_curr);
+		break;
+	case OPLUS_IC_FUNC_GAUGE_GET_REAL_TIME_CURR:
+		func = OPLUS_CHG_IC_FUNC_CHECK(
+			OPLUS_IC_FUNC_GAUGE_GET_REAL_TIME_CURR,
+			oplus_sm8350_get_real_time_current);
 		break;
 	case OPLUS_IC_FUNC_GAUGE_GET_BATT_TEMP:
 		func = OPLUS_CHG_IC_FUNC_CHECK(

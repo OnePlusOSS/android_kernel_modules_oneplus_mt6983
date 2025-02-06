@@ -82,6 +82,8 @@ enum panel_id{
 	P_3,
 	P_B,
 	TD4377,
+	TXD_ILI9883C,
+	DS_ILI9883C,
 	ILI9883C,
 	FT8057P,
 	P_7,

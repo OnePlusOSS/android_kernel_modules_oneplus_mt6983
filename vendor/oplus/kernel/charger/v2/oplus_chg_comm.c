@@ -55,6 +55,7 @@
 #include <oplus_chg_monitor.h>
 #include <oplus_chg_ufcs.h>
 #include <oplus_chg_pps.h>
+#include <oplus_chg_plc.h>
 #if IS_ENABLED(CONFIG_OPLUS_DYNAMIC_CONFIG_CHARGER)
 #include "oplus_cfg.h"
 #endif
@@ -231,6 +232,7 @@ struct oplus_chg_comm {
 	struct oplus_mms *pps_topic;
 	struct oplus_mms *err_topic;
 	struct oplus_mms *retention_topic;
+	struct oplus_mms *plc_topic;
 	struct mms_subscribe *gauge_subs;
 	struct mms_subscribe *wired_subs;
 	struct mms_subscribe *vooc_subs;
@@ -239,6 +241,7 @@ struct oplus_chg_comm {
 	struct mms_subscribe *pps_subs;
 	struct mms_subscribe *comm_subs;
 	struct mms_subscribe *retention_subs;
+	struct mms_subscribe *plc_subs;
 
 	spinlock_t remuse_lock;
 
@@ -418,7 +421,8 @@ struct oplus_chg_comm {
 #endif
 
 	unsigned int nvid_support_flags;
-
+	int plc_status;
+	int plc_support;
 };
 
 static struct oplus_comm_spec_config default_spec = {
@@ -1579,6 +1583,11 @@ static void oplus_comm_check_fv_over(struct oplus_chg_comm *chip)
 		if (get_effective_result(chip->wired_charging_disable_votable) != 0)
 			return;
 	}
+
+	if (chip->wls_online && is_wls_charging_disable_votable_available(chip)) {
+		if (get_effective_result(chip->wls_charging_disable_votable) > 0)
+			return;
+	}
 	if (is_wls_fastchg_started(chip))
 		return;
 
@@ -1666,8 +1675,13 @@ void oplus_comm_get_rechg_soc_limit(struct oplus_mms *topic, int *rechg_soc, boo
 	}
 	if (!rechg_soc || !en) {
 		chg_err("invalid value");
+		return;
 	}
 	chip = oplus_mms_get_drvdata(topic);
+	if (!chip) {
+		chg_err("oplus_chg_comm chip is NULL\n");
+		return;
+	}
 
 	*rechg_soc = chip->rechg_soc;
 	*en = chip->rechg_soc_en;
@@ -2125,7 +2139,10 @@ static int oplus_comm_set_ui_soc(struct oplus_chg_comm *chip, int soc)
 	if (chip->ui_soc == soc)
 		return 0;
 
-	chip->ui_soc = soc;
+	if ((chip->plc_status == PLC_STATUS_ENABLE || chip->plc_status == PLC_STATUS_WAIT) && (chip->ui_soc < soc))
+		chip->ui_soc = chip->ui_soc;
+	else
+		chip->ui_soc = soc;
 
 	chg_info("set ui_soc=%d\n", soc);
 	chip->soc_update_jiffies = jiffies;
@@ -2228,7 +2245,7 @@ static int oplus_comm_push_uisoc_drop_msg(struct oplus_chg_comm *chip,  int err,
 		    MSG_TYPE_ITEM, MSG_PRIO_MEDIUM, COMM_ITEM_UISOC_DROP_ERROR,
 		    "$$Vterm@@%d$$start_UISoc@@%d$$start_Soc@@%d$$start_volt@@%d$$start_voltmin@@%d$$start_battemp@@%d"
 		    "$$start_curr@@%d$$time_uisoc@@%d$$target_uisoc@@%d$$avg_current@@%d$$end_UISoc@@%d$$end_Soc@@%d"
-		    "$$end_volt@@%d$$end_voltmin@@%d$$end_battemp@@%d$$end_curr@@%d$$start_utc_t@@%d$$end_utc_t@@%d$$cc@@%d"
+		    "$$end_volt@@%d$$end_voltmin@@%d$$end_battemp@@%d$$end_curr@@%d$$start_utc_t@@%lu$$end_utc_t@@%lu$$cc@@%d"
 		    "$$end_reason@@%s",
 		    Vterm, start_UISoc, start_Soc, start_volt, start_voltmin, start_battemp, start_curr, time_uisoc,
 		    target_uisoc, avg_current, chip->ui_soc, chip->soc, chip->vbat_mv, chip->vbat_min_mv, chip->batt_temp,
@@ -3305,7 +3322,8 @@ static int oplus_enforce_chg_up_limit_result(struct oplus_chg_comm *chip, bool c
 	return rc;
 }
 
-#define CHG_UP_DELAY_COUNT		3
+#define CHG_UP_DELAY_COUNT		4
+#define CHG_UP_EXECUT_EACH_MS		1200
 static void monitor_ui_soc_to_enable_chg_up_limit(struct oplus_chg_comm *chip, bool immediate_execut)
 {
 	static int over_count = 0;
@@ -3325,7 +3343,7 @@ static void monitor_ui_soc_to_enable_chg_up_limit(struct oplus_chg_comm *chip, b
 
 	jiffies_diff = jiffies > last_jiffies ? jiffies - last_jiffies : last_jiffies - jiffies;
 	chg_debug("jiffies_diff %ld %ld %ld", jiffies_diff, jiffies, last_jiffies);
-	if (jiffies_diff < msecs_to_jiffies(1000) && (immediate_execut == false))
+	if (jiffies_diff < msecs_to_jiffies(CHG_UP_EXECUT_EACH_MS) && (immediate_execut == false))
 		return;
 
 	last_jiffies = jiffies;
@@ -5205,6 +5223,59 @@ static void oplus_comm_subscribe_retention_topic(struct oplus_mms *topic, void *
 	chip->retention_state = !!data.intval;
 }
 
+static void oplus_comm_plc_subs_callback(struct mms_subscribe *subs,
+					 enum mms_msg_type type, u32 id, bool sync)
+{
+	struct oplus_chg_comm *chip = subs->priv_data;
+	union mms_msg_data data = { 0 };
+
+	switch (type) {
+	case MSG_TYPE_ITEM:
+		switch (id) {
+		case PLC_ITEM_SUPPORT:
+			oplus_mms_get_item_data(chip->plc_topic, id, &data,
+						false);
+			chip->plc_support = !!data.intval;
+			break;
+		case PLC_ITEM_STATUS:
+			oplus_mms_get_item_data(chip->plc_topic, id, &data,
+						false);
+			chip->plc_status = data.intval;
+			break;
+		default:
+			break;
+		}
+		break;
+	default:
+		break;
+	}
+}
+
+static void oplus_comm_subscribe_plc_topic(struct oplus_mms *topic,
+					   void *prv_data)
+{
+	struct oplus_chg_comm *chip = prv_data;
+	union mms_msg_data data = { 0 };
+	int rc;
+
+	chip->plc_topic = topic;
+	chip->plc_subs = oplus_mms_subscribe(chip->plc_topic, chip,
+					     oplus_comm_plc_subs_callback,
+					     "chg_comm");
+	if (IS_ERR_OR_NULL(chip->plc_subs)) {
+		chg_err("subscribe plc topic error, rc=%ld\n",
+			PTR_ERR(chip->plc_subs));
+		return;
+	}
+
+	rc = oplus_mms_get_item_data(chip->plc_topic, PLC_ITEM_SUPPORT, &data, true);
+	if (rc >= 0)
+		chip->plc_support = data.intval;
+	rc = oplus_mms_get_item_data(chip->plc_topic, PLC_ITEM_STATUS, &data, true);
+	if (rc >= 0)
+		chip->plc_status = data.intval;
+}
+
 static void oplus_comm_subs_comm_callback(struct mms_subscribe *subs,
 						enum mms_msg_type type, u32 id, bool sync)
 {
@@ -5460,7 +5531,6 @@ static void oplus_comm_offline_delayed_process_work(struct work_struct *work)
 	struct oplus_chg_comm *chip =
 		container_of(work, struct oplus_chg_comm, offline_delayed_process_work);
 
-	flush_work(&chip->plugin_work);
 	if (chip->wired_online || chip->wls_online)
 		return;
 
@@ -8897,6 +8967,7 @@ static int oplus_comm_driver_probe(struct platform_device *pdev)
 	oplus_mms_wait_topic("ufcs", oplus_comm_subscribe_ufcs_topic, comm_dev);
 	oplus_mms_wait_topic("pps", oplus_comm_subscribe_pps_topic, comm_dev);
 	oplus_mms_wait_topic("retention", oplus_comm_subscribe_retention_topic, comm_dev);
+	oplus_mms_wait_topic("plc", oplus_comm_subscribe_plc_topic, comm_dev);
 
 #if IS_ENABLED(CONFIG_DRM_PANEL_NOTIFY) || IS_ENABLED(CONFIG_OPLUS_CHG_DRM_PANEL_NOTIFY)
 	oplus_comm_set_led_on(comm_dev, true);

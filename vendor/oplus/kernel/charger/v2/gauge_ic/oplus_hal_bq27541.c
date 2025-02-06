@@ -1718,7 +1718,7 @@ static int bq27541_get_battery_cc(struct chip_bq27541 *chip) /*  sjc20150105  */
 		}
 		if (ret) {
 			dev_err(chip->dev, "error reading cc.\n");
-			return ret;
+			return 0;
 		}
 	} else {
 		if (chip->cc_pre) {
@@ -1796,7 +1796,7 @@ static int bq27541_get_battery_soh(struct chip_bq27541 *chip) /*  sjc20150105  *
 		}
 		if (ret) {
 			dev_err(chip->dev, "error reading fcc.\n");
-			return ret;
+			return 0;
 		}
 	} else {
 		if (chip->soh_pre) {
@@ -4306,7 +4306,8 @@ check_error:
 /* only for wite battery full param in guage dirver probe on 7250 platform */
 static int bq27441_battery_full_param_write_cmd(struct chip_bq27541 *chip)
 {
-	u8 reg_data = 0, rc = 0;
+	int rc = 0;
+	u8 reg_data = 0;
 	u8 CNTL1_VAL_1[2] = { 0x52, 0x00 };
 	u8 CNTL1_VAL_2[2] = { 0x00, 0x00 };
 	u8 CNTL1_VAL_3[2] = { 0x00, 0x00 };
@@ -5035,7 +5036,7 @@ write_parameter:
 static int
 bq28z610_batt_full_zero_parameter_write_cmd(struct chip_bq27541 *chip)
 {
-	u8 rc = 0;
+	int rc = 0;
 	u8 CNTL1_VAL_1[2] = { 0x00, 0x00 };
 	u8 CNTL1_VAL_2[7] = { 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00 };
 	u8 read_buf[7] = { 0 };

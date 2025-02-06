@@ -33,8 +33,10 @@
 #include <linux/sched.h>
 #include <linux/slab.h>
 #include <linux/spinlock.h>
+#if (LINUX_VERSION_CODE < KERNEL_VERSION(6, 6, 0))
 #include <linux/usb/typec.h>
 #include <linux/usb/usbpd.h>
+#endif
 
 #include <linux/bitops.h>
 #include <linux/debugfs.h>

@@ -1164,6 +1164,7 @@ int charger_manager_get_charger_temperature(struct charger_consumer *consumer,
 	}
 	return -EBUSY;
 }
+EXPORT_SYMBOL(charger_manager_get_charger_temperature);
 
 int charger_manager_force_charging_current(struct charger_consumer *consumer,
 	int idx, int charging_current)
@@ -2813,31 +2814,27 @@ static int charger_pm_event(struct notifier_block *notifier,
 {
 	ktime_t ktime_now;
 	struct timespec64 now;
-	struct mtk_charger *info;
-
-	info = container_of(notifier,
-		struct mtk_charger, pm_notifier);
 
 	switch (pm_event) {
 	case PM_SUSPEND_PREPARE:
-		info->is_suspend = true;
+		pinfo->is_suspend = true;
 		chr_debug("%s: enter PM_SUSPEND_PREPARE\n", __func__);
 		break;
 	case PM_POST_SUSPEND:
-		info->is_suspend = false;
+		pinfo->is_suspend = false;
 		chr_debug("%s: enter PM_POST_SUSPEND\n", __func__);
 		ktime_now = ktime_get_boottime();
 		now = ktime_to_timespec64(ktime_now);
 
-		if (timespec64_compare(&now, &info->endtime) >= 0 &&
-			info->endtime.tv_sec != 0 &&
-			info->endtime.tv_nsec != 0) {
+		if (timespec64_compare(&now, &pinfo->endtime) >= 0 &&
+			pinfo->endtime.tv_sec != 0 &&
+			pinfo->endtime.tv_nsec != 0) {
 			chr_err("%s: alarm timeout, wake up charger\n",
 				__func__);
-			__pm_relax(info->charger_wakelock);
-			info->endtime.tv_sec = 0;
-			info->endtime.tv_nsec = 0;
-			_wake_up_charger(info);
+			__pm_relax(pinfo->charger_wakelock);
+			pinfo->endtime.tv_sec = 0;
+			pinfo->endtime.tv_nsec = 0;
+			_wake_up_charger(pinfo);
 		}
 		break;
 	default:
@@ -2855,19 +2852,17 @@ static struct notifier_block charger_pm_notifier_func = {
 static enum alarmtimer_restart
 	mtk_charger_alarm_timer_func(struct alarm *alarm, ktime_t now)
 {
-	struct mtk_charger *info =
-	container_of(alarm, struct mtk_charger, charger_timer);
 	unsigned long flags;
 
-	if (info->is_suspend == false) {
+	if (pinfo->is_suspend == false) {
 		chr_err("%s: not suspend, wake up charger\n", __func__);
-		_wake_up_charger(info);
+		_wake_up_charger(pinfo);
 	} else {
 		chr_err("%s: alarm timer timeout\n", __func__);
-		spin_lock_irqsave(&info->slock, flags);
-		if (!info->charger_wakelock->active)
-			__pm_stay_awake(info->charger_wakelock);
-		spin_unlock_irqrestore(&info->slock, flags);
+		spin_lock_irqsave(&pinfo->slock, flags);
+		if (!pinfo->charger_wakelock->active)
+			__pm_stay_awake(pinfo->charger_wakelock);
+		spin_unlock_irqrestore(&pinfo->slock, flags);
 	}
 
 	return ALARMTIMER_NORESTART;

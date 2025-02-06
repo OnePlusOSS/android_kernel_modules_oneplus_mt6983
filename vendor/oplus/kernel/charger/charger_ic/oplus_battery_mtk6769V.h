@@ -22,7 +22,11 @@
 #include <linux/uaccess.h>
 #include <linux/version.h>
 
-#include "../../../misc/mediatek/typec/tcpc/inc/tcpm.h"
+#ifdef CONFIG_OPLUS_PD_EXT_SUPPORT
+#include "../pd_ext/inc/tcpm.h"
+#else
+#include <tcpm.h>
+#endif
 struct mtk_charger;
 /*#include "../../../power/supply/mtk_pe.h"
 #include "../../../power/supply/mtk_pe2.h"

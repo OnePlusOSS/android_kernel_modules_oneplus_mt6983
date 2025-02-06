@@ -364,6 +364,33 @@ static int black_fb_notifier_callback(struct notifier_block *self,
 
 	return 0;
 }
+#if IS_ENABLED(CONFIG_OPLUS_MTK_DRM_SUB_NOTIFY)
+static int black_fb_notifier_sub_callback(struct notifier_block *self,
+	unsigned long event, void *data)
+{
+	switch (event) {
+	case THEIA_PANEL_BLANK_EVENT:
+		g_black_data.blank = *(int *)data;
+		if (g_black_data.status != BLACK_STATUS_CHECK_DEBUG) {
+			if (g_black_data.blank == THEIA_PANEL_UNBLANK_VALUE) {
+				delete_timer_black("FINISH_FB", true);
+				del_timer(&g_recovery_data.timer);
+				BLACK_DEBUG_PRINTK("black_fb_notifier_sub_callback: del_timer g_recovery_data del in mtk\n");
+				BLACK_DEBUG_PRINTK("black_fb_notifier_sub_callback: del timer, status:%d, blank:%d\n",
+					g_black_data.status, g_black_data.blank);
+			}
+		} else {
+			BLACK_DEBUG_PRINTK("black_fb_notifier_sub_callback debug: status:%d, blank:%d\n",
+				g_black_data.status, g_black_data.blank);
+		}
+		break;
+	default:
+		break;
+	}
+
+	return 0;
+}
+#endif
 #endif
 
 #if IS_ENABLED(CONFIG_DRM_PANEL_NOTIFY) || IS_ENABLED(CONFIG_QCOM_PANEL_EVENT_NOTIFIER)
@@ -565,7 +592,8 @@ void black_screen_check_init(void)
 		return;
 	}
 #if IS_ENABLED(CONFIG_OPLUS_MTK_DRM_SUB_NOTIFY)
-	if (mtk_disp_sub_notifier_register("oplus_theia_sub", &g_black_data.fb_notif)) {
+	g_black_data.fb_notif_sub.notifier_call = black_fb_notifier_sub_callback;
+	if (mtk_disp_sub_notifier_register("oplus_theia_sub", &g_black_data.fb_notif_sub)) {
 		g_black_data.status = BLACK_STATUS_INIT_FAIL;
 		BLACK_DEBUG_PRINTK("black_screen_check_init, register sub fb notifier fail\n");
 		return;
@@ -599,7 +627,7 @@ void black_screen_exit(void)
 #elif IS_ENABLED(CONFIG_OPLUS_MTK_DRM_GKI_NOTIFY)
 	mtk_disp_notifier_unregister(&g_black_data.fb_notif);
 #if IS_ENABLED(CONFIG_OPLUS_MTK_DRM_SUB_NOTIFY)
-	mtk_disp_sub_notifier_unregister(&g_black_data.fb_notif);
+	mtk_disp_sub_notifier_unregister(&g_black_data.fb_notif_sub);
 #endif
 #endif
 }

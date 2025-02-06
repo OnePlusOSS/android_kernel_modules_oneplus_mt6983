@@ -1361,7 +1361,7 @@ static int fts_enable_headset_mode(struct chip_data_ft3518 *ts_data,
 static void fts_force_glove_mode(struct chip_data_ft3518 *ts_data, bool enable)
 {
 	int retval = 0;
-	u8 regval = 0;
+	int regval = 0;
 
 	TPD_INFO("%s: %s force glove mode.\n", __func__, enable ? "Enter" : "Exit");
 
@@ -1792,7 +1792,7 @@ static u32 fts_u32_trigger_reason(void *chip_data, int gesture_enable,
 		}
 	}
 
-	if ((buf[0] == 0xFF) && (buf[1] == 0xFF) && (buf[2] == 0xFF) && (!is_suspended)) {
+	if ((buf[0] == 0xFF) && (buf[1] == 0xFF) && (buf[2] == 0xFF) && (!is_suspended) && !CHK_BIT(result_event, IRQ_PALM)) {
 		TPD_INFO("Need recovery TP state");
 		ret = touch_i2c_read_byte(ts_data->client, FTS_REG_POINTS_LB);
 		return IRQ_FW_AUTO_RESET;
@@ -2510,7 +2510,7 @@ static int ft3518_parse_dts(struct chip_data_ft3518 *ts_data, struct i2c_client 
 
 static void fts_get_glove_mode(void *chip_data, int *enable)
 {
-	u8 regval = 0;
+	int regval = 0;
 	struct chip_data_ft3518 *ts_data = (struct chip_data_ft3518 *)chip_data;
 
 	if (!ts_data || !enable) {

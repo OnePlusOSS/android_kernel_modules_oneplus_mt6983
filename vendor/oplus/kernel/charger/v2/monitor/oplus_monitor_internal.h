@@ -111,6 +111,8 @@ struct oplus_monitor {
 	struct oplus_mms *retention_topic;
 	struct mms_subscribe *ufcs_subs;
 	struct mms_subscribe *retention_subs;
+	struct oplus_mms *plc_topic;
+	struct mms_subscribe *plc_subs;
 
 	struct oplus_chg_track *track;
 
@@ -162,6 +164,8 @@ struct oplus_monitor {
 	int batt_fcc_comp;
 	int batt_soh_comp;
 	int uisoc_keep_2_err;
+	int batt_qmax;
+	int gauge_car_c;
 	struct super_endurance_mode_info sem_info;
 	bool gauge_inited;
 
@@ -235,6 +239,14 @@ struct oplus_monitor {
 	bool ufcs_charging;
 	u32 ufcs_adapter_id;
 	bool ufcs_oplus_adapter;
+
+	/* plc */
+	int plc_status;
+	int plc_support;
+	int enable_count;
+	int plc_init_sm_soc;
+	int plc_init_ui_soc;
+	int plc_init_temp;
 
 	/* chg into liqued*/
 	int cc_state;

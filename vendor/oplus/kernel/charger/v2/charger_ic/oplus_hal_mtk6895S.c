@@ -4242,6 +4242,11 @@ int oplus_get_adapter_svid(void)
 				}
 			}
 			ret = tcpm_dpm_vdm_discover_svid(tcpc_dev, NULL);
+
+			/* When the return code is TCP_DPM_RET_NOT_SUPPORT, not retry to avoid PD hardreset. */
+			if (ret == TCP_DPM_RET_NOT_SUPPORT)
+				break;
+
 			if (ret != TCPM_SUCCESS) {
 				disc_svid_retries++;
 				chg_err("Failed to discover svid. ret %d retries: %d\n", ret, disc_svid_retries);

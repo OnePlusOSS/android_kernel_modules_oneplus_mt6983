@@ -998,9 +998,6 @@ static void fbg_binder_wakeup_hook(void *unused, struct task_struct *caller_task
 	struct task_struct *binder_proc_task, struct task_struct *binder_th_task,
 	unsigned int code, bool pending_async, bool sync)
 {
-	if (!__frame_boost_enabled())
-	    return;
-
 	if (sync)
 		add_binder_to_frame_group(binder_th_task, current);
 }
@@ -1019,9 +1016,6 @@ static void fbg_binder_restore_priority_hook(void *unused, struct binder_transac
 	struct oplus_task_struct *ots = get_oplus_task_struct(task);
 	unsigned long flags;
 	raw_spinlock_t *lock = NULL;
-
-	if (!__frame_boost_enabled())
-	    return;
 
 	if (IS_ERR_OR_NULL(ots))
 		return;
@@ -1053,9 +1047,6 @@ static void fbg_binder_wait_for_work_hook(void *unused, bool do_proc_work,
 	unsigned long flags;
 	raw_spinlock_t *lock = NULL;
 
-	if (!__frame_boost_enabled())
-	    return;
-
 	if (IS_ERR_OR_NULL(ots))
 		return;
 
@@ -1074,9 +1065,6 @@ static void fbg_binder_wait_for_work_hook(void *unused, bool do_proc_work,
 
 static void fbg_sync_txn_recvd_hook(void *unused, struct task_struct *tsk, struct task_struct *from)
 {
-	if (!__frame_boost_enabled())
-		return;
-
 	add_binder_to_frame_group(tsk, from);
 }
 
@@ -2019,17 +2007,11 @@ skip:
 static void fbg_update_cfs_util_hook(void *unused, struct task_struct *tsk,
 	u64 runtime, u64 vruntime)
 {
-	if (!__frame_boost_enabled())
-		return;
-
 	fbg_update_task_util(tsk, runtime, true);
 }
 
 static void fbg_update_rt_util_hook(void *unused, struct task_struct *tsk, u64 runtime)
 {
-	if (!__frame_boost_enabled())
-		return;
-
 	fbg_update_task_util(tsk, runtime, true);
 }
 
@@ -2110,9 +2092,6 @@ void fbg_android_rvh_schedule_handler(struct task_struct *prev,
 	struct task_struct *next, struct rq *rq)
 {
 	struct oplus_task_struct *ots;
-
-	if (!__frame_boost_enabled())
-	    return;
 
 	if (atomic_read(&fbg_initialized) == 0)
 		return;
@@ -2681,9 +2660,6 @@ static void fbg_flush_task_hook(void *unused, struct task_struct *tsk)
 	unsigned long flags;
 	raw_spinlock_t *lock = NULL;
 
-	if (!__frame_boost_enabled())
-		return;
-
 	if (IS_ERR_OR_NULL(ots))
 		return;
 
@@ -2705,9 +2681,6 @@ static void fbg_flush_task_hook(void *unused, struct task_struct *tsk)
 static void fbg_sched_fork_hook(void *unused, struct task_struct *tsk)
 {
 	struct oplus_task_struct *ots = get_oplus_task_struct(tsk);
-
-	if (!__frame_boost_enabled())
-		return;
 
 	if (IS_ERR_OR_NULL(ots))
 		return;

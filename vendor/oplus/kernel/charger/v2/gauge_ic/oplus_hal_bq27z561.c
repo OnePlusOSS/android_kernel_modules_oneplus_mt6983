@@ -1930,7 +1930,7 @@ static int bq27z561_get_battery_cc(struct chip_bq27z561 *chip)
 		}
 		if (ret) {
 			dev_err(chip->dev, "error reading cc.\n");
-			return ret;
+			return 0;
 		}
 	} else {
 		if (chip->cc_pre)
@@ -2041,7 +2041,7 @@ static int bq27z561_get_battery_soh(struct chip_bq27z561 *chip)
 		}
 		if (ret) {
 			dev_err(chip->dev, "error reading fcc.\n");
-			return ret;
+			return 0;
 		}
 	} else {
 		if (chip->soh_pre)

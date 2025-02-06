@@ -1597,13 +1597,14 @@ static int __init oplus_sla_init(void)
 	ret |= nf_register_net_hooks(&init_net, oplus_sla_ops,
 			ARRAY_SIZE(oplus_sla_ops));
 
-	debug(" enter.\n");
+	debug("guokang enter.\n");
+        debug("0x%x\n", CT_MARK_APP_TYPE_MASK);
 	return ret;
 }
 
 static void __exit oplus_sla_exit(void)
 {
-	debug(" exit.\n");
+	debug("guokang exit.\n");
 	oplus_sla_genl_fini();
 
 	if (oplus_sla_table_hrd) {

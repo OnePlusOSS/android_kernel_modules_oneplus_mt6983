@@ -58,8 +58,13 @@
 #endif
 
 #ifdef CONFIG_OPLUS_CHARGER_MTK
+#ifdef CONFIG_OPLUS_PD_EXT_SUPPORT
+#include "../pd_ext/inc/tcpci.h"
+#include "../pd_ext/inc/tcpm.h"
+#else
 #include <tcpci.h>
 #include <tcpm.h>
+#endif
 #endif
 
 #ifdef CONFIG_OPLUS_CHARGER_MTK
@@ -161,7 +166,7 @@ static int get_boot_reason(void)
 #define SC6607_PD_AICR_MAX_3000MA 3000
 
 #ifdef CONFIG_OPLUS_CHARGER_MTK
-#define OPLUS_BC12_MAX_TRY_COUNT 3
+#define OPLUS_BC12_MAX_TRY_COUNT 2
 #else
 #define OPLUS_BC12_MAX_TRY_COUNT 2
 #endif
@@ -603,6 +608,7 @@ static int sc6607_bc12_timeout_start(struct sc6607 *chip)
 	pr_info(" start\n");
 	del_timer(&chip->bc12_timeout);
 	chip->bc12_timeout.expires = jiffies + msecs_to_jiffies(500);
+	chip->bc12_timeout.function = sc6607_bc12_timeout_func;
 	add_timer(&chip->bc12_timeout);
 	return 0;
 }
@@ -3135,26 +3141,6 @@ static int sc6607_enter_test_mode(struct sc6607 *chip, bool en)
 	return 0;
 }
 
-static int sc6607_set_pd_phy_tx_discard_time(struct sc6607 *chip)
-{
-	int ret = 0;
-	u8 value[3]= {SC6607_REG_TX_DISCARD, 0x00, 0x64};
-	struct i2c_msg xfer[1];
-
-	xfer[0].addr = chip->client->addr + 1,
-	xfer[0].flags = 0;
-	xfer[0].len = sizeof(value);
-	xfer[0].buf = value;
-
-	ret = i2c_transfer(chip->client->adapter, xfer, ARRAY_SIZE(xfer));
-	if (ret == ARRAY_SIZE(xfer)) {
-		return 0;
-	} else {
-		pr_err("sc6607_set_pd_phy_tx_discard_time err %d\n", ret);
-		return ret;
-	}
-}
-
 static void sc6607_set_cc_pull_up_idrive(struct sc6607 *chip)
 {
 	int ret = 0;
@@ -3266,7 +3252,6 @@ static int sc6607_init_device(struct sc6607 *chip)
 	sc6607_set_cc_pull_up_idrive(chip);
 	sc6607_set_cc_pull_down_idrive(chip);
 	sc6607_enter_test_mode(chip, true);
-	sc6607_set_pd_phy_tx_discard_time(chip);
 	sc6607_set_continuous_time(chip);
 	sc6607_set_bmc_width(chip);
 	sc6607_enter_test_mode(chip, false);
@@ -4431,7 +4416,7 @@ static int pd_tcp_notifier_call(struct notifier_block *pnb,
 	uint8_t old_state = TYPEC_UNATTACHED;
 	uint8_t new_state = TYPEC_UNATTACHED;
 	struct oplus_chg_chip *chg_chip = oplus_chg_get_chg_struct();
-	int ret = 0;
+	int ret = 0, sink_mv, sink_ma;
 	pinfo = container_of(pnb, struct sc6607, pd_nb);
 
 	pr_err("PD charger event:%d %d\n", (int)event, (int)noti->pd_state.connected);
@@ -4516,6 +4501,7 @@ static int pd_tcp_notifier_call(struct notifier_block *pnb,
 		     new_state == TYPEC_ATTACHED_NORP_SRC ||
 		     new_state == TYPEC_ATTACHED_CUSTOM_SRC ||
 		     new_state == TYPEC_ATTACHED_DBGACC_SNK)) {
+			oplus_pd_set_aicr(SC6607_PD_AICR_MAX_3000MA, false);
 			pr_info("Charger plug in, polarity = %d\n", noti->typec_state.polarity);
 			sc6607_inform_charger_type(g_chip);
 			if (!chg_chip->authenticate || chg_chip->balancing_bat_stop_chg)
@@ -4525,16 +4511,19 @@ static int pd_tcp_notifier_call(struct notifier_block *pnb,
 			    old_state == TYPEC_ATTACHED_CUSTOM_SRC ||
 			    old_state == TYPEC_ATTACHED_DBGACC_SNK) &&
 			    new_state == TYPEC_UNATTACHED) {
+			oplus_pd_set_aicr(SC6607_PD_AICR_MAX_3000MA, false);
 			pr_info("Charger plug out\n");
 
 		} else if (old_state == TYPEC_UNATTACHED &&
 			   (new_state == TYPEC_ATTACHED_SRC ||
 			    new_state == TYPEC_ATTACHED_DEBUG)) {
+			oplus_pd_set_aicr(SC6607_PD_AICR_MAX_3000MA, false);
 			pr_info("OTG plug in, polarity = %d\n", noti->typec_state.polarity);
 			battery_update();
 		} else if ((old_state == TYPEC_ATTACHED_SRC ||
 			    old_state == TYPEC_ATTACHED_DEBUG) &&
 			    new_state == TYPEC_UNATTACHED) {
+			oplus_pd_set_aicr(SC6607_PD_AICR_MAX_3000MA, false);
 			pr_info("OTG plug out\n");
 			battery_update();
 		} else if (old_state == TYPEC_UNATTACHED &&
@@ -4545,6 +4534,16 @@ static int pd_tcp_notifier_call(struct notifier_block *pnb,
 			   new_state == TYPEC_UNATTACHED) {
 			pr_info("Audio plug out\n");
 			/* disable AudioAccessory connection */
+		}
+		break;
+	case TCP_NOTIFY_SINK_VBUS:
+		sink_mv = noti->vbus_state.mv;
+		sink_ma = noti->vbus_state.ma;
+		pr_info("%s: sink vbus %dmV %dmA type(0x%02x) adapter\n", __func__,
+			sink_mv, sink_ma, noti->vbus_state.type);
+		if (noti->vbus_state.type & TCP_VBUS_CTRL_PD_DETECT) {
+			oplus_pd_set_aicr(sink_ma, true);
+			pr_err("set sc6607 pd aicr %d\n", sink_ma);
 		}
 		break;
 	default:
@@ -4620,6 +4619,7 @@ int oplus_mtk_pd_setup(void)
 				}
 			}
 		} else if (g_chip->pd_type == PD_CONNECT_PE_READY_SNK ||
+			g_chip->pd_type == PD_CONNECT_TYPEC_ONLY_SNK ||
 			g_chip->pd_type == PD_CONNECT_PE_READY_SNK_PD30) {
 			adapter_dev_get_cap(g_chip->pd_adapter, MTK_PD, &cap);
 			for (i = 0; i < cap.nr; i++)
@@ -4632,13 +4632,15 @@ int oplus_mtk_pd_setup(void)
 					ibus_ma = cap.ma[i];
 					if (ibus_ma > IBUS_2A)
 						ibus_ma = IBUS_2A;
-					break;
+					goto out;
 				}
 			}
+			return 0;
 		} else {
 			vbus_mv = VBUS_5V;
 			ibus_ma = IBUS_2A;
 		}
+out:
 		pr_info("PD request: %dmV, %dmA\n", vbus_mv, ibus_ma);
 		ret = oplus_pdc_setup(&vbus_mv, &ibus_ma);
 	} else {
@@ -7319,7 +7321,8 @@ static int sc6607_charger_probe(struct i2c_client *client, const struct i2c_devi
 	if (chip->tcpc != NULL) {
 		chip->pd_nb.notifier_call = pd_tcp_notifier_call;
 		ret = register_tcp_dev_notifier(chip->tcpc, &chip->pd_nb,
-			TCP_NOTIFY_TYPE_USB | TCP_NOTIFY_TYPE_MISC);
+			TCP_NOTIFY_TYPE_USB | TCP_NOTIFY_TYPE_MISC |
+			TCP_NOTIFY_TYPE_VBUS);
 	} else {
 		pr_err("get tcpc dev fail\n");
 	}

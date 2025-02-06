@@ -100,6 +100,7 @@ struct sc8547d_device {
 	bool vac_support;
 	bool ic_sc8547d;
 	bool enable_otg;
+	bool always_otg_en;
 
 	struct work_struct ufcs_regdump_work;
 	struct work_struct otg_enabled_work;
@@ -1166,7 +1167,8 @@ static int sc8547_init_device(struct sc8547d_device *chip)
 	sc8547_update_bits(chip->client, SC8547_REG_09, SC8547_IBUS_UCP_RISE_MASK_MASK,
 			   (1 << SC8547_IBUS_UCP_RISE_MASK_SHIFT));
 	sc8547_write_byte(chip->client, SC8547_REG_10, 0x02); /* mask insert irq */
-
+	if (chip->always_otg_en)
+		sc8547_update_bits(chip->client, SC8547D_ADDR_OTG_EN, SC8547D_OTG_EN_MASK, 0x04);
 	return 0;
 }
 
@@ -2212,7 +2214,8 @@ static void sc8547d_otg_enabled_work(struct work_struct *work)
 	} else {
 		if (chip->enable_otg)
 			sc8547_write_byte(chip->client, SC8547D_ENABLE_OTG_REG, 0x02);
-		sc8547_update_bits(chip->client, SC8547D_ADDR_OTG_EN, SC8547D_OTG_EN_MASK, 0x0);
+		if (!chip->always_otg_en)
+			sc8547_update_bits(chip->client, SC8547D_ADDR_OTG_EN, SC8547D_OTG_EN_MASK, 0x0);
 	}
 }
 static void sc8547d_ufcs_regdump_work(struct work_struct *work)
@@ -2685,6 +2688,45 @@ static int sc8547d_cp_set_work_start(struct oplus_chg_ic_dev *ic_dev, bool start
 	return 0;
 }
 
+static void sc8547d_set_ucp_disable(struct sc8547d_device *chip, bool disable)
+{
+	u8 value;
+
+	if (!chip) {
+		chg_err("chip is null\n");
+		return;
+	}
+	if (disable) {
+		/* to avoid cp ucp cause buck chg, change ucp as 100ms */
+		sc8547_read_byte(chip->client, SC8547_REG_05, &value);
+		value = value | 0x80;
+		chg_info("set 05 reg = 0x%x\n", value);
+		sc8547_write_byte(chip->client, SC8547_REG_05, value);
+	} else {
+		sc8547_read_byte(chip->client, SC8547_REG_05, &value);
+		value = value & (~0x80);
+		chg_info("set 05 reg = 0x%x\n", value);
+		sc8547_write_byte(chip->client, SC8547_REG_05, value);
+	}
+}
+
+static int sc8547d_cp_set_ucp_disable(struct oplus_chg_ic_dev *ic_dev, bool en)
+{
+	struct sc8547d_device *chip;
+
+	if (ic_dev == NULL) {
+		chg_err("oplus_chg_ic_dev is NULL");
+		return -ENODEV;
+	}
+	chip = oplus_chg_ic_get_priv_data(ic_dev);
+
+	chg_info("%s %s\n", chip->dev->of_node->name, en ? "en" : "dis");
+
+	sc8547d_set_ucp_disable(chip, en);
+
+	return 0;
+}
+
 static int sc8547d_cp_get_work_status(struct oplus_chg_ic_dev *ic_dev, bool *start)
 {
 	struct sc8547d_device *chip;
@@ -2796,6 +2838,9 @@ static void *sc8547d_cp_get_func(struct oplus_chg_ic_dev *ic_dev, enum oplus_chg
 		break;
 	case OPLUS_IC_FUNC_CP_SET_ADC_ENABLE:
 		func = OPLUS_CHG_IC_FUNC_CHECK(OPLUS_IC_FUNC_CP_SET_ADC_ENABLE, sc8547d_cp_adc_enable);
+		break;
+	case OPLUS_IC_FUNC_CP_SET_UCP_DISABLE:
+		func = OPLUS_CHG_IC_FUNC_CHECK(OPLUS_IC_FUNC_CP_SET_UCP_DISABLE, sc8547d_cp_set_ucp_disable);
 		break;
 	default:
 		chg_err("this func(=%d) is not supported\n", func_id);
@@ -3114,9 +3159,10 @@ static int sc8547d_driver_probe(struct i2c_client *client,
 	chip->use_slave_cp = of_property_read_bool(chip->dev->of_node, "oplus,use_slave_cp");
 	chip->vac_support = of_property_read_bool(chip->dev->of_node, "oplus,vac_support");
 	chip->enable_otg = of_property_read_bool(chip->dev->of_node, "oplus,enable_otg");
-	chg_info("use_vooc_phy=%d, use_ufcs_phy=%d, use_slave_cp=%d, vac_support=%d, enable_otg=%d\n",
+	chip->always_otg_en = of_property_read_bool(chip->dev->of_node, "oplus,always_otg_en");
+	chg_info("use_vooc_phy=%d, use_ufcs_phy=%d, use_slave_cp=%d, vac_support=%d, enable_otg=%d always_otg_en=%d\n",
 		 chip->use_vooc_phy, chip->use_ufcs_phy, chip->use_slave_cp, chip->vac_support,
-		 chip->enable_otg);
+		 chip->enable_otg, chip->always_otg_en);
 
 	if (chip->use_vooc_phy) {
 		rc = sc8547_charger_choose(chip);

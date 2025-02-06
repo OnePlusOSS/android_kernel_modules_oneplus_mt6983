@@ -2332,6 +2332,29 @@ static void oplus_chg_wls_get_third_part_verity_data_work(
 		sizeof(wls_status->vendor_id), &(wls_status->vendor_id));
 }
 
+#define OPLUS_TX_CUSTOM_ID 0x11
+static void oplus_wls_tx_aes_verity_init(struct oplus_chg_wls *wls_dev)
+{
+	struct oplus_chg_wls_status *wls_status = &wls_dev->wls_status;
+
+	if (wls_status->verify_by_aes)
+		return;
+
+	if (wls_dev->rx_protocol_version >= WLS_RX_PROTOCOL_VERSION_30 &&
+	    wls_status->adapter_id >= WLS_ADAPTER_MODEL_4 &&
+	    wls_status->adapter_id <= WLS_ADAPTER_MODEL_25) {
+		wls_status->vendor_id = OPLUS_TX_CUSTOM_ID;
+		wls_status->aes_verity_data_ok = false;
+		if (!wls_status->verify_by_aes)
+			schedule_delayed_work(&wls_dev->wls_get_third_part_verity_data_work, 0);
+		wls_status->verify_by_aes = true;
+		chg_info("verify_by_aes=%d, vendor_id=0x%02x\n",
+		         wls_status->verify_by_aes, wls_status->vendor_id);
+	}
+
+	return;
+}
+
 static void oplus_chg_wls_standard_msg_handler(struct oplus_chg_wls *wls_dev,
 					       u8 mask, u8 data)
 {
@@ -2369,6 +2392,7 @@ static void oplus_chg_wls_standard_msg_handler(struct oplus_chg_wls *wls_dev,
 			pwr_mw = oplus_chg_wls_get_base_power_max(wls_status->adapter_id);
 			vote(wls_dev->fcc_votable, BASE_MAX_VOTER, true, (pwr_mw * 1000 / dynamic_cfg->svooc_vol_mv), false);
 		}
+		oplus_wls_tx_aes_verity_init(wls_dev);
 		break;
 	case WLS_RESPONE_INTO_FASTCHAGE:
 		if (rx_msg->msg_type == WLS_CMD_INTO_FASTCHAGE) {
@@ -3020,6 +3044,7 @@ static int oplus_chg_wls_send_msg(struct oplus_chg_wls *wls_dev, u8 msg, u8 data
 	struct oplus_chg_rx_msg *rx_msg = &wls_dev->rx_msg;
 	int cep;
 	int rc;
+	unsigned long time_left;
 
 	if (!wls_dev->msg_callback_ok) {
 		rc = oplus_chg_wls_rx_register_msg_callback(wls_dev->wls_rx->rx_ic, wls_dev,
@@ -3065,11 +3090,13 @@ static int oplus_chg_wls_send_msg(struct oplus_chg_wls *wls_dev, u8 msg, u8 data
 		rx_msg->pending = true;
 		reinit_completion(&wls_dev->msg_ack);
 		schedule_delayed_work(&wls_dev->wls_send_msg_work, msecs_to_jiffies(1000));
-		rc = wait_for_completion_timeout(&wls_dev->msg_ack, msecs_to_jiffies(wait_time_s * 1000));
-		if (!rc) {
+		time_left = wait_for_completion_timeout(&wls_dev->msg_ack, msecs_to_jiffies(wait_time_s * 1000));
+		if (!time_left) {
 			chg_err("Error, timed out sending message\n");
 			cancel_delayed_work_sync(&wls_dev->wls_send_msg_work);
 			rc = -ETIMEDOUT;
+		} else {
+			rc = 0;
 		}
 		rx_msg->msg_type = 0;
 		rx_msg->data = 0;
@@ -3165,6 +3192,7 @@ static int oplus_chg_wls_send_raw_data(struct oplus_chg_wls *wls_dev, u8 msg[2],
 {
 	struct oplus_chg_rx_msg *rx_msg = &wls_dev->rx_msg;
 	int rc = 0;
+	unsigned long time_left;
 
 	if (!wls_dev->msg_callback_ok) {
 		rc = oplus_chg_wls_rx_register_msg_callback(wls_dev->wls_rx->rx_ic, wls_dev,
@@ -3200,11 +3228,13 @@ static int oplus_chg_wls_send_raw_data(struct oplus_chg_wls *wls_dev, u8 msg[2],
 		if (rc) {
 			chg_err("send data error, rc=%d\n", rc);
 		}
-		rc = wait_for_completion_timeout(&wls_dev->msg_ack, msecs_to_jiffies(wait_time_s * 1000));
-		if (!rc) {
+		time_left = wait_for_completion_timeout(&wls_dev->msg_ack, msecs_to_jiffies(wait_time_s * 1000));
+		if (!time_left) {
 			chg_err("Error, timed out sending message\n");
 			cancel_delayed_work_sync(&wls_dev->wls_send_msg_work);
 			rc = -ETIMEDOUT;
+		} else {
+			rc = 0;
 		}
 		rx_msg->msg_head = 0;
 		rx_msg->msg_type = 0;
@@ -4317,7 +4347,7 @@ static enum oplus_chg_temp_region oplus_chg_wls_get_temp_region(struct oplus_chg
 		temp_region = BATT_TEMP_HOT;
 		break;
 	case TEMP_REGION_MAX:
-		temp_region = BATT_TEMP_MAX;
+		temp_region = BATT_TEMP_MAX - 1;
 		break;
 	default:
 		temp_region = BATT_TEMP_NORMAL;
@@ -5217,14 +5247,16 @@ static void oplus_chg_wls_ploss_warn_ta_uv(struct oplus_chg_wls *wls_dev, u8 err
 	int rc;
 
 	fcc_ma = get_effective_result(wls_dev->fcc_votable);
-	fcc_ma = fcc_ma - WLS_TX_PLOSS_CURRENT_STEP_MA < WLS_TX_PLOSS_CURRENT_LIMIT_LOW_MA ?
-			WLS_TX_PLOSS_CURRENT_LIMIT_LOW_MA : fcc_ma - WLS_TX_PLOSS_CURRENT_STEP_MA;
 	if (err_type == WLS_TX_ERROR_PLOSS_FOD_WARN) {
+		fcc_ma = fcc_ma - WLS_TX_PLOSS_CURRENT_STEP_MA < WLS_TX_PLOSS_CURRENT_LIMIT_LOW_MA ?
+			WLS_TX_PLOSS_CURRENT_LIMIT_LOW_MA : fcc_ma - WLS_TX_PLOSS_CURRENT_STEP_MA;
 		vote(wls_dev->fcc_votable, WLS_PLOSS_WARN_VOTER, true, fcc_ma, false);
 		cancel_delayed_work(&wls_dev->wls_ploss_warn_work);
 		schedule_delayed_work(&wls_dev->wls_ploss_warn_work, msecs_to_jiffies(PLOSS_WARN_DELAY_MS));
 	}
 	if (err_type == WLS_TX_ERROR_TA_UV) {
+		fcc_ma = fcc_ma - WLS_TX_TAUV_CURRENT_STEP_MA < WLS_TX_TAUV_CURRENT_LIMIT_LOW_MA ?
+			WLS_TX_TAUV_CURRENT_LIMIT_LOW_MA : fcc_ma - WLS_TX_TAUV_CURRENT_STEP_MA;
 		rc = oplus_chg_wls_rx_get_vout(wls_dev->wls_rx->rx_ic, &vout_mv);
 		if (rc < 0)
 			chg_err("can't get vout, rc=%d\n", rc);
@@ -5859,7 +5891,7 @@ static void oplus_chg_wls_check_term_charge(struct oplus_chg_wls *wls_dev)
 	     (wls_status->current_rx_state == OPLUS_CHG_WLS_RX_STATE_EPP_PLUS) ||
 	     (wls_status->current_rx_state == OPLUS_CHG_WLS_RX_STATE_FFC) ||
 	     (wls_status->current_rx_state == OPLUS_CHG_WLS_RX_STATE_DONE))) {
-		oplus_chg_wls_send_msg(wls_dev, WLS_CMD_SET_CEP_TIMEOUT, 0xff, 2);
+		(void)oplus_chg_wls_send_msg(wls_dev, WLS_CMD_SET_CEP_TIMEOUT, 0xff, 2);
 	}
 	curr_ma = get_client_vote(wls_dev->nor_icl_votable, CHG_DONE_VOTER);
 	rc = oplus_chg_wls_get_skin_temp(wls_dev, &skin_temp);

@@ -93,6 +93,9 @@ static inline int get_task_cls_for_scene(struct task_struct *task)
 		}
 	}
 
+	if (global_lowend_plat_opt && test_sched_assist_ux_type(task, SA_TYPE_HEAVY) && is_heavy_load_top_task(task))
+		return cls_mid;
+
 	if (sched_assist_scene(SA_ANIM) && test_sched_assist_ux_type(task, SA_TYPE_ANIMATOR))
 		return is_task_util_over(task, BOOST_THRESHOLD_UNIT) ? cls_mid : 0;
 

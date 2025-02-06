@@ -897,9 +897,11 @@ err:
 	if (filename)
 		kfree(filename);
 #if (LINUX_VERSION_CODE >= KERNEL_VERSION(6, 1, 0))
-	path_put_fn(&path);
+	if (path.mnt && path.dentry)
+		path_put_fn(&path);
 #else
-	path_put(&path);
+	if (path.mnt && path.dentry)
+		path_put(&path);
 #endif
 
 	return NULL;
@@ -1048,7 +1050,7 @@ static ssize_t oplus_uprobe_proc_write(struct file *file, const char __user *buf
     if (atomic_read(&uprobe_count) > MAX_UPROBE_COUNT) {
 		pr_err(OPLUS_UPROBE_LOG_TAG "uprobe_count Maximum limit\n");
 		pr_storage(OPLUS_UPROBE_LOG_TAG "uprobe_count Maximum limit uprobe_count(%d)\n", uprobe_count);
-        return -EINVAL;
+		goto err;
 	}
 
 	ou = parse_uprobe_cmd(argc, argv);

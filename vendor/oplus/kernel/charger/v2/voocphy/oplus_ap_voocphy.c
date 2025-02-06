@@ -1398,6 +1398,26 @@ static int oplus_voocphy_init_vooc(struct oplus_voocphy_manager *chip)
 	return rc;
 }
 
+static int oplus_voocphy_upload_cp_error(struct oplus_voocphy_manager *chip, int err_type)
+{
+	int rc = 0;
+
+	if (!chip) {
+		voocphy_err("oplus_voocphy_manager chip null\n");
+		return rc;
+	}
+
+	if (chip->ops && chip->ops->upload_cp_error) {
+		rc = chip->ops->upload_cp_error(chip, err_type);
+		if (rc < 0) {
+			voocphy_info("upload cp error failed, rc=%d.\n", rc);
+			return rc;
+		}
+	}
+
+	return rc;
+}
+
 static int oplus_voocphy_print_dbg_info(struct oplus_voocphy_manager *chip)
 {
 	int i = 0;
@@ -1405,6 +1425,8 @@ static int oplus_voocphy_print_dbg_info(struct oplus_voocphy_manager *chip)
 	bool fg_dump_reg = false;
 	bool fg_send_info = false;
 	int report_flag = 0;
+	int error_type = 0;
+	int rc = 0;
 
 	if (chip->ops && chip->ops->check_cp_int_happened &&
 	    chip->ops->check_cp_int_happened(chip, &fg_dump_reg, &fg_send_info))
@@ -1454,6 +1476,15 @@ chg_exception:
 		}
 		if (fg_send_info) {
 			report_flag |= (1 << 4);
+			if (chip->ops && chip->ops->get_cp_error_type) {
+				rc = chip->ops->get_cp_error_type(chip, &error_type);
+				if (0 == rc) {
+					voocphy_err("upload cp err, error_type = %d\n", error_type);
+					oplus_voocphy_upload_cp_error(chip, error_type);
+				} else {
+					voocphy_err("get cp err type failed, rc = %d\n", rc);
+				}
+			}
 		}
 	}
 

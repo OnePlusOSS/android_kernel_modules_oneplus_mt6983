@@ -286,8 +286,13 @@ struct kbase_kcpu_command {
 struct kbase_kcpu_command_queue {
 	struct kbase_context *kctx;
 	struct kbase_kcpu_command commands[KBASEP_KCPU_QUEUE_SIZE];
+#if IS_ENABLED(CONFIG_MALI_MTK_KTHREAD_ENHANCE)
+	struct kthread_work work;
+	struct kthread_work force_signal_work;
+#else
 	struct work_struct work;
 	struct work_struct force_signal_work;
+#endif
 #ifdef CONFIG_MALI_FENCE_DEBUG
 	struct work_struct timeout_work;
 #endif /* CONFIG_MALI_FENCE_DEBUG */

@@ -106,6 +106,14 @@ static struct panel_node g_panel_node[PANEL_NUM] = {
 		.lcm_name = "td4377",
 	},
 	{
+		.id = TXD_ILI9883C,
+		.lcm_name = "txd_ili9883c",
+	},
+	{
+		.id = DS_ILI9883C,
+		.lcm_name = "ds_ili9883c",
+	},
+	{
 		.id = ILI9883C,
 		.lcm_name = "ili9883c",
 	},

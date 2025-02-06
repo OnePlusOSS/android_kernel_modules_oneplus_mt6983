@@ -1243,6 +1243,10 @@ static inline void tp_work_func(struct touchpanel_data *ts)
 		return;
 	}
 
+	if (ts->touch_event_diasble) {
+		return;
+	}
+
 	/*
 	 *  trigger_reason:this callback determine which trigger reason should be
 	 *  The value returned has some policy!
@@ -4151,6 +4155,7 @@ int register_common_touch_device(struct touchpanel_data *pdata)
 	ts->palm_to_sleep_enable = 0;
 	ts->tp_ic_touch_num = 0;
 	ts->last_tp_ic_touch_num = 0;
+	ts->touch_event_diasble = false;
 	for (i = 0; i < MAX_FINGER_NUM; i++) {
 		ts->last_x_y_point[i].x = 0;
 		ts->last_x_y_point[i].y = 0;

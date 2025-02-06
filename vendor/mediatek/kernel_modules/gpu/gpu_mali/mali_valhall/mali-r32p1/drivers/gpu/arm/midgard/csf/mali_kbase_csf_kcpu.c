@@ -55,7 +55,12 @@ static DEFINE_SPINLOCK(kbase_csf_fence_lock);
 static void kcpu_queue_process(struct kbase_kcpu_command_queue *kcpu_queue,
 			bool ignore_waits);
 
+#if IS_ENABLED(CONFIG_MALI_MTK_KTHREAD_ENHANCE)
+static void kcpu_queue_process_worker(struct kthread_work *data);
+#else
 static void kcpu_queue_process_worker(struct work_struct *data);
+#endif
+
 #ifdef CONFIG_MALI_FENCE_DEBUG
 static void kcpu_queue_timeout_worker(struct work_struct *data);
 #endif
@@ -479,7 +484,11 @@ static void kbase_kcpu_jit_retry_pending_allocs(struct kbase_context *kctx)
 	 */
 	list_for_each_entry(blocked_queue,
 			&kctx->csf.kcpu_queues.jit_blocked_queues, jit_blocked)
+#if IS_ENABLED(CONFIG_MALI_MTK_KTHREAD_ENHANCE)
+		kthread_queue_work(kctx->csf.kcpu_queues.worker, &blocked_queue->work);
+#else
 		queue_work(kctx->csf.kcpu_queues.wq, &blocked_queue->work);
+#endif
 }
 
 static int kbase_kcpu_jit_free_process(struct kbase_kcpu_command_queue *queue,
@@ -738,7 +747,11 @@ static enum kbase_csf_event_callback_action event_cqs_callback(void *param)
 		(struct kbase_kcpu_command_queue *)param;
 	struct kbase_context *const kctx = kcpu_queue->kctx;
 
+#if IS_ENABLED(CONFIG_MALI_MTK_KTHREAD_ENHANCE)
+	kthread_queue_work(kctx->csf.kcpu_queues.worker, &kcpu_queue->work);
+#else
 	queue_work(kctx->csf.kcpu_queues.wq, &kcpu_queue->work);
+#endif
 
 	return KBASE_CSF_EVENT_CALLBACK_KEEP;
 }
@@ -1351,7 +1364,11 @@ static void kbase_csf_fence_wait_callback(struct dma_fence *fence,
 				  fence->context, fence->seqno);
 
 	/* Resume kcpu command queue processing. */
+#if IS_ENABLED(CONFIG_MALI_MTK_KTHREAD_ENHANCE)
+	kthread_queue_work(kctx->csf.kcpu_queues.worker, &kcpu_queue->work);
+#else
 	queue_work(kctx->csf.kcpu_queues.wq, &kcpu_queue->work);
+#endif
 }
 
 static void kbase_kcpu_fence_wait_cancel(
@@ -1464,7 +1481,11 @@ static void fence_timeout_callback(struct timer_list *timer)
 	kbase_sync_fence_info_get(fence, &info);
 
 	if (info.status == 1) {
+#if IS_ENABLED(CONFIG_MALI_MTK_KTHREAD_ENHANCE)
+		kthread_queue_work(kctx->csf.kcpu_queues.worker, &kcpu_queue->work);
+#else
 		queue_work(kctx->csf.kcpu_queues.wq, &kcpu_queue->work);
+#endif
 	} else if (info.status == 0) {
 		dev_warn(kctx->kbdev->dev, "fence has not yet signalled in %ums",
 			 FENCE_WAIT_TIMEOUT_MS);
@@ -1752,7 +1773,11 @@ static void kcpu_force_signal_fence(struct kbase_kcpu_command_queue *kcpu_queue)
 #endif
 }
 
+#if IS_ENABLED(CONFIG_MALI_MTK_KTHREAD_ENHANCE)
+static void kcpu_queue_force_fence_signal_worker(struct kthread_work *data)
+#else
 static void kcpu_queue_force_fence_signal_worker(struct work_struct *data)
+#endif
 {
 	struct kbase_kcpu_command_queue *kcpu_queue = container_of(data,
 			struct kbase_kcpu_command_queue, force_signal_work);
@@ -1794,7 +1819,11 @@ static void fence_signal_timeout_cb(struct timer_list *timer)
                fence_signal_timeout_start(kcpu_queue);
 
 #ifdef CONFIG_MALI_FENCE_DEBUG
+#if IS_ENABLED(CONFIG_MALI_MTK_KTHREAD_ENHANCE)
+       kthread_queue_work(kctx->csf.kcpu_queues.worker, &kcpu_queue->force_signal_work);
+#else
        queue_work(kctx->csf.kcpu_queues.wq, &kcpu_queue->force_signal_work);
+#endif
 #endif
 }
 
@@ -2032,7 +2061,11 @@ static void kcpu_queue_timeout_worker(struct work_struct *data)
 }
 #endif /* CONFIG_MALI_FENCE_DEBUG */
 
+#if IS_ENABLED(CONFIG_MALI_MTK_KTHREAD_ENHANCE)
+static void kcpu_queue_process_worker(struct kthread_work *data)
+#else
 static void kcpu_queue_process_worker(struct work_struct *data)
+#endif
 {
 	struct kbase_kcpu_command_queue *queue = container_of(data,
 				struct kbase_kcpu_command_queue, work);
@@ -2078,8 +2111,14 @@ static int delete_queue(struct kbase_context *kctx, u32 id)
 
 		mutex_unlock(&kctx->csf.kcpu_queues.lock);
 
+#if IS_ENABLED(CONFIG_MALI_MTK_KTHREAD_ENHANCE)
+		kthread_cancel_work_sync(&queue->force_signal_work);
+		kthread_cancel_work_sync(&queue->work);
+#else
 		cancel_work_sync(&queue->force_signal_work);
 		cancel_work_sync(&queue->work);
+#endif
+
 #ifdef CONFIG_MALI_FENCE_DEBUG
 		cancel_work_sync(&queue->timeout_work);
 #endif /* CONFIG_MALI_FENCE_DEBUG */
@@ -2826,10 +2865,19 @@ int kbase_csf_kcpu_queue_context_init(struct kbase_context *kctx)
 	for (idx = 0; idx < KBASEP_MAX_KCPU_QUEUES; ++idx)
 		kctx->csf.kcpu_queues.array[idx] = NULL;
 
+#if IS_ENABLED(CONFIG_MALI_MTK_KTHREAD_ENHANCE)
+	kctx->csf.kcpu_queues.worker = kthread_create_worker(0, "%i_mali-kcpuq-kthread", 0);
+	if (IS_ERR(kctx->csf.kcpu_queues.worker))
+#else
 	kctx->csf.kcpu_queues.wq = alloc_workqueue("mali_kbase_csf_kcpu",
 					WQ_UNBOUND | WQ_HIGHPRI, 0);
 	if (!kctx->csf.kcpu_queues.wq)
+#endif
 		return -ENOMEM;
+
+#if IS_ENABLED(CONFIG_MALI_MTK_KTHREAD_ENHANCE)
+	sched_set_fifo(kctx->csf.kcpu_queues.worker->task);
+#endif
 
 #ifdef CONFIG_MALI_FENCE_DEBUG
 	kctx->csf.kcpu_queues.timeout_wq = alloc_workqueue("mali_kbase_csf_kcpu_timeout",
@@ -2861,7 +2909,11 @@ void kbase_csf_kcpu_queue_context_term(struct kbase_context *kctx)
 #ifdef CONFIG_MALI_FENCE_DEBUG
 	destroy_workqueue(kctx->csf.kcpu_queues.timeout_wq);
 #endif /* CONFIG_MALI_FENCE_DEBUG */
+#if IS_ENABLED(CONFIG_MALI_MTK_KTHREAD_ENHANCE)
+	kthread_destroy_worker(kctx->csf.kcpu_queues.worker);
+#else
 	destroy_workqueue(kctx->csf.kcpu_queues.wq);
+#endif
 	mutex_destroy(&kctx->csf.kcpu_queues.lock);
 }
 
@@ -2919,8 +2971,13 @@ int kbase_csf_kcpu_queue_new(struct kbase_context *kctx,
 	queue->command_started = false;
 	INIT_LIST_HEAD(&queue->jit_blocked);
 	queue->has_error = false;
+#if IS_ENABLED(CONFIG_MALI_MTK_KTHREAD_ENHANCE)
+	kthread_init_work(&queue->work, kcpu_queue_process_worker);
+	kthread_init_work(&queue->force_signal_work, kcpu_queue_force_fence_signal_worker);
+#else
 	INIT_WORK(&queue->work, kcpu_queue_process_worker);
 	INIT_WORK(&queue->force_signal_work, kcpu_queue_force_fence_signal_worker);
+#endif
 #ifdef CONFIG_MALI_FENCE_DEBUG
 	INIT_WORK(&queue->timeout_work, kcpu_queue_timeout_worker);
 #endif /* CONFIG_MALI_FENCE_DEBUG */

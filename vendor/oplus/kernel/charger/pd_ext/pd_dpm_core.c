@@ -718,7 +718,7 @@ void pd_dpm_snk_standby_power(struct pd_port *pd_port)
 	}
 
 	if (ma >= 0)
-		tcpci_sink_vbus(pd_port->tcpc, type, pd_port->request_v_new, 0);
+		tcpci_sink_vbus(pd_port->tcpc, type, pd_port->request_v_new, ma);
 #else
 #ifdef CONFIG_USB_PD_SNK_GOTOMIN
 	tcpci_sink_vbus(pd_port->tcpc, TCP_VBUS_CTRL_REQUEST,

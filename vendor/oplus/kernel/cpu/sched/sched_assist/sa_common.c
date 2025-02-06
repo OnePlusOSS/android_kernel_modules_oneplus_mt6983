@@ -119,6 +119,18 @@ bool is_webview(struct task_struct *p)
 }
 #endif
 
+bool is_heavy_load_top_task(struct task_struct *p)
+{
+	if (!is_top(p))
+		return false;
+
+	/* is UI main thread or RenderThread of TOP APP */
+	if ((p->pid == p->tgid) || (!strncmp(p->comm, "RenderThread", 12)))
+		return true;
+
+	return false;
+}
+
 struct ux_sched_cputopo ux_sched_cputopo;
 
 static inline void sched_init_ux_cputopo(void)
@@ -648,6 +660,11 @@ unsigned int ux_task_exec_limit(struct task_struct *p)
 	unsigned int exec_limit = UX_EXEC_SLICE;
 	unsigned long im_flag;
 
+	if (global_lowend_plat_opt && (ux_state & SA_TYPE_HEAVY) && is_heavy_load_top_task(p)) {
+		exec_limit *= 40;
+		return exec_limit;
+	}
+
 	/*
 	 * Note:
 	 * SS_LOCK_OWNER has lowest ux prio and lowest ux exectime. There maybe
@@ -899,7 +916,7 @@ static void dequeue_ux_thread(struct rq *rq, struct task_struct *p)
 
 		/* inherit ux can only keep it's ux state in MAX_INHERIT_GRAN(64 ms) */
 		if (get_ux_state_type(p) == UX_STATE_INHERIT &&
-			(p->se.sum_exec_runtime - ots->inherit_ux_start > MAX_INHERIT_GRAN)) {
+			(p->se.sum_exec_runtime - ots->inherit_ux_start > get_max_inherit_gran(p))) {
 			atomic64_set(&ots->inherit_ux, 0);
 			ots->ux_depth = 0;
 			ots->ux_state = 0;
@@ -1111,6 +1128,14 @@ void clear_all_inherit_type(struct task_struct *p)
 	oplus_set_ux_state_lock(p, 0, true);
 }
 
+int get_max_inherit_gran(struct task_struct *p)
+{
+	if (global_lowend_plat_opt && test_inherit_ux(p, INHERIT_UX_BINDER))
+		return MAX_INHERIT_GRAN * 2;
+
+	return MAX_INHERIT_GRAN;
+}
+
 void sched_assist_target_comm(struct task_struct *task, const char *buf)
 {
 	char comm[TASK_COMM_LEN];
@@ -1316,6 +1341,28 @@ bool sa_skip_rt_sync(struct rq *rq, struct task_struct *p, bool *sync)
 	return false;
 }
 EXPORT_SYMBOL(sa_skip_rt_sync);
+
+bool sa_rt_skip_ux_cpu(int cpu)
+{
+	struct rq *rq;
+	struct oplus_rq *orq;
+	struct task_struct *curr;
+
+	rq = cpu_rq(cpu);
+	orq = (struct oplus_rq *) rq->android_oem_data1;
+	curr = rq->curr;
+
+	/* skip running ux */
+	if (curr && test_task_ux(curr))
+		return true;
+
+	/* skip runnable ux */
+	if (!oplus_rbtree_empty(&orq->ux_list))
+		return true;
+
+	return false;
+}
+EXPORT_SYMBOL(sa_rt_skip_ux_cpu);
 
 void opt_ss_lock_contention(struct task_struct *p, unsigned long old_im, int new_im)
 {

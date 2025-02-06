@@ -997,6 +997,7 @@ struct touchpanel_data {
 	bool tp_data_record_support;                        /*feature used to data record when get tp log*/
 	bool suspend_work_support;                          /*feature used to support suspend work queue*/
 	int glove_enable;                                   /*control state of glove gesture*/
+	bool touch_event_diasble;                           /*diasble touch event report*/
 	int leather_cover_enable;                           /*control state of leather_cover gesture*/
 	bool force_bus_ready_support;                       /*force bus ready to true afer notify*/
 	bool skip_reinit_device_support;                    /*spi need skip complete_all, prevent error in access reg*/

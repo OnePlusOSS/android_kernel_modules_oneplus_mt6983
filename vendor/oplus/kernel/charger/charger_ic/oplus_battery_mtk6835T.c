@@ -52,7 +52,12 @@
 #include <linux/of_gpio.h>
 #include <linux/iio/consumer.h>
 #include "op_charge.h"
+#ifdef CONFIG_OPLUS_PD_EXT_SUPPORT
+#include "../pd_ext/inc/tcpm.h"
+#else
 #include <tcpm.h>
+#endif
+
 #include "../oplus_charger.h"
 #include "../oplus_gauge.h"
 #include "../oplus_vooc.h"
@@ -5803,7 +5808,7 @@ void oplus_set_otg_switch_status(bool value)
 		}
 
 		printk(KERN_ERR "[OPLUS_CHG][%s]: otg switch[%d]\n", __func__, value);
-		tcpm_typec_change_role(pinfo->tcpc, value ? TYPEC_ROLE_DRP : TYPEC_ROLE_SNK);
+		tcpm_typec_change_role(pinfo->tcpc, value ? TYPEC_ROLE_TRY_SNK : TYPEC_ROLE_SNK);
 	}
 }
 EXPORT_SYMBOL(oplus_set_otg_switch_status);

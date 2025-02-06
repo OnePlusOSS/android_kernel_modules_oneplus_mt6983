@@ -82,6 +82,9 @@ struct pwrkey_monitor_data {
 	unsigned int error_count;
 #if IS_ENABLED(CONFIG_OPLUS_MTK_DRM_GKI_NOTIFY)
 	struct notifier_block fb_notif;
+#if IS_ENABLED(CONFIG_OPLUS_MTK_DRM_SUB_NOTIFY)
+	struct notifier_block fb_notif_sub;
+#endif
 #endif
 	struct timer_list timer;
 	struct work_struct error_happen_work;

@@ -39,6 +39,8 @@ enum gauge_topic_item {
 	GAUGE_ITEM_LIFETIME_STATUS,
 	GAUGE_ITEM_RATIO_VALUE,
 	GAUGE_ITEM_RATIO_TRANGE,
+	GAUGE_ITEM_QMAX,
+	GAUGE_ITEM_CAR_C,
 };
 
 enum gauge_type_id {
@@ -104,6 +106,7 @@ int oplus_gauge_get_batt_mvolts_2cell_min(void);
 
 int oplus_gauge_get_batt_soc(void);
 int oplus_gauge_get_batt_current(void);
+int oplus_gauge_get_real_time_current(void);
 int oplus_gauge_get_remaining_capacity(void);
 int oplus_gauge_get_device_type(void);
 int oplus_gauge_get_device_type_for_vooc(void);

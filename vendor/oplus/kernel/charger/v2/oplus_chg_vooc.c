@@ -564,7 +564,7 @@ static int find_level_to_current(int val, struct current_level *table, int len)
 
 int oplus_vooc_check_abnormal_power_for_error_count(struct oplus_chg_vooc *chip)
 {
-	int abnormal_power;
+	int abnormal_power = -1;
 
 	if (chip->support_abnormal_over_80w_adapter)
 		abnormal_power = sid_to_adapter_power(chip->sid);
@@ -1659,6 +1659,7 @@ static void oplus_vooc_switch_check_work(struct work_struct *work)
 			chg_info("abnormal over_80w adapter dis cnt is %d >= vooc_max, switch to noraml and clear the count \n",
 				  chip->abnormal_adapter_dis_cnt);
 			chip->abnormal_adapter_dis_cnt = 0;
+			oplus_chg_clear_abnormal_adapter_var(chip);
 			if (oplus_chg_vooc_get_switch_mode(chip->vooc_ic) !=
 			    VOOC_SWITCH_MODE_NORMAL) {
 				switch_normal_chg(chip->vooc_ic);
@@ -1674,6 +1675,7 @@ static void oplus_vooc_switch_check_work(struct work_struct *work)
 		chg_info("abnormal adapter dis cnt is %d >= vooc_max, switch to noraml and clear the count\n",
 			  chip->abnormal_adapter_dis_cnt);
 		chip->abnormal_adapter_dis_cnt = 0;
+		oplus_chg_clear_abnormal_adapter_var(chip);
 		if (oplus_chg_vooc_get_switch_mode(chip->vooc_ic) !=
 		    VOOC_SWITCH_MODE_NORMAL) {
 			switch_normal_chg(chip->vooc_ic);

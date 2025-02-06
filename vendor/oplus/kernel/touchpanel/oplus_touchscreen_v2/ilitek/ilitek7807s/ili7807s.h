@@ -775,6 +775,8 @@ struct ilitek_ts_data {
 	bool eng_flow;
 	bool differ_mode;
 
+	int glove_mode_flag;
+	int glove_mode_status;
 	u8 glove_mode;
 	u8 water_flag;
 	s16 thr;

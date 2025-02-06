@@ -110,6 +110,7 @@ struct oplus_gauge_operations {
 	void (*cal_model_check)(bool ffc_state);
 	bool (*get_bqfs_status)(void);
 	int (*bqfs_fw_check)(void);
+	int (*get_gauge_car_c)(int *car_c);
 };
 
 /****************************************

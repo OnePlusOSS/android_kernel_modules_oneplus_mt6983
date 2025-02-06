@@ -3902,6 +3902,52 @@ static ssize_t proc_leather_cover_enable_read(struct file *file, char __user *bu
 DECLARE_PROC_OPS(leather_cover_enable, simple_open,
 		  proc_leather_cover_enable_read, proc_leather_cover_enable_write, NULL);
 
+static ssize_t proc_disable_touch_event_write(struct file *file,
+		const char __user *buffer, size_t count, loff_t *ppos)
+{
+	int value = 0;
+	char buf[4] = {0};
+	struct touchpanel_data *ts = PDE_DATA(file_inode(file));
+
+	if (!ts) {
+		TPD_INFO("%s: ts is NULL\n", __func__);
+		return count;
+	}
+
+	tp_copy_from_user(buf, sizeof(buf), buffer, count, 4);
+
+	if (kstrtoint(buf, 10, &value)) {
+		TP_INFO(ts->tp_index, "%s: kstrtoint error\n", __func__);
+		return count;
+	}
+
+	ts->touch_event_diasble = !!value;
+
+	TP_INFO(ts->tp_index, "%s: touch_event_diasble value=%d\n", __func__, value);
+
+	return count;
+}
+
+static ssize_t proc_disable_touch_event_read(struct file *file, char __user *buffer,
+		size_t count, loff_t *ppos)
+{
+	int ret = 0;
+	char page[PAGESIZE] = {0};
+	struct touchpanel_data *ts = PDE_DATA(file_inode(file));
+
+	if (!ts) {
+		return 0;
+	}
+
+	TP_INFO(ts->tp_index, "touch_event_diasble value is: %d\n", ts->touch_event_diasble);
+	ret = snprintf(page, PAGESIZE - 1, "%d\n", ts->touch_event_diasble);
+	ret = simple_read_from_buffer(buffer, count, ppos, page, strlen(page));
+
+	return ret;
+}
+
+DECLARE_PROC_OPS(proc_disable_touch_event_ops, simple_open, proc_disable_touch_event_read, proc_disable_touch_event_write, NULL);
+
 #ifndef CONFIG_REMOVE_OPLUS_FUNCTION
 /*proc/touchpanel/debug_info/health_monitor*/
 static int tp_health_monitor_read_func(struct seq_file *s, void *v)
@@ -4288,6 +4334,7 @@ int init_touchpanel_proc(struct touchpanel_data *ts)
 			"leather_cover_enable", 0666, NULL, &leather_cover_enable, ts, false,
 			ts->leather_cover_mode_support
 		},
+		{"disable_touch_event", 0644, NULL, &proc_disable_touch_event_ops, ts, false, true},
 	};
 
 	TP_INFO(ts->tp_index, "%s entry\n", __func__);
