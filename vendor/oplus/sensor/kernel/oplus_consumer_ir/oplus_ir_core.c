@@ -41,6 +41,19 @@ extern int wl2868c_voltage_output(unsigned int ldo_num, int vol);
 extern int wl2868c_ldo_set_disable(unsigned int ldo_num);
 #endif
 
+#if defined (CONFIG_OPLUS_SENSOR_IR_USE_WL2866D)
+enum wl2866d_ldo_num {
+	MAIN_DVDD1,      /*maincam 1.05V*/
+	FRONT_DVDD2,     /*frontcam 1.1v*/
+	MAIN_AVDD1,      /*maincam 2.8V*/
+	FRONT_AVDD2,     /*frontcam ir 2.8V*/
+};
+
+extern int wl2866d_set_ldo_enable(enum wl2866d_ldo_num ldonum, uint32_t voltage);
+extern int wl2866d_set_ldo_disable(enum wl2866d_ldo_num ldonum);
+extern void wl2866d_set_registers_init(void);
+#endif
+
 struct hw_core_config_t {
 	int vdd_type;
 	int vdd_min_vol;
@@ -157,6 +170,15 @@ static void enable_ir_vdd(struct ir_core *ir_core)
 		pr_info("oplus_ir_core:wl2868c error status!\n");
 	}
 #endif
+
+#if defined (CONFIG_OPLUS_SENSOR_IR_USE_WL2866D)
+	if (ir_core->core_config.vdd_type == IR_EXTERNAL_VDD_TYPE) {
+		wl2866d_set_ldo_enable(FRONT_AVDD2, ir_core->core_config.vdd_max_vol);
+		pr_info("oplus_ir_core:wl2866d config value %d \n", ir_core->core_config.vdd_max_vol);
+	} else {
+		pr_info("oplus_ir_core:wl2866d error status!\n");
+	}
+#endif
 }
 
 static void disable_ir_vdd(struct ir_core *ir_core)
@@ -171,6 +193,15 @@ static void disable_ir_vdd(struct ir_core *ir_core)
 		wl2868c_ldo_set_disable(WL2868C_LDO5);
 	} else {
 		pr_info("oplus_ir_core: wl2868c ERROR status\n");
+	}
+#endif
+
+#if defined (CONFIG_OPLUS_SENSOR_IR_USE_WL2866D)
+	if (ir_core->core_config.vdd_type == IR_EXTERNAL_VDD_TYPE) {
+		wl2866d_set_ldo_disable(FRONT_AVDD2);
+		pr_info("oplus_ir_core:wl2866d config value %d \n", ir_core->core_config.vdd_max_vol);
+	} else {
+		pr_info("oplus_ir_core:wl2866d error status!\n");
 	}
 #endif
 }

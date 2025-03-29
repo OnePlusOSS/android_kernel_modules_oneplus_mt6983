@@ -13,3 +13,7 @@ config OPLUS_SENSOR_CONSUMER_IR_MTK
 	help
 	  To compile this driver as a module, set m in kernel build config
 	  module will be called oplus_ir_pwm.
+config OPLUS_SENSOR_IR_USE_WL2866D
+	bool "use ldo WL2866"
+	help
+	  To use ldo WL2866, added flag for new kernels as previous flag not available.

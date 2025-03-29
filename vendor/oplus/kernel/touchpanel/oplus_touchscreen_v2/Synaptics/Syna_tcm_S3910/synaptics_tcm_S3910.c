@@ -5123,7 +5123,7 @@ static int syna_trx_short_test(struct seq_file *s, void *chip_data,
 			      syna_testdata->pos, "0x%02x, ", u_data8);
 
 		for (j = 0; j < 8; j++) {
-			if (1 == (u_data8 & (1 << j))) {
+			if (u_data8 & (1 << j)) {
 				TP_INFO(tcm_info->tp_index, "trx short test failed at %d bits.\n", checked_bits + 1);
 
 				if (!error_count) {

@@ -229,32 +229,71 @@ static int zeroflash_get_fw_image(void)
 	int retval = 0;
 	struct syna_tcm_hcd *tcm_hcd = g_zeroflash_hcd->tcm_hcd;
 	struct firmware *request_fw_headfile = NULL;
+	struct touchpanel_data *ts = spi_get_drvdata(tcm_hcd->s_client);
+	char *fw_name_lpwg = NULL;
+	char *p_node = NULL;
+	char *postfix = "_LPWG.img";
+	uint8_t copy_len = 0;
 
-	if(!g_zeroflash_hcd->fw_entry) {
-		TPD_INFO("oplus tp update can't get fw, get fw from headfile\n");
-		request_fw_headfile = kzalloc(sizeof(struct firmware), GFP_KERNEL);
-		if (request_fw_headfile == NULL) {
-			TPD_INFO("%s kzalloc failed!\n", __func__);
-			return -1;
+	if (tcm_hcd->request_fw_image_id == 1) {
+		fw_name_lpwg = kzalloc(MAX_FW_NAME_LENGTH, GFP_KERNEL);
+			if (fw_name_lpwg == NULL) {
+				TPD_INFO("fw_name_lpwg kzalloc error!\n");
+				return -ENOMEM;
+			}
+
+		p_node = strstr(ts->panel_data.fw_name, ".");
+		copy_len = p_node - ts->panel_data.fw_name;
+		memcpy(fw_name_lpwg, ts->panel_data.fw_name, copy_len);
+		strlcat(fw_name_lpwg, postfix, MAX_FW_NAME_LENGTH);
+		/*request lpwg img firmware here*/
+
+		if (g_zeroflash_hcd->fw_lpwg_entry != NULL) {
+			release_firmware(g_zeroflash_hcd->fw_lpwg_entry);
+			g_zeroflash_hcd->fw_lpwg_entry = NULL;
+			g_zeroflash_hcd->image = NULL;
+		}
+
+		retval = request_firmware(&g_zeroflash_hcd->fw_lpwg_entry, fw_name_lpwg, ts->dev);
+		if (!retval) {
+			g_zeroflash_hcd->image = g_zeroflash_hcd->fw_lpwg_entry->data;
+			TPD_INFO("lpwg firmware image size = %d\n",
+				(unsigned int)g_zeroflash_hcd->fw_lpwg_entry->size);
 		} else {
-			request_fw_headfile->data = tcm_hcd->tcm_firmware_headfile->data;
-			request_fw_headfile->size = tcm_hcd->tcm_firmware_headfile->size;
-			g_zeroflash_hcd->fw_entry = request_fw_headfile;
-			tcm_hcd->tp_fw_update_headfile = true;
+			TPD_INFO("request_firmware(%s) fail !\n", fw_name_lpwg);
+		}
+
+		kfree(fw_name_lpwg);
+	} else {
+		if(!g_zeroflash_hcd->fw_entry) {
+			TPD_INFO("oplus tp update can't get fw, get fw from headfile\n");
+			request_fw_headfile = kzalloc(sizeof(struct firmware), GFP_KERNEL);
+			if (request_fw_headfile == NULL) {
+				TPD_INFO("%s kzalloc failed!\n", __func__);
+				return -1;
+			} else {
+				request_fw_headfile->data = tcm_hcd->tcm_firmware_headfile->data;
+				request_fw_headfile->size = tcm_hcd->tcm_firmware_headfile->size;
+				g_zeroflash_hcd->fw_entry = request_fw_headfile;
+				tcm_hcd->tp_fw_update_headfile = true;
+			}
+		}
+
+		if (g_zeroflash_hcd->fw_entry != NULL) {
+			TPD_INFO("Firmware image size = %d\n",
+				(unsigned int)g_zeroflash_hcd->fw_entry->size);
+
+			g_zeroflash_hcd->image = g_zeroflash_hcd->fw_entry->data;
+		} else {
+			TPD_INFO("null fw entry return\n");
+			return -1;
 		}
 	}
 
-	if (g_zeroflash_hcd->fw_entry != NULL) {
-		TPD_INFO("Firmware image size = %d\n",
-			(unsigned int)g_zeroflash_hcd->fw_entry->size);
-
-		g_zeroflash_hcd->image = g_zeroflash_hcd->fw_entry->data;
-	} else {
-		TPD_INFO("null fw entry return\n");
-		return -1;
-	}
-	if(!tcm_hcd->tp_fw_update_parse) {
-		return 0;
+	if (!ts->lpwg_fw_support) {
+		if(!tcm_hcd->tp_fw_update_parse) {
+			return 0;
+		}
 	}
 
 	retval = zeroflash_parse_fw_image();
@@ -267,7 +306,11 @@ static int zeroflash_get_fw_image(void)
 		}
 		return retval;
 	}
-	tcm_hcd->tp_fw_update_parse = false;
+
+	if (!ts->lpwg_fw_support) {
+		tcm_hcd->tp_fw_update_parse = false;
+	}
+
 	return 0;
 }
 
@@ -769,6 +812,19 @@ retry_app_download:
 	return 0;
 }
 
+static void zeroflash_reset_download_firmware(void)
+{
+	struct syna_tcm_hcd *tcm_hcd = g_zeroflash_hcd->tcm_hcd;
+	TPD_INFO("Prepare reset firmware download\n");
+	disable_irq_nosync(tcm_hcd->s_client->irq);
+	syna_reset_gpio(tcm_hcd, 0);
+	msleep(20);
+	syna_reset_gpio(tcm_hcd, 1);
+	msleep(20);
+	enable_irq(tcm_hcd->s_client->irq);
+	return;
+}
+
 extern int syna_tcm_run_bootloader_firmware(struct syna_tcm_hcd *tcm_hcd);
 static void zeroflash_do_romboot_firmware_download(void)
 {
@@ -859,11 +915,13 @@ static void zeroflash_do_romboot_firmware_download(void)
 	UNLOCK_BUFFER(g_zeroflash_hcd->out);
 	if (retval < 0) {
 		TPD_INFO("Failed to write command ROMBOOT DOWNLOAD");
+		zeroflash_reset_download_firmware();
 		goto exit;
 	}
 
 	retval = syna_tcm_run_bootloader_firmware(tcm_hcd);
 	if (retval < 0) {
+		zeroflash_reset_download_firmware();
 		TPD_INFO("Failed to switch to bootloader");
 		goto exit;
 	}

@@ -884,7 +884,9 @@ static bool is_charger_exist(struct mtk_charger *info)
 
 static int get_charger_type(struct mtk_charger *info)
 {
-	union power_supply_propval prop, prop2, prop3;
+	union power_supply_propval prop = {0};
+	union power_supply_propval prop2 = {0};
+	union power_supply_propval prop3 = {0};
 	static struct power_supply *chg_psy;
 	int ret;
 
@@ -2885,7 +2887,7 @@ static ssize_t sc_tuisoc_store(
 	struct device *dev, struct device_attribute *attr,
 					 const char *buf, size_t size)
 {
-	unsigned long val = 0;
+	long val = 0;
 	int ret;
 	struct power_supply *chg_psy = NULL;
 	struct mtk_charger *info = NULL;
@@ -2947,7 +2949,7 @@ static ssize_t sc_ibat_limit_store(
 	struct device *dev, struct device_attribute *attr,
 					 const char *buf, size_t size)
 {
-	unsigned long val = 0;
+	long val = 0;
 	int ret;
 	struct power_supply *chg_psy = NULL;
 	struct mtk_charger *info = NULL;

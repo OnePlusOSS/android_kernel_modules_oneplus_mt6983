@@ -666,22 +666,28 @@ static int ilitek_tddi_fw_ili_convert(u8 *pfw)
 	int i, size, blk_num = 0, blk_map = 0, num;
 	int b0_addr = 0, b0_num = 0;
 	const unsigned char *CTPM_FW = NULL;
-
 	if (!ilits->p_firmware_headfile) {
-		ILI_ERR("get idev->p_firmware_headfile is NULL\n");
-		return -1;
-	}
+		ILI_ERR("get idev->p_firmware_headfile_h enter\n");
+		if (!ilits->p_firmware_headfile_h->firmware_data
+			|| ilits->p_firmware_headfile_h->firmware_size <= ILI_FILE_HEADER
+			|| ilits->p_firmware_headfile_h->firmware_size >= MAX_HEX_FILE_SIZE) {
+			ILI_ERR("get idev->p_firmware_headfile_h error\n");
+			return -1;
 
-	if (!ilits->p_firmware_headfile->data
+		}
+		CTPM_FW = ilits->p_firmware_headfile_h->firmware_data;
+		size = ilits->p_firmware_headfile_h->firmware_size;
+	} else {
+		ILI_ERR("get idev->p_firmware_headfile enter\n");
+		if (!ilits->p_firmware_headfile->data
 			|| ilits->p_firmware_headfile->size <= ILI_FILE_HEADER
 			|| ilits->p_firmware_headfile->size >= MAX_HEX_FILE_SIZE) {
-		ILI_ERR("get idev->p_firmware_headfile error\n");
-		return -1;
+			ILI_ERR("get idev->p_firmware_headfile error\n");
+			return -1;
+		}
+		CTPM_FW = ilits->p_firmware_headfile->data;
+		size = ilits->p_firmware_headfile->size;
 	}
-
-	CTPM_FW = ilits->p_firmware_headfile->data;
-	size = ilits->p_firmware_headfile->size;
-
 	if (size < ILI_FILE_HEADER || size > MAX_HEX_FILE_SIZE) {
 		ILI_ERR("size of ILI file is invalid\n");
 		return -EINVAL;

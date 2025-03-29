@@ -55,6 +55,7 @@
 #define SC6607_VID		0x311c
 #define SC6607_PID		0x6600
 #define PD_MSG_CRC_LEN 4
+#define PD_MSG_LEN_OVER_TOTAL_LENGTH 3
 
 struct rt1711_chip {
 	struct i2c_client *client;
@@ -1326,11 +1327,14 @@ static int rt1711_transmit(struct tcpc_device *tcpc,
 
 		if (chip->chip_vid == SOUTHCHIP_PD_VID) {
 			packet.cnt += PD_MSG_CRC_LEN;
+			rv = rt1711_block_write(chip->client,
+					TCPC_V10_REG_TX_BYTE_CNT,
+					packet.cnt - PD_MSG_LEN_OVER_TOTAL_LENGTH, (uint8_t *) &packet);
+		} else {
+			rv = rt1711_block_write(chip->client,
+					TCPC_V10_REG_TX_BYTE_CNT,
+					packet.cnt + 1, (uint8_t *) &packet);
 		}
-
-		rv = rt1711_block_write(chip->client,
-				TCPC_V10_REG_TX_BYTE_CNT,
-				packet.cnt+1, (uint8_t *) &packet);
 		if (rv < 0)
 			return rv;
 	}

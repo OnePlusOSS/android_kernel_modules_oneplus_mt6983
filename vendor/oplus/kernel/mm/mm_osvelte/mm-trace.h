@@ -24,7 +24,7 @@ static noinline void tracing_mark_write(const char *buf)
 #define WRITE_MSG(format_begin, format_end, track_name, name, value) { \
 	char buf[MM_TRACE_MESSAGE_LENGTH] __attribute__((uninitialized));     \
 	const char *track_name_sep = track_name[0] != '\0' ? "|" : ""; \
-	int pid = current->pid; \
+	int pid = current->tgid; \
 	int len = snprintf(buf, sizeof(buf), format_begin "%s%s%s" format_end, \
 			   pid, track_name, track_name_sep, name, value); \
 	if (len >= (int) sizeof(buf)) { \

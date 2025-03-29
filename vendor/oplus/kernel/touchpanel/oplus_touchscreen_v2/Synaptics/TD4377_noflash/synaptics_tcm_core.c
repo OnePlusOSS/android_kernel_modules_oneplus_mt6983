@@ -694,6 +694,7 @@ static int syna_parse_report(struct syna_tcm_hcd *tcm_hcd)
 		case TOUCH_REPORT_GESTURE_UNICODE:
 		case TOUCH_REPORT_GESTURE_VEE:
 		case TOUCH_REPORT_GESTURE_TRIANGLE:
+		case TOUCH_GESTURE_SINGLE_TAP:
 			bits = config_data[idx++];
 			retval = syna_get_report_data(tcm_hcd, offset, bits, &data);
 			if (retval < 0) {
@@ -846,6 +847,19 @@ static int syna_parse_report(struct syna_tcm_hcd *tcm_hcd)
 				return retval;
 			}
 			touch_data->water_mode = data;
+			offset += bits;
+			break;
+		case TOUCH_REPORT_GLOVE_DETECTED:
+			bits = config_data[idx++];
+			retval = syna_get_report_data(tcm_hcd, offset, bits, &data);
+			if (retval < 0) {
+				if (tcm_hcd->health_monitor_support) {
+					tp_healthinfo_report(tcm_hcd->monitor_data, HEALTH_REPORT, "parse_report_err_nsmstate");
+				}
+				TPD_INFO("Failed to get NSM state\n");
+				return retval;
+			}
+			touch_data->glove_status = data;
 			offset += bits;
 			break;
 		case TOUCH_NUM_OF_ACTIVE_OBJECTS:
@@ -1027,6 +1041,8 @@ static int syna_set_normal_report_config(struct syna_tcm_hcd *tcm_hcd)
 
 	/*touch_hcd->out.buf[idx++] = TOUCH_GESTURE_DOUBLE_TAP;*/
 	/*touch_hcd->out.buf[idx++] = 8;*/
+	touch_hcd->out.buf[idx++] = TOUCH_REPORT_GLOVE_DETECTED;
+	touch_hcd->out.buf[idx++] = 8;
 	touch_hcd->out.buf[idx++] = TOUCH_REPORT_PALM_DETECTED;
 	touch_hcd->out.buf[idx++] = 8;
 	if (ts->waterproof_support) {
@@ -1081,6 +1097,7 @@ static int syna_set_gesture_report_config(struct syna_tcm_hcd *tcm_hcd)
 	unsigned int idx = 0;
 	unsigned int length;
 	struct touch_hcd *touch_hcd = tcm_hcd->touch_hcd;
+	struct touchpanel_data *ts = spi_get_drvdata(tcm_hcd->s_client);
 
 	TPD_DEBUG("%s: set gesture report\n", __func__);
 	length = le2_to_uint(tcm_hcd->app_info.max_touch_report_config_size);
@@ -1119,6 +1136,10 @@ static int syna_set_gesture_report_config(struct syna_tcm_hcd *tcm_hcd)
 	touch_hcd->out.buf[idx++] = 1;
 	touch_hcd->out.buf[idx++] = TOUCH_REPORT_GESTURE_TRIANGLE;
 	touch_hcd->out.buf[idx++] = 1;
+	if (ts->aod_gesture_support) {
+		touch_hcd->out.buf[idx++] = TOUCH_GESTURE_SINGLE_TAP;
+		touch_hcd->out.buf[idx++] = 1;
+	}
 	touch_hcd->out.buf[idx++] = TOUCH_PAD_TO_NEXT_BYTE;
 	touch_hcd->out.buf[idx++] = TOUCH_REPORT_GESTURE_INFO;
 	touch_hcd->out.buf[idx++] = 16;
@@ -1270,6 +1291,17 @@ static void syna_tcm_dispatch_report(struct syna_tcm_hcd *tcm_hcd)
 			if (touch_data->palm_status == PALM_TO_SLEEP) {
 				syna_set_trigger_reason(tcm_hcd, IRQ_PALM);
 				touch_data->palm_status = PALM_TO_DEFAULT;
+			}
+			if (touch_data->glove_status == GLOVE_TO_TRIGGER && touch_data->glove_flag == 0) {
+				TPD_INFO("Enter glove_mode\n");
+				touch_data->glove_flag = 1;
+				tp_healthinfo_report(tcm_hcd->monitor_data, HEALTH_GLOVE, &touch_data->glove_flag);
+			}
+
+			if (touch_data->glove_status == GLOVE_TO_HAND && touch_data->glove_flag == 1) {
+				TPD_INFO("Quit glove_mode\n");
+				touch_data->glove_flag = 0;
+				tp_healthinfo_report(tcm_hcd->monitor_data, HEALTH_GLOVE, &touch_data->glove_flag);
 			}
 		}
 	} else if (tcm_hcd->report.id == REPORT_IDENTIFY) {
@@ -2950,11 +2982,64 @@ static int syna_get_touch_points(void *chip_data, struct point_info *points, int
 	return obj_attention;
 }
 
+static int syna_tcm_sw_reset(struct syna_tcm_hcd *tcm_hcd)
+{
+	int retval;
+	unsigned char *resp_buf;
+	unsigned int resp_buf_size;
+	unsigned int resp_length;
+
+	resp_buf = NULL;
+	resp_buf_size = 0;
+
+	retval = syna_tcm_write_message(tcm_hcd,
+					CMD_RESET,
+					NULL,
+					0,
+					&resp_buf,
+					&resp_buf_size,
+					&resp_length,
+					RESPONSE_TIMEOUT_MS_SHORT);
+	if (retval < 0) {
+		retval = -EINVAL;
+		TPD_INFO("Failed to do sw reset\n");
+	}
+
+	kfree(resp_buf);
+	return retval;
+}
+
+static int syna_tcm_before_switch_to_gesture_mode(struct syna_tcm_hcd *tcm_hcd, bool enable)
+{
+	if (enable) {
+		/*set gesture fw mode flag = 1*/
+		tcm_hcd->request_fw_image_id = 1;
+		/*sw reset*/
+		syna_tcm_sw_reset(tcm_hcd);
+
+		msleep(50);
+		/*wait hostdownload done*/
+		tp_wait_hdl_finished();
+
+		tcm_hcd->request_fw_image_id = 0;
+	}
+	return 0;
+}
+
+
+
+
+
 static int syna_tcm_set_gesture_mode(struct syna_tcm_hcd *tcm_hcd, bool enable)
 {
 	int retval = 0;
 	unsigned short config;
+	struct touchpanel_data *ts = spi_get_drvdata(tcm_hcd->s_client);
 
+	if (ts->lpwg_fw_support) {
+		/*request lpwg firmware*/
+		syna_tcm_before_switch_to_gesture_mode(tcm_hcd, enable);
+	}
 	/*this command may take too much time, if needed can add flag to skip this */
 	retval = syna_tcm_get_dynamic_config(tcm_hcd, DC_IN_WAKEUP_GESTURE_MODE, &config);
 	if (retval < 0) {
@@ -2977,6 +3062,15 @@ static int syna_tcm_set_gesture_mode(struct syna_tcm_hcd *tcm_hcd, bool enable)
 				TPD_INFO("Failed to set dynamic gesture config\n");
 				return retval;
 			}
+			if (ts->aod_gesture_support) {
+				retval = syna_tcm_set_dynamic_config(tcm_hcd,
+ 						     DC_GESTURE_MASK,
+						     0xFFFF);
+				if (retval < 0) {
+					TPD_INFO("%s: Failed to set dynamic gesture mask config\n", __func__);
+					return retval;
+				}
+			}
 		}
 	}
 
@@ -2988,6 +3082,97 @@ static int syna_tcm_set_gesture_mode(struct syna_tcm_hcd *tcm_hcd, bool enable)
 		}
 	}
 
+	return retval;
+}
+
+static int syna_tcm_set_glove_mode(struct syna_tcm_hcd *tcm_hcd, bool enable)
+{
+	unsigned short regval = 0;
+	int retval = 0;
+
+	retval = syna_tcm_get_dynamic_config(tcm_hcd, DC_GLOVE_MODE_ENABLED, &regval);
+	if (retval < 0) {
+		TPD_INFO("Failed to get glove config\n");
+		return 0;
+	}
+	TPD_INFO("before edit glove mode reg_val = 0x%x\n", regval);
+
+	if (enable) {
+		retval = syna_tcm_set_dynamic_config(tcm_hcd, DC_GLOVE_MODE_ENABLED, 1);
+	}
+	else {
+		retval = syna_tcm_set_dynamic_config(tcm_hcd, DC_GLOVE_MODE_ENABLED, 0);
+	}
+	if (retval < 0) {
+		TPD_INFO("Failed to set glove config\n");
+		return 0;
+	}
+	TPD_INFO("sucess to set glove config regval = %d\n", enable);
+
+	retval = syna_tcm_get_dynamic_config(tcm_hcd, DC_GLOVE_MODE_ENABLED, &regval);
+	if (retval < 0) {
+		TPD_INFO("Failed to get glove config\n");
+		return 0;
+	}
+	TPD_INFO("after edit glove mode reg_val=0x%x", regval);
+
+	return retval;
+}
+
+static int syna_tcm_set_aod_mode(struct syna_tcm_hcd *tcm_hcd, bool enable)
+{
+	int retval = 0;
+	unsigned short config;
+
+
+	retval = syna_tcm_get_dynamic_config(tcm_hcd, DC_IN_WAKEUP_GESTURE_MODE, &config);
+	if (retval < 0) {
+		TPD_INFO("Failed to get dynamic config\n");
+		return retval;
+	}
+
+	TPD_DEBUG("config id is %d, enable: %d\n", config, enable);
+
+	if (enable) {
+		if (!config) {
+			retval = syna_set_input_reporting(tcm_hcd, true);
+			if (retval < 0) {
+				TPD_INFO("Failed to set input reporting\n");
+				return retval;
+			}
+			retval = syna_tcm_set_dynamic_config(tcm_hcd, DC_IN_WAKEUP_GESTURE_MODE, true);
+			if (retval < 0) {
+				TPD_INFO("Failed to set dynamic aod gesture config\n");
+				return retval;
+			}
+			retval = syna_tcm_set_dynamic_config(tcm_hcd,
+						     DC_GESTURE_MASK,
+						     0xFFFF);
+			if (retval < 0) {
+				TPD_INFO("%s: Failed to set dynamic gesture mask config\n", __func__);
+				return retval;
+			}
+		}
+	} else {
+			retval = syna_tcm_identify(tcm_hcd, true);
+			if (retval < 0) {
+				TPD_INFO("Failed to do identification\n");
+				return retval;
+			}
+			retval = syna_set_input_reporting(tcm_hcd, false);
+			if (retval < 0) {
+				TPD_INFO("Failed to set input reporting\n");
+				return retval;
+			}
+
+			retval = syna_tcm_set_dynamic_config(tcm_hcd, DC_IN_WAKEUP_GESTURE_MODE, false);
+			if (retval < 0) {
+				TPD_INFO("Failed to set dynamic gesture config\n");
+				return retval;
+			}
+			/*enable_irq(tcm_hcd->s_client->irq);*/
+			TPD_INFO("%s: EXIT MODE_AOD \n", __func__);
+	}
 	return retval;
 }
 
@@ -3149,21 +3334,31 @@ static int synaptics_enable_game_mode(struct syna_tcm_hcd *tcm_hcd, bool enable)
 
 	return ret;
 }
-void tp_wait_hdl_finished(void);
+/* void tp_wait_hdl_finished(void); */
 
 static int syna_mode_switch(void *chip_data, work_mode mode, int flag)
 {
 	int ret = 0;
 	struct syna_tcm_hcd *tcm_hcd = (struct syna_tcm_hcd *)chip_data;
-
+	struct touchpanel_data *ts = spi_get_drvdata(tcm_hcd->s_client);
 	if(!tcm_hcd->tp_irq_state) {
 		TPD_INFO("tp irq disabled, skip switch mode.\n");
 		return 0;
 	}
-
-	msleep(100);
-	tp_wait_hdl_finished();
-
+	if (!ts->is_suspended) {
+		if (ts->aod_gesture_support) {
+			if (ts->out_aod_flag || ts->in_aod_flag) {
+				TPD_INFO("enter aod mode switch\n");
+				atomic_set(&tcm_hcd->host_downloading, 0);
+				/*syna_tcm_hdl_done(tcm_hcd);*/
+				enable_irq(tcm_hcd->s_client->irq);
+				g_tcm_hcd->hdl_finished_flag = 1;
+				complete(&tcm_hcd->config_complete);
+			}
+		}
+		msleep(100);
+		tp_wait_hdl_finished();
+	}
 	TPD_INFO("syna_mode_switch begin, mode = %d\n", mode);
 	switch (mode) {
 	case MODE_NORMAL:
@@ -3177,6 +3372,19 @@ static int syna_mode_switch(void *chip_data, work_mode mode, int flag)
 		ret = syna_tcm_set_gesture_mode(tcm_hcd, flag);
 		if (ret < 0) {
 			TPD_INFO("%s:Failed to set gesture mode\n", __func__);
+		}
+		break;
+	case MODE_GLOVE:
+		TPD_INFO("%s: %s force glove_mode.\n", __func__, flag ? "1" : "0");
+		ret = syna_tcm_set_glove_mode(tcm_hcd, flag);
+		if (ret < 0) {
+			TPD_INFO("%s:Failed to set glove mode\n", __func__);
+		}
+		break;
+	case MODE_AOD:
+		ret = syna_tcm_set_aod_mode(tcm_hcd, flag);
+		if (ret < 0) {
+			TPD_INFO("%s:Failed to set aod mode\n", __func__);
 		}
 		break;
 	case MODE_SLEEP:
@@ -3431,6 +3639,9 @@ static int syna_get_gesture_info(void *chip_data, struct gesture_info *gesture)
 	switch (touch_data->lpwg_gesture) {
 	case DTAP_DETECT:
 		gesture->gesture_type = DOU_TAP;
+		break;
+	case STAP_DETECT:
+		gesture->gesture_type = SINGLE_TAP;
 		break;
 	case CIRCLE_DETECT:
 		gesture->gesture_type = CIRCLE_GESTURE;
@@ -4727,6 +4938,30 @@ static void syna_read_water_flag(void *chip_data)
 	}
 }
 
+static void syna_getglove_mode_status(void *chip_data, int *enable)
+{
+	struct syna_tcm_hcd *tcm_hcd = (struct syna_tcm_hcd *)chip_data;
+	struct touch_hcd *touch_hcd = tcm_hcd->touch_hcd;
+	struct touch_data *touch_data = &touch_hcd->touch_data;
+	int retval = 0;
+	unsigned short config;
+
+	retval = syna_tcm_get_dynamic_config(tcm_hcd, DC_GLOVE_MODE_STATE, &config);
+	if (retval < 0) {
+		TPD_INFO("Failed to get dynamic DC_GLOVE_MODE_STATE  config\n");
+		return;
+	}
+	/*0x0F indicates the initial state;
+	0x00 indicates that stage 1 has been entered, and there is no glove on the detection state surface
+	0x01 indicates that stage 1 has been entered, and objects have been detected on the surface, but the conditions for stage 2 have not yet been met
+	0x02 indicates that the glove mode is entered, and it will not exit after raising your hand.*/
+	*enable = (config == 0x02 ? 1 : 0);
+	TPD_INFO("%s: config id is %d, enable: %d ,glove_status%d\n", __func__, config, *enable, touch_data->glove_status);
+
+	return;
+}
+
+
 static struct oplus_touchpanel_operations syna_tcm_ops = {
 	.ftm_process       = syna_ftm_process,
 	.get_vendor        = syna_get_vendor,
@@ -4754,6 +4989,7 @@ static struct oplus_touchpanel_operations syna_tcm_ops = {
 /*	.freq_hop_trigger = syna_freq_hop_trigger,*/
 	.smooth_lv_set    = syna_tcm_smooth_lv_set,
 	.sensitive_lv_set = syna_tcm_sensitive_lv_set,
+	.get_glove_mode         = syna_getglove_mode_status,
 };
 
 /*

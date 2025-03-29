@@ -168,7 +168,7 @@ extern int get_boot_mode(void);
  */
 void syna_dev_update_lpwg_status(struct syna_tcm *tcm)
 {
-	tcm->lpwg_enabled = (tcm->gesture_type || tcm->touch_and_hold || tcm->fp_active) ? true : false;
+	tcm->lpwg_enabled = (tcm->gesture_type || tcm->touch_and_hold || (tcm->fp_active && !tcm->fp_prevent)) ? true : false;
 	return;
 }
 

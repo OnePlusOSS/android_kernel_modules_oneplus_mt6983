@@ -1151,7 +1151,7 @@ static int __attribute__((__unused__)) init_ddr_vendor_size(struct device_info *
 	for (i=0; i < DRAMC_MR_CNT; i++) {
 		pr_err("mr_info:idx= %d, value, %x \n", mr_info[i].mr_index, mr_info[i].mr_value);
 		if(mr_info[i].mr_index == 5) {
-			ddr_vendor = mr_info[i].mr_value;
+			ddr_vendor = mr_info[i].mr_value & 0xFF;
 		}
 	}
 

@@ -208,6 +208,7 @@ typedef enum {
 	MODE_PALM_TO_SLEEP,
 	MODE_WATERPROOF,
 	MODE_LEATHER_COVER,
+	MODE_AOD,
 } work_mode;
 
 typedef enum {
@@ -329,6 +330,7 @@ typedef enum lcd_event_type {
 	LCD_CTL_CS_OFF,
 	LCD_CTL_IRQ_ON,
 	LCD_CTL_IRQ_OFF,
+	LCD_CTL_AOD_OFF = 0x30,
 } lcd_event_type;
 
 typedef enum {
@@ -997,12 +999,14 @@ struct touchpanel_data {
 	bool tp_data_record_support;                        /*feature used to data record when get tp log*/
 	bool suspend_work_support;                          /*feature used to support suspend work queue*/
 	int glove_enable;                                   /*control state of glove gesture*/
+	int pocket_prevent_mode;
 	bool touch_event_diasble;                           /*diasble touch event report*/
 	int leather_cover_enable;                           /*control state of leather_cover gesture*/
 	bool force_bus_ready_support;                       /*force bus ready to true afer notify*/
 	bool skip_reinit_device_support;                    /*spi need skip complete_all, prevent error in access reg*/
 	bool edge_pull_out_support;                         /*feature used to edge coordinates pull out*/
 	/******For FW update area********/
+	bool lpwg_fw_support;                               /*feature to support low power wakeup gesture firmware and effect firmware are separated.*/
 	bool loading_fw;                                    /*touchpanel FW updating*/
 	int firmware_update_type;                           /*firmware_update_type: 0=check firmware version 1=force update; 2=for FAE debug*/
 	struct completion fw_complete;						/*completion for control fw update*/
@@ -1019,6 +1023,7 @@ struct touchpanel_data {
 	struct engineer_test_operations   *engineer_ops;     /*call_back function*/
 	bool auto_test_need_cal_support;
 	bool sportify_aod_gesture_support;
+	bool aod_gesture_support;
 	/******For button key area********/
 	/*every bit declear one state of key "reserve(keycode)|home(keycode)|menu(keycode)|back(keycode)"*/
 	u8   vk_bitmap;
@@ -1047,6 +1052,8 @@ struct touchpanel_data {
 	struct gesture_info    gesture;                     /*gesture related info*/
 	int gesture_enable_indep;                         /*independent control state of black gesture*/
 
+	bool in_aod_flag;
+	bool out_aod_flag;
 	/******For fingerprint area********/
 	int fp_enable;                                      /*underscreen fingerprint enable or not*/
 	int fp_quick_start_data;                            /*for fingerprint quick start featrue*/

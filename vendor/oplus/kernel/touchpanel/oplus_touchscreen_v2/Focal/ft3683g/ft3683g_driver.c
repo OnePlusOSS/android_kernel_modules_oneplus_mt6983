@@ -3818,6 +3818,9 @@ static int fts_diaphragm_touch_lv_set(void *chip_data, int value)
 	TPD_INFO("fts_diaphragm_touch_lv_set to %d", value);
 
 	switch(value) {
+	case SMART_DEFAULT_MODE:
+		regvalue = 0;
+		break;
 	case SMART_FILM_MODE:
 		regvalue = 1;
 		break;

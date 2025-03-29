@@ -69,6 +69,7 @@
 #define FTS_REG_GLOVE_MODE_SWITCH               0xC0
 #define FTS_REG_GLOVE_MODE_STATE                0x01
 #define FTS_REG_TEMPERATURE                     0x97
+#define FTS_REG_DIAPHRAGM_EN                    0xC3
 
 #define FTS_MAX_POINTS_SUPPORT                  10
 #define FTS_MAX_ID                              0x0A
@@ -135,6 +136,10 @@
 
 #define FTS_120HZ_REPORT_RATE                   0x0C
 #define FTS_180HZ_REPORT_RATE                   0x12
+
+#define FTS_WRITE_RATE_120                      120
+#define FTS_WRITE_RATE_180                      180
+#define FTS_WRITE_RATE_240                      240
 
 #define GET_LEN_BY_WIDTH_MAJOR(width_major, len)\
 ({\
@@ -262,6 +267,12 @@ struct chip_data_ft3518 {
 	bool water_mode;
 };
 
+enum diaphragm_mode {
+	DIAPHRAGM_DEFAULT_MODE = 0,
+	DIAPHRAGM_FILM_MODE = 1,
+	DIAPHRAGM_WATERPROO_MODE = 2,
+	DIAPHRAGM_FILM_WATERPROO_MODE = 3,
+};
 
 extern struct chip_data_ft3518 *g_fts_data;
 

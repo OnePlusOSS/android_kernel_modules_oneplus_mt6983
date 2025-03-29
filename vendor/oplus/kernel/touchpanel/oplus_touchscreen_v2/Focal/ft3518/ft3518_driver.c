@@ -2403,6 +2403,47 @@ static void fts_set_gesture_state(void *chip_data, int state)
 	ts_data->gesture_state = state;
 }
 
+static int fts_diaphragm_touch_lv_set(void *chip_data, int level)
+{
+	struct chip_data_ft3518 *ts_data = (struct chip_data_ft3518 *)chip_data;
+	int ret = 0;
+	u8 retval = 0;
+	u8 diaphragm_mode = 0;
+
+	if (ts_data == NULL || ts_data->client == NULL) {
+		return 0;
+	}
+	TPD_INFO("%s:level=%d", __func__, level);
+	retval = touch_i2c_read_byte(ts_data->client, FTS_REG_DIAPHRAGM_EN);
+
+	switch (level) {
+	case DIAPHRAGM_DEFAULT_MODE:
+		diaphragm_mode = 0;
+		break;
+	case DIAPHRAGM_FILM_MODE:
+		diaphragm_mode = 1;
+		break;
+	case DIAPHRAGM_WATERPROO_MODE:
+		diaphragm_mode = 2;
+		break;
+	case DIAPHRAGM_FILM_WATERPROO_MODE:
+		diaphragm_mode = 3;
+		break;
+	default:
+		TPD_INFO("error, level = %d", level);
+		return 0;
+	}
+	TPD_INFO("%s:write %x=%x.", __func__, FTS_REG_DIAPHRAGM_EN, diaphragm_mode);
+	diaphragm_mode = diaphragm_mode | retval;
+	ret = touch_i2c_write_byte(ts_data->client, FTS_REG_DIAPHRAGM_EN, diaphragm_mode);
+
+	if (ret < 0) {
+		TPD_INFO("%s: write DIAPHRAGM write(%x=%x) fail", __func__, FTS_REG_DIAPHRAGM_EN, level);
+		return 0;
+	}
+	return 0;
+}
+
 static void fts_get_water_mode(void *chip_data)
 {
 	struct chip_data_ft3518 *ts_data = (struct chip_data_ft3518 *)chip_data;
@@ -2420,6 +2461,43 @@ static void fts_force_water_mode(void *chip_data, bool enable)
 {
 	TPD_INFO("%s: %s force_water_mode is not supported .\n", __func__, enable ? "Enter" : "Exit");
 }
+
+static void fts_rate_white_list_ctrl(void *chip_data, int value)
+{
+	struct chip_data_ft3518 *ts_data = (struct chip_data_ft3518 *)chip_data;
+	u8 send_value = FTS_120HZ_REPORT_RATE;
+	int ret = 0;
+
+	if (ts_data == NULL) {
+		return;
+	}
+
+	if (ts_data->ts->is_suspended) {
+		return;
+	}
+
+	switch (value) {
+		/* TP RATE */
+	case FTS_WRITE_RATE_120:
+		send_value = 1;
+		break;
+	case FTS_WRITE_RATE_180:
+		send_value = 0;
+		break;
+	case FTS_WRITE_RATE_240:
+		send_value = 0; /*IC does not support reporting rate*/
+		break;
+	default:
+		TPD_INFO("%s: report rate = %d, not support\n", __func__, value);
+		return;
+	}
+
+	TPD_INFO("%s, got value = %d, set value = %d\n", __func__, value, send_value);
+	ret = touch_i2c_write_byte(ts_data->client, FTS_REG_GAME_MODE_EN, send_value);
+	if(ret < 0)
+		TPD_INFO("%s: setting new report rate failed!\n", __func__);
+}
+
 static void fts_enable_gesture_mask(void *chip_data, uint32_t enable)
 {
 	int ret = 0;
@@ -2558,6 +2636,8 @@ static struct oplus_touchpanel_operations fts_ops = {
 	.get_glove_mode             = fts_get_glove_mode,
 	.get_water_mode             = fts_get_water_mode,
 	.force_water_mode           = fts_force_water_mode,
+	.diaphragm_touch_lv_set     = fts_diaphragm_touch_lv_set,
+	.rate_white_list_ctrl       = fts_rate_white_list_ctrl,
 	/*todo
 	        .get_vendor                 = synaptics_get_vendor,
 	        .get_keycode                = synaptics_get_keycode,

@@ -158,6 +158,10 @@ static int cts_mode_switch(void *chip_data, work_mode mode, int flag)
 			TPD_INFO("<I> switch MODE_WATERPROOF: %s\n", flag ? "In" : "Out");
 			ret = cts_if->set_waterproof_mode(cts_dev, flag);
 			break;
+		case MODE_AOD:
+			TPD_INFO("<I> switch MODE_AOD: %s\n", flag ? "In" : "Out");
+			ret = cts_if->set_aod_mode(cts_dev, flag);
+			break;
         default:
             break;
     }
@@ -292,31 +296,49 @@ static int cts_get_gesture_info(void *chip_data,
     //struct cts_interface *cts_if = cts_dev->cts_if;
     struct cts_device_touch_info *touch_info = &cts_dev->rtdata.touch_info;
     struct cts_device_gesture_info *gesture_info = &cts_dev->rtdata.gesture_info;
-    uint32_t gesture_type;
-   
+    uint32_t gesture_type = 0;
+
     memcpy(gesture_info, touch_info, sizeof(struct cts_device_gesture_info));
 
     TPD_INFO("<I> Process gesture, id=0x%02x, num_points=%d\n",
             gesture_info->gesture_id, gesture_info->num_points);
 
     memset(gesture, 0, sizeof(*gesture));
-  switch(gesture_info->gesture_id) {
-    case CTS_GESTURE_D_TAP: gesture_type = DOU_TAP;          break;
-    case CTS_GESTURE_V:     gesture_type = UP_VEE;           break;
-    case CTS_GESTURE_M:     gesture_type = M_GESTRUE;        break;
-    case CTS_GESTURE_W:     gesture_type = W_GESTURE;        break;
-    case CTS_GESTURE_O:     gesture_type = CIRCLE_GESTURE;          break;
-    case CTS_GESTURE_RV:    gesture_type = DOWN_VEE;         break;
-    //case CTS_GESTURE_UP:    gesture_type = Down2UpSwip;     break;
-    //case CTS_GESTURE_DOWN:  gesture_type = Up2DownSwip;     break;
-    //case CTS_GESTURE_LEFT:  gesture_type = Right2LeftSwip;  break;
-    //case CTS_GESTURE_RIGHT: gesture_type = Left2RightSwip;  break;
-    case CTS_GESTURE_DOUBLE: gesture_type = DOU_SWIP;         break;
-    case CTS_GESTURE_LR:    gesture_type = RIGHT_VEE;        break;
-    case CTS_GESTURE_RR:    gesture_type = LEFT_VEE;         break;
-    default: gesture_type = UnkownGesture;                  break;
-    }
-
+	switch(gesture_info->gesture_id) {
+		case CTS_GESTURE_D_TAP:
+			gesture_type = DOU_TAP;
+			break;
+		case CTS_GESTURE_V:
+			gesture_type = UP_VEE;
+			break;
+		case CTS_GESTURE_M:
+			gesture_type = M_GESTRUE;
+			break;
+		case CTS_GESTURE_W:
+			gesture_type = W_GESTURE;
+			break;
+		case CTS_GESTURE_O:
+			gesture_type = CIRCLE_GESTURE;
+			break;
+		case CTS_GESTURE_RV:
+			gesture_type = DOWN_VEE;
+			break;
+		case CTS_GESTURE_DOUBLE:
+			gesture_type = DOU_SWIP;
+			break;
+		case CTS_GESTURE_LR:
+			gesture_type = RIGHT_VEE;
+			break;
+		case CTS_GESTURE_RR:
+			gesture_type = LEFT_VEE;
+			break;
+		case CTS_GESTURE_S_TAP:
+			gesture_type = SINGLE_TAP;
+			break;
+		default:
+			TPD_INFO("Unknown gesture code\n");
+			break;
+	}
     gesture->gesture_type = gesture_type;
 
     if (gesture_info->num_points >= 1) {
@@ -396,18 +418,47 @@ static int cts_read_fw_ddi_version(void *chip_data, struct touchpanel_data *ts)
 static fw_update_state cts_fw_update(void *chip_data, const struct firmware *fw,
         bool force)
 {
-    struct chipone_ts_data *cts_data = (struct chipone_ts_data *)chip_data;
-    struct cts_device *cts_dev = &cts_data->cts_dev;
-    int ret;
+	struct chipone_ts_data *cts_data = (struct chipone_ts_data *)chip_data;
+	struct cts_device *cts_dev = &cts_data->cts_dev;
+	struct panel_info *panel_data = &tsdata->panel_data;
+	int ret;
 
-    /* If fw was not NULL, then need to update vfw.data buf. */
-    if (fw && cts_data->vfw.data) {
-        memcpy(cts_data->vfw.data, fw->data, fw->size);
-        cts_data->vfw.name = cts_dev->hwdata->name;
-        cts_data->vfw.hwid = cts_dev->hwdata->hwid;
-        cts_data->vfw.fwid = cts_dev->hwdata->fwid;
-        cts_data->vfw.size = fw->size;
-    }
+	if (cts_data->vfw.data == NULL) {
+		TPD_INFO("<E> vfw.data == NULL, retry alloc");
+		cts_data->vfw.data = vmalloc(120 * 1024);
+		if (!cts_data->vfw.data) {
+			TPD_INFO("<E> Alloc vfw.data failed\n");
+			return FW_UPDATE_ERROR;
+		}
+	}
+
+/* If fw was not NULL, then need to update vfw.data buf. */
+	if (fw) {
+		TPD_INFO("<I> Update firmware from img");
+		memcpy(cts_data->vfw.data, fw->data, fw->size);
+		cts_data->vfw.size = fw->size;
+	} else {
+		if (!cts_data->vfw.size) {
+			if (tsdata->firmware_in_dts) {
+				TPD_INFO("<I> Update firmware from dts");
+				memcpy(cts_data->vfw.data, tsdata->firmware_in_dts->data,
+					tsdata->firmware_in_dts->size);
+				cts_data->vfw.size = tsdata->firmware_in_dts->size;
+			} else if (panel_data->firmware_headfile.firmware_data) {
+				TPD_INFO("<I> Update firmware from headfile");
+				memcpy(cts_data->vfw.data, panel_data->firmware_headfile.firmware_data,
+					panel_data->firmware_headfile.firmware_size);
+				cts_data->vfw.size = panel_data->firmware_headfile.firmware_size;
+			} else {
+				TPD_INFO("<E> No firmware update");
+				return FW_UPDATE_ERROR;
+			}
+		}
+	}
+	cts_data->vfw.name = cts_dev->hwdata->name;
+	cts_data->vfw.hwid = cts_dev->hwdata->hwid;
+	cts_data->vfw.fwid = cts_dev->hwdata->fwid;
+
 
     cts_lock_device(cts_dev);
     ret = cts_update_firmware(cts_dev, &cts_data->vfw, false);
@@ -421,6 +472,8 @@ static fw_update_state cts_fw_update(void *chip_data, const struct firmware *fw,
     cts_unlock_device(cts_dev);
     if (ret)
         TPD_INFO("<E> get fw_ddi_version failed %d\n", ret);
+
+	cts_data->boot_update = true;
 
     return FW_UPDATE_SUCCESS;
 }
@@ -442,7 +495,7 @@ static int cts_reset(void *chip_data)
     return 0;
 }
 
-static void cts_tp_touch_release(struct touchpanel_data *ts)
+/*static void cts_tp_touch_release(struct touchpanel_data *ts)
 {
 #ifdef TYPE_B_PROTOCOL
     int i = 0;
@@ -470,7 +523,7 @@ static void cts_tp_touch_release(struct touchpanel_data *ts)
     ts->view_area_touched = 0;
     ts->touch_count = 0;
     ts->irq_slot = 0;
-}
+}*/
 
 static int cts_esd_handle(void* chip_data)
 {
@@ -478,6 +531,11 @@ static int cts_esd_handle(void* chip_data)
     struct cts_device *cts_dev = &cts_data->cts_dev;
     int retry = 5;
     int ret;
+
+	if (!cts_data->boot_update) {
+		TPD_DEBUG("<D> Need update firmware first!");
+		return 0;
+	}
 
     TPD_DEBUG("<D> ESD protection work\n");
 
@@ -494,13 +552,31 @@ static int cts_esd_handle(void* chip_data)
                 break;
         } while (retry--);
         ret = -1;
-        cts_tp_touch_release(tsdata);
+	if (tsdata == NULL) {
+		return -EINVAL;
+	}
+	tp_touch_btnkey_release(tsdata->tp_index);
     } else {
         ret = 0;
         TPD_DEBUG("<D> None ESD event!\n");
     }
 
     return ret;
+}
+
+static int cts_get_vendor(void *chip_data, struct panel_info *panel_data)
+{
+    struct chipone_ts_data *cts_data = (struct chipone_ts_data *)chip_data;
+
+	if (tsdata->firmware_in_dts != NULL) {
+		cts_data->p_firmware_headfile = tsdata->firmware_in_dts;
+		TPD_INFO("<I> Get firmware headfile from dts\n");
+	} else {
+		cts_data->p_firmware_headfile_h = &panel_data->firmware_headfile;
+		TPD_INFO("<I> panel_data->test_limit_name: %s, panel_data->fw_name: %s\n",
+			panel_data->test_limit_name, panel_data->fw_name);
+	}
+	return 0;
 }
 
 static fw_check_state cts_fw_check(void *chip_data,
@@ -729,6 +805,7 @@ static struct oplus_touchpanel_operations cts_tp_ops = {
     .reset								= cts_reset,
     .fw_check							= cts_fw_check,
     .fw_update							= cts_fw_update,
+    .get_vendor							= cts_get_vendor,
     .trigger_reason						= cts_trigger_reason,
     .esd_handle							= cts_esd_handle,
     .set_touch_direction				= cts_set_touch_direction,
@@ -775,8 +852,13 @@ static int cts_update_headfile_fw(void *chip_data, struct panel_info *panel_data
     cts_firmware.name = panel_data->fw_name;
     cts_firmware.hwid = cts_dev->hwdata->hwid;
     cts_firmware.fwid = cts_dev->hwdata->fwid;
-    cts_firmware.data = (u8 *)tsdata->firmware_in_dts->data;
-    cts_firmware.size = tsdata->firmware_in_dts->size;
+	if (cts_data->p_firmware_headfile) {
+	    cts_firmware.data = (u8 *)cts_data->p_firmware_headfile->data;
+		cts_firmware.size = cts_data->p_firmware_headfile->size;
+	} else {
+		cts_firmware.data = (u8 *)cts_data->p_firmware_headfile_h->firmware_data;
+		cts_firmware.size = cts_data->p_firmware_headfile_h->firmware_size;
+	}
 
     TPD_INFO("<I> Fw name:%s!\n", cts_firmware.name);
     TPD_INFO("<I> Fw size:%zu!\n", cts_firmware.size);
@@ -789,6 +871,7 @@ static int cts_update_headfile_fw(void *chip_data, struct panel_info *panel_data
     }
 
     cts_read_fw_ddi_version(chip_data, tsdata);
+	cts_data->boot_update = true;
 
     return 0;
 }
@@ -1439,6 +1522,7 @@ static int cts_driver_probe(struct spi_device *client)
         TPD_INFO("<W> Add sysfs entry for device failed %d\n", ret);
         //goto err_tool_init;
     }
+	cts_data->boot_update = false;
 
     return 0;
 /**

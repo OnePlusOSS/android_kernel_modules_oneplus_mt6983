@@ -746,7 +746,7 @@ static int __init init_shutdown_detect_ctrl(void)
 {
 	struct proc_dir_entry *pe;
 	pr_err("shutdown_detect:register shutdown_detect interface\n");
-	pe = proc_create("shutdown_detect", 0666, NULL, &shutdown_detect_fops);
+	pe = proc_create("shutdown_detect", 0664, NULL, &shutdown_detect_fops);
 	if (!pe) {
 		pr_err("shutdown_detect:Failed to register shutdown_detect interface\n");
 		return -ENOMEM;

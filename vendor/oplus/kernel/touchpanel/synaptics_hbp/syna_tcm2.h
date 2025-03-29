@@ -706,6 +706,7 @@ struct syna_tcm {
 	bool is_fp_down;
 	struct fp_underscreen_info fp_info;	/*tp info used for underscreen fingerprint*/
 	bool fp_active;	/*prepare for screen off fingerprint earlier*/
+	bool fp_prevent;	/*sensor near and fp closed, exit active state and enter sleep*/
 
 	/* framebuffer callbacks notifier */
 #if IS_ENABLED(CONFIG_DRM_OPLUS_PANEL_NOTIFY)

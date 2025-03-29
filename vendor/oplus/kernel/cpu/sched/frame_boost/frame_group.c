@@ -544,11 +544,9 @@ static void release_frame_task_list(struct list_head *task_list)
 			list_del_init(&ots->fbg_list);
 			ots->fbg_state = NONE_FRAME_TASK;
 			ots->fbg_depth = INVALID_FBG_DEPTH;
-
-			put_task_struct(p);
 		}
-
 		fbg_list_entry_unlock(lock);
+		put_task_struct(p);
 	}
 	local_irq_restore(flags);
 }

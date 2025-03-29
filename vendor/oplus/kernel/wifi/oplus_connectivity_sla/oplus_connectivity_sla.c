@@ -57,7 +57,7 @@
 
 #define MARK_MASK    0x0fff
 #define GAME_UNSPEC_MASK 0x8000
-#define CT_MARK_APP_TYPE_MASK 0xfff00000   //mark for detect white list
+#define CT_MARK_APP_TYPE_MASK 0x00f00000   /* mark for detect white list */
 #define CT_MARK_APP_TYPE_OFFSET 20
 
 #define GAME_NUM 7
@@ -71,7 +71,9 @@
 
 #define UID_MASK   100000
 #define INIT_APP_TYPE      0
-#define UNKNOW_APP_TYPE    0xfff /*for distinguish dual sta app*/
+#define UNKNOW_APP_TYPE    0xf /*for distinguish dual sta app*/
+#define SLA_APP 11
+#define DUAL_STA_APP 12
 
 #define OPLUS_SLA_CMD_MAX (__OPLUS_SLA_CMD_MAX - 1)
 #define OPLUS_SLA_FAMILY_VERSION	1
@@ -256,7 +258,7 @@ static bool is_same_app(u32 source_app_uid, u32 target_app_uid)
 static u32 get_ct_mark(struct nf_conn *ct)
 {
 	if (ct != NULL) {
-		return (ct->mark & ~CT_MARK_APP_TYPE_MASK);
+		return (ct->mark & MARK_MASK);
 	}
     return 0;
 }
@@ -314,10 +316,10 @@ static void print_stream_info(struct sk_buff *skb)
 					srcport = ntohs(udp_hdr(skb)->source);
 					dstip = (unsigned char *)&iph->daddr;
 
-					debug("screen_on[%d] uid[%u] proto[%d] srcport[%d] dstport[%d]"
-						" dstip[%d.%d.%d.%d] dev[%s] mark[%x] ct_mark[%x] app_type[%d]\n",
-						oplus_sla_screen_on, uid, iph->protocol, srcport, dstport,
-						dstip[0], dstip[1], dstip[2], dstip[3], dev ? dev->name : "null", skb->mark,
+					debug("screen_on[%d] oplus_sla_enable_status[%d] oplus_sla_vpn_connected[%d] uid[%u] proto[%d] srcport[%d] dstport[%d]"
+						" dstip[%d.%d.%d.%d] dev[%s] mark[%x] ct_mark[%x] ct_mark[%x] app_type[%d]\n",
+						oplus_sla_screen_on, oplus_sla_enable_status, oplus_sla_vpn_connected, uid, iph->protocol, srcport, dstport,
+						dstip[0], dstip[1], dstip[2], dstip[3], dev ? dev->name : "null", skb->mark, ct->mark,
 						get_ct_mark(ct), get_app_type(ct));
 				}
 			}
@@ -338,12 +340,13 @@ static bool is_skb_pre_bound(struct sk_buff *skb)
 	return false;
 }
 
+/*sla app or game app */
 static bool is_sla_white_or_game_app(struct nf_conn *ct, struct sk_buff *skb)
 {
 	u32 oplus_app_type = get_app_type(ct);
-	//debug("type : %u \n", get_app_type(ct));
-	if (oplus_app_type > 0 &&
-		oplus_app_type < DUAL_STA_APP_BASE) { /* game app skb */
+	/* debug("type : %u \n", get_app_type(ct)); */
+	if ((oplus_app_type > 0 &&
+		oplus_app_type < GAME_NUM) || oplus_app_type == SLA_APP) { /* game app skb */
 		return true;
 	}
 
@@ -359,9 +362,7 @@ static bool is_dual_sta_white_app(struct nf_conn *ct, struct sk_buff *skb,
 	struct sock *sk = NULL;
 	const struct file *filp = NULL;
 
-	//debug("type : %u \n", get_app_type(ct));
-
-	if (get_app_type(ct) >= DUAL_STA_APP_BASE) {
+	if (get_app_type(ct) == DUAL_STA_APP) {
 		return true;
 	}
 
@@ -387,7 +388,7 @@ static bool is_dual_sta_white_app(struct nf_conn *ct, struct sk_buff *skb,
 		for (i = 0; i < dual_wifi_app_list.count; i++) {
 			if (dual_wifi_app_list.uid[i]) {
 				if (is_same_app(uid.val, dual_wifi_app_list.uid[i])) {
-					set_app_type(ct, i + DUAL_STA_APP_BASE);
+					set_app_type(ct, DUAL_STA_APP);
 					return true;
 				}
 			}
@@ -642,7 +643,6 @@ static int detect_game_skb(struct sk_buff *skb)
 static void detect_white_list_app_skb(struct sk_buff *skb)
 {
 	int i = 0;
-	int index = -1;
 	kuid_t uid;
 	struct nf_conn *ct = NULL;
 	enum ip_conntrack_info ctinfo;
@@ -660,7 +660,7 @@ static void detect_white_list_app_skb(struct sk_buff *skb)
 	   list app again
 	*/
 	if (SLA_MODE_DUAL_WIFI != sla_work_mode &&
-		get_app_type(ct) >= DUAL_STA_APP_BASE) {
+		get_app_type(ct) == DUAL_STA_APP) {
 		set_app_type(ct, INIT_APP_TYPE);
 	}
 
@@ -682,7 +682,7 @@ static void detect_white_list_app_skb(struct sk_buff *skb)
 		for (i = 0; i < white_app_list.count; i++) {
 			if (white_app_list.uid[i]) {
 				if (is_same_app(uid.val, white_app_list.uid[i])) {
-					set_app_type(ct, i + WHITE_APP_BASE);
+					set_app_type(ct, SLA_APP);
 					return;
 				}
 			}
@@ -693,22 +693,6 @@ static void detect_white_list_app_skb(struct sk_buff *skb)
 			set_app_type(ct, UNKNOW_APP_TYPE);
 		}
 
-	} else if (get_app_type(ct) >= WHITE_APP_BASE &&
-		get_app_type(ct) < DUAL_STA_APP_BASE) {
-		/*calc white app cell bytes when sla is not enable,
-		    when the default network is change to cell,we should
-		    disable dual sta from framework
-		*/
-		if (oplus_sla_info[CELL_INDEX].if_up) {
-			if (!oplus_sla_info[MAIN_WLAN].if_up ||
-				oplus_sla_def_net == CELL_INDEX) {
-				index = get_app_type(ct) - WHITE_APP_BASE;
-
-				if (index < WHITE_APP_NUM) {
-					white_app_list.cell_bytes_normal[index] += skb->len;
-				}
-			}
-		}
 	}
 
 	return;
@@ -938,6 +922,10 @@ static unsigned int oplus_sla_output_hook(void *priv,
 {
 	int ret = NF_ACCEPT;
 	int game_ret = NF_ACCEPT;
+
+	if (oplus_sla_vpn_connected || !oplus_sla_enable_status) {
+		goto end_sla_output;
+	}
 
 	game_ret = detect_game_skb(skb);
 
@@ -1597,14 +1585,13 @@ static int __init oplus_sla_init(void)
 	ret |= nf_register_net_hooks(&init_net, oplus_sla_ops,
 			ARRAY_SIZE(oplus_sla_ops));
 
-	debug("guokang enter.\n");
-        debug("0x%x\n", CT_MARK_APP_TYPE_MASK);
+	debug(" enter.\n");
 	return ret;
 }
 
 static void __exit oplus_sla_exit(void)
 {
-	debug("guokang exit.\n");
+	debug(" exit.\n");
 	oplus_sla_genl_fini();
 
 	if (oplus_sla_table_hrd) {

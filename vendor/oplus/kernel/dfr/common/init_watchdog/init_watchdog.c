@@ -186,10 +186,12 @@ static void init_check_work_handler(struct work_struct *work)
 		snprintf(extra_info, EXTRA_INFO_BUF_LEN, "init process block in D-state "
 			"more than 30s, block_count is %u", g_init_watchdog_data->block_count);
 		if (g_init_watchdog_debug_enabled || g_init_watchdog_data->block_count == 1) {
+/*
 #if IS_ENABLED(CONFIG_OPLUS_FEATURE_THEIA)
 			theia_send_event(THEIA_EVENT_INIT_HANG, THEIA_LOGINFO_KERNEL_LOG,
 				current->pid, extra_info);
 #endif
+*/
 			pr_err(INIT_WATCHDOG_LOG_TAG "block_count is %u\n",
 				g_init_watchdog_data->block_count);
 			pr_err(INIT_WATCHDOG_LOG_TAG "dump init process kernel backtrace\n");
@@ -222,7 +224,7 @@ static ssize_t kick_watchdog_write(struct file *filp,
 	}
 
 	if (likely(!strncmp(str, "kick", 4))) {
-		pr_info(INIT_WATCHDOG_LOG_TAG "init process kicked\n");
+		/* pr_info(INIT_WATCHDOG_LOG_TAG "init process kicked\n"); */
 		g_init_watchdog_data->state = STATE_CHECKED;
 		g_init_watchdog_data->kick_state = STATE_KICKED;
 	} else if (!strncmp(str, "enable", 6)) {

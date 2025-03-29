@@ -240,6 +240,7 @@ struct cts_device_gesture_point {
 #define DOWN2UP_SWIP			11  /* |^*/
 #define M_GESTRUE				12  /* M*/
 #define W_GESTURE				13  /* W*/
+#define SINGLE_TAP				16	/* single tap */
 
 #define UnkownGesture			0
 
@@ -269,6 +270,7 @@ struct cts_device_gesture_info {
 #define CTS_GESTURE_RIGHT               (0x24)
 #define CTS_GESTURE_DOUBLE              (0x25)
 #define CTS_GESTURE_D_TAP               (0x50)
+#define CTS_GESTURE_S_TAP               (0x51)
 
     u8  num_points;
 
@@ -464,6 +466,7 @@ struct cts_interface {
     int (*set_diaphragm_lv_set)(const struct cts_device *cts_dev, int cmd);
     int (*get_water_flag)(const struct cts_device *cts_dev, u8 *cmd);
 	int (*set_waterproof_mode)(const struct cts_device *cts_dev, int cmd);
+	int (*set_aod_mode)(const struct cts_device *cts_dev, int cmd);
     int (*prepare_test)(struct cts_device *cts_dev);
     int (*prepare_black_test)(struct cts_device *cts_dev);
 	int (*set_black_test_pwr_mode)(const struct cts_device *cts_dev, u8 pwr_mode);
@@ -506,14 +509,15 @@ struct cts_device {
 struct chipone_ts_data {
     struct touchpanel_data *tsdata;
     struct cts_firmware vfw;
-
+	struct firmware *p_firmware_headfile;
+	struct firmware_headfile *p_firmware_headfile_h;
     int touch_direction;
 #ifdef CONFIG_CTS_I2C_HOST
     struct i2c_client *i2c_client;
 #else
     struct spi_device *spi_client;
 #endif /* CONFIG_CTS_I2C_HOST */
-
+	bool boot_update;
     struct device *device;
 
     struct cts_device cts_dev;

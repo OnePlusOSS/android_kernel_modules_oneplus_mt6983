@@ -1012,6 +1012,18 @@ int oplus_gauge_check_bqfs_fw(void)
 	return rc;
 }
 
+int oplus_gauge_bqfs_data_check(void)
+{
+	int rc = 0;
+	if (!g_gauge_chip)
+		return rc;
+
+	if (g_gauge_chip->gauge_ops && g_gauge_chip->gauge_ops->bqfs_data_check)
+		rc = g_gauge_chip->gauge_ops->bqfs_data_check();
+
+	return rc;
+}
+
 void oplus_gauge_get_device_name(u8 *name, int len)
 {
 	if (g_gauge_chip && g_gauge_chip->device_name && name)
@@ -1073,6 +1085,12 @@ void oplus_gauge_cal_model_check(bool ffc_state)
 	if (!g_gauge_chip)
 		return;
 	else {
+		if (oplus_switching_support_parallel_chg()) {
+			if (g_sub_gauge_chip && g_sub_gauge_chip->gauge_ops &&
+					g_sub_gauge_chip->gauge_ops->cal_model_check) {
+				g_sub_gauge_chip->gauge_ops->cal_model_check(ffc_state);
+			}
+		}
 		if (g_gauge_chip->gauge_ops && g_gauge_chip->gauge_ops->cal_model_check) {
 			return g_gauge_chip->gauge_ops->cal_model_check(ffc_state);
 		}

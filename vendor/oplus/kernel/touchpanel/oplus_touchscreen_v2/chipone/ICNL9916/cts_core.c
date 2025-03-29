@@ -1931,7 +1931,7 @@ int cts_enter_program_mode(struct cts_device *cts_dev)
     }
 #else
     cts_set_program_addr(cts_dev);
-    cts_plat_reset_device(cts_dev->pdata);
+    /*cts_plat_reset_device(cts_dev->pdata);*/
     ret = cts_plat_spi_write(cts_dev->pdata,
             0xcc, &magic_num[1], 3, 5, 10);
     if (ret) {
@@ -2166,7 +2166,7 @@ read_hwid:
     }
 
     cts_init_rtdata_with_normal_mode(cts_dev);
-
+#if 0
 #ifdef CONFIG_CTS_I2C_HOST
     if (!cts_plat_is_i2c_online(cts_dev->pdata, CTS_DEV_NORMAL_MODE_I2CADDR))
         TPD_INFO("<E> Normal mode i2c addr is offline\n");
@@ -2175,7 +2175,7 @@ read_hwid:
     if (!cts_plat_is_normal_mode(cts_dev->pdata))
         TPD_DEBUG("<W> Normal mode spi addr is offline\n");
 #endif
-
+#endif
     ret = cts_init_device_hwdata(cts_dev, hwid, fwid);
     if (ret) {
         TPD_INFO("<E> Device hwid: %06x fwid: %04x not found\n", hwid, fwid);
