@@ -1047,7 +1047,7 @@ static int fts_hw_reset(struct chip_data_ft3683g *ts_data, u32 delayms)
 	if (delayms) {
 		msleep(delayms);
 	}
-
+	ts_data->is_ic_sleep = false;
 	return 0;
 }
 static int fts_power_control(void *chip_data, bool enable)
@@ -1072,7 +1072,7 @@ static int fts_power_control(void *chip_data, bool enable)
 		msleep(POWEWRUP_TO_RESET_TIME);
 		fts_rstgpio_set(ts_data->hw_res, true);
 		msleep(RESET_TO_NORMAL_TIME);
-
+		ts_data->is_ic_sleep = false;
 	} else {
 		ret = fts_write_reg(FTS_REG_PULSE_CONTROL, 0x01);
 		msleep(2);
@@ -2368,7 +2368,7 @@ static int fts_mode_switch(void *chip_data, work_mode mode, int flag)
 			TPD_INFO("%s: enter into sleep failed.\n", __func__);
 			goto mode_err;
 		}
-
+		ts_data->is_ic_sleep = true;
 		break;
 
 	case MODE_GESTURE:
@@ -2376,7 +2376,7 @@ static int fts_mode_switch(void *chip_data, work_mode mode, int flag)
 		         ts_data->ts->is_suspended);
 
 		if (ts_data->ts->is_suspended) {                             /* do not pull up reset when doing resume*/
-			if (ts_data->last_mode == MODE_SLEEP) {
+			if (ts_data->is_ic_sleep == true) {
 				fts_hw_reset(ts_data, RESET_TO_NORMAL_TIME);
 			}
 		}
@@ -2440,8 +2440,6 @@ static int fts_mode_switch(void *chip_data, work_mode mode, int flag)
 		TPD_INFO("%s: Wrong mode.\n", __func__);
 		goto mode_err;
 	}
-
-	ts_data->last_mode = mode;
 	return 0;
 mode_err:
 	return ret;
@@ -4075,6 +4073,7 @@ static int fts_tp_probe(struct spi_device *spi)
 		goto err_register_driver;
 	}
 
+	ts_data->is_ic_sleep = false;
 	ts_data->snr_read_support = ts->snr_read_support;
 	ts_data->tp_data_record_support = ts->tp_data_record_support;
 	ts_data->differ_read_every_frame = 0;

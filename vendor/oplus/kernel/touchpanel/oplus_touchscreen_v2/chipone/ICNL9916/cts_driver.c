@@ -1477,10 +1477,16 @@ static int cts_driver_probe(struct spi_device *client)
 		TPD_INFO("<E> Init tbuf/rbuf failed!");
 		goto err_free_vfw_data;
 	}
+	/* init int_data */
+	if (cts_data->cts_dev.cts_if->init_int_data(&cts_data->cts_dev)) {
+		TPD_INFO("<E> Init int_data failed!");
+		goto err_free_common_touch;
+	}
+
     ret = register_common_touch_device(tsdata);
     if (ret < 0) {
         TPD_INFO("<E> register touch device failed: ret=%d\n", ret);
-        goto err_free_common_touch;
+        goto err_free_int_data;
     }
 
     disable_irq_nosync(tsdata->irq);
@@ -1496,7 +1502,7 @@ static int cts_driver_probe(struct spi_device *client)
     ret = cts_probe_device(&cts_data->cts_dev);
     if (ret) {
         TPD_INFO("<E> Probe device failed %d\n", ret);
-        goto err_free_common_touch;
+        goto err_free_int_data;
     }
 #ifdef CONFIG_TOUCHPANEL_MTK_PLATFORM
 	if (tsdata->boot_mode == RECOVERY_BOOT) {
@@ -1531,7 +1537,12 @@ err_sysfs_add_device:
     cts_sysfs_remove_device(&client->dev);
 err_tool_init:
     cts_tool_deinit(cts_data);*/
-    
+
+err_free_int_data:
+	if (cts_data->cts_dev.rtdata.int_data)
+		kfree(cts_data->cts_dev.rtdata.int_data);
+	cts_data->cts_dev.rtdata.int_data = NULL;
+
 err_free_common_touch:
 	cts_deinit_trans_buf(&cts_data->cts_dev);
 

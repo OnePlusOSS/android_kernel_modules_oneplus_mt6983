@@ -767,6 +767,7 @@ static void statsParsePktInfo(uint8_t *pucPkt, struct sk_buff *skb,
 				"<RX> TDLS type %d, category %d, Action %d, Token %d\n",
 				pucEthBody[0], pucEthBody[1],
 				pucEthBody[2], pucEthBody[3]);
+			GLUE_SET_INDEPENDENT_PKT(skb, TRUE);
 			break;
 		case EVENT_TX:
 			DBGLOG(TX, INFO,

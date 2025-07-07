@@ -1878,10 +1878,6 @@ static int cts_init_fwdata(struct cts_device *cts_dev)
         }
         TPD_INFO("<I>   %-24s: %lu\n", "Int data size", fwdata->int_data_size);
 
-        ret = cts_if->init_int_data(cts_dev);
-        if (ret < 0) {
-            return -EINVAL;
-        }
     }
 
     return 0;

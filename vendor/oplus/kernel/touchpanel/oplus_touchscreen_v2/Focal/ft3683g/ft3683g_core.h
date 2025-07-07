@@ -321,6 +321,7 @@ struct chip_data_ft3683g {
 	bool prc_mode;
 	bool touch_analysis_support;
 	bool ft3683_grip_v2_support;
+	bool is_ic_sleep;    /*ic sleep status*/
 	u32 touch_size;
 	u8 *touch_buf;
 	int ta_flag;

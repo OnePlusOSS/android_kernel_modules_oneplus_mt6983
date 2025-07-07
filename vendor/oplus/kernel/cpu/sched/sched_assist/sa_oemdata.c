@@ -45,7 +45,8 @@ void android_vh_dup_task_struct_handler(void *unused,
 		struct task_struct *tsk, struct task_struct *orig)
 {
 	int node;
-	struct oplus_task_struct *ots = NULL;
+	struct oplus_task_struct *ots;
+	struct oplus_task_struct *orig_ots;
 
 	if (!tsk || !orig)
 		return;
@@ -63,6 +64,14 @@ void android_vh_dup_task_struct_handler(void *unused,
 #if IS_ENABLED(CONFIG_ARM64_AMU_EXTN) && IS_ENABLED(CONFIG_OPLUS_FEATURE_CPU_JANKINFO)
 	ots->uid_struct = NULL;
 #endif
+	/* if thread fork from RenderThread, inherit its IM_FLAG_RENDER_THREAD */
+	orig_ots = get_oplus_task_struct(orig);
+	if (!IS_ERR_OR_NULL(orig_ots)) {
+		if (test_bit(IM_FLAG_RENDER_THREAD, &orig_ots->im_flag) && !strcmp(orig->comm, "RenderThread")) {
+			set_bit(IM_FLAG_RENDER_THREAD, &ots->im_flag);
+		}
+	}
+
 	smp_mb();
 
 	WRITE_ONCE(tsk->android_oem_data1[OTS_IDX], (u64) ots);

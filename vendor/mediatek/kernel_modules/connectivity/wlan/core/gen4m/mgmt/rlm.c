@@ -5078,6 +5078,7 @@ static void rlmBssReset(struct ADAPTER *prAdapter, struct BSS_INFO *prBssInfo)
 }
 
 #if CFG_SUPPORT_TDLS
+#if CFG_SUPPORT_802_11AC
 /*----------------------------------------------------------------------------*/
 /*!
  * \brief
@@ -5093,10 +5094,18 @@ uint32_t rlmFillVhtCapIEByAdapter(struct ADAPTER *prAdapter,
 	struct IE_VHT_CAP *prVhtCap;
 	struct VHT_SUPPORTED_MCS_FIELD *prVhtSupportedMcsSet;
 	uint8_t i;
+	uint8_t ucMaxBw;
+	uint8_t supportNss = wlanGetSupportNss(
+				prAdapter, prBssInfo->ucBssIndex);
 
-	ASSERT(prAdapter);
-	ASSERT(prBssInfo);
-	/* ASSERT(prMsduInfo); */
+	if (!prAdapter) {
+		DBGLOG(TDLS, ERROR, "prAdapter error!\n");
+		return 0;
+	}
+	if (!prBssInfo) {
+		DBGLOG(TDLS, ERROR, "prBssInfo error!\n");
+		return 0;
+	}
 
 	prVhtCap = (struct IE_VHT_CAP *)pOutBuf;
 
@@ -5104,14 +5113,47 @@ uint32_t rlmFillVhtCapIEByAdapter(struct ADAPTER *prAdapter,
 	prVhtCap->ucLength = sizeof(struct IE_VHT_CAP) - ELEM_HDR_LEN;
 	prVhtCap->u4VhtCapInfo = VHT_CAP_INFO_DEFAULT_VAL;
 
-	if (IS_FEATURE_ENABLED(prAdapter->rWifiVar.ucRxShortGI))
-		prVhtCap->u4VhtCapInfo |= VHT_CAP_INFO_SHORT_GI_80;
+	ucMaxBw = cnmGetBssMaxBw(prAdapter, prBssInfo->ucBssIndex);
+
+	prVhtCap->u4VhtCapInfo |= (prAdapter->rWifiVar.ucRxMaxMpduLen &
+			VHT_CAP_INFO_MAX_MPDU_LEN_MASK);
+
+	if (ucMaxBw == MAX_BW_160MHZ)
+		prVhtCap->u4VhtCapInfo |=
+			VHT_CAP_INFO_MAX_SUP_CHANNEL_WIDTH_SET_160;
+	else if (ucMaxBw == MAX_BW_80_80_MHZ)
+		prVhtCap->u4VhtCapInfo |=
+			VHT_CAP_INFO_MAX_SUP_CHANNEL_WIDTH_SET_160_80P80;
+
+	if (IS_FEATURE_ENABLED(prAdapter->rWifiVar.ucRxShortGI)) {
+		if (ucMaxBw >= MAX_BW_80MHZ)
+			prVhtCap->u4VhtCapInfo |= VHT_CAP_INFO_SHORT_GI_80;
+
+		if (ucMaxBw >= MAX_BW_160MHZ)
+			prVhtCap->u4VhtCapInfo |=
+				VHT_CAP_INFO_SHORT_GI_160_80P80;
+	}
 
 	if (IS_FEATURE_ENABLED(prAdapter->rWifiVar.ucRxLdpc))
 		prVhtCap->u4VhtCapInfo |= VHT_CAP_INFO_RX_LDPC;
 
-	if (IS_FEATURE_ENABLED(prAdapter->rWifiVar.ucRxStbc))
-		prVhtCap->u4VhtCapInfo |= VHT_CAP_INFO_RX_STBC_ONE_STREAM;
+	if (IS_FEATURE_ENABLED(prAdapter->rWifiVar.ucRxStbc)) {
+		uint8_t tempRxStbcNss = prAdapter->rWifiVar.ucRxStbcNss;
+
+		if (tempRxStbcNss > supportNss) {
+			DBGLOG(TDLS, WARN,
+				"Apply Nss:%d -> %d as RxStbcNss in VHT Cap",
+				tempRxStbcNss, supportNss);
+			tempRxStbcNss = supportNss;
+		}
+		prVhtCap->u4VhtCapInfo |=
+			((tempRxStbcNss << VHT_CAP_INFO_RX_STBC_OFFSET) &
+			 VHT_CAP_INFO_RX_STBC_MASK);
+	}
+
+	if (IS_FEATURE_ENABLED(prAdapter->rWifiVar.ucTxStbc) &&
+			prBssInfo->ucOpTxNss >= 2)
+		prVhtCap->u4VhtCapInfo |= VHT_CAP_INFO_TX_STBC;
 
 	/*set MCS map */
 	prVhtSupportedMcsSet = &prVhtCap->rVhtSupportedMcsSet;
@@ -5119,23 +5161,31 @@ uint32_t rlmFillVhtCapIEByAdapter(struct ADAPTER *prAdapter,
 		   sizeof(struct VHT_SUPPORTED_MCS_FIELD));
 
 	for (i = 0; i < 8; i++) {
-		prVhtSupportedMcsSet->u2RxMcsMap |= BITS(2 * i, (2 * i + 1));
-		prVhtSupportedMcsSet->u2TxMcsMap |= BITS(2 * i, (2 * i + 1));
+		uint8_t ucOffset = i * 2;
+		uint8_t ucMcsMap;
+
+		if (i < supportNss)
+			ucMcsMap = VHT_CAP_INFO_MCS_MAP_MCS9;
+		else
+			ucMcsMap = VHT_CAP_INFO_MCS_NOT_SUPPORTED;
+
+		prVhtSupportedMcsSet->u2RxMcsMap |= (ucMcsMap << ucOffset);
+		prVhtSupportedMcsSet->u2TxMcsMap |= (ucMcsMap << ucOffset);
 	}
 
-	prVhtSupportedMcsSet->u2RxMcsMap &=
-		(VHT_CAP_INFO_MCS_MAP_MCS9 << VHT_CAP_INFO_MCS_1SS_OFFSET);
-	prVhtSupportedMcsSet->u2TxMcsMap &=
-		(VHT_CAP_INFO_MCS_MAP_MCS9 << VHT_CAP_INFO_MCS_1SS_OFFSET);
 	prVhtSupportedMcsSet->u2RxHighestSupportedDataRate =
 		VHT_CAP_INFO_DEFAULT_HIGHEST_DATA_RATE;
 	prVhtSupportedMcsSet->u2TxHighestSupportedDataRate =
 		VHT_CAP_INFO_DEFAULT_HIGHEST_DATA_RATE;
 
-	ASSERT(IE_SIZE(prVhtCap) <= (ELEM_HDR_LEN + ELEM_MAX_LEN_VHT_CAP));
+	if (IE_SIZE(prVhtCap) > (ELEM_HDR_LEN + ELEM_MAX_LEN_VHT_CAP)) {
+		DBGLOG(TDLS, ERROR, "prVhtCap size error!\n");
+		return 0;
+	}
 
 	return IE_SIZE(prVhtCap);
 }
+#endif
 #endif
 
 #if CFG_SUPPORT_NAN
@@ -5467,7 +5517,10 @@ uint32_t rlmFillHtCapIEByAdapter(struct ADAPTER *prAdapter,
 {
 	struct IE_HT_CAP *prHtCap;
 	struct SUP_MCS_SET_FIELD *prSupMcsSet;
-	u_int8_t fg40mAllowed;
+	uint8_t fg40mAllowed;
+	uint8_t ucIdx;
+	uint8_t supportNss = wlanGetSupportNss(
+				prAdapter, prBssInfo->ucBssIndex);
 
 	ASSERT(prAdapter);
 	ASSERT(prBssInfo);
@@ -5482,11 +5535,7 @@ uint32_t rlmFillHtCapIEByAdapter(struct ADAPTER *prAdapter,
 	prHtCap->ucLength = sizeof(struct IE_HT_CAP) - ELEM_HDR_LEN;
 
 	prHtCap->u2HtCapInfo = HT_CAP_INFO_DEFAULT_VAL;
-	if (!fg40mAllowed) {
-		prHtCap->u2HtCapInfo &= ~(HT_CAP_INFO_SUP_CHNL_WIDTH |
-					  HT_CAP_INFO_SHORT_GI_40M |
-					  HT_CAP_INFO_DSSS_CCK_IN_40M);
-	}
+
 	if (IS_FEATURE_ENABLED(prAdapter->rWifiVar.ucRxShortGI))
 		prHtCap->u2HtCapInfo |=
 			(HT_CAP_INFO_SHORT_GI_20M | HT_CAP_INFO_SHORT_GI_40M);
@@ -5494,8 +5543,48 @@ uint32_t rlmFillHtCapIEByAdapter(struct ADAPTER *prAdapter,
 	if (IS_FEATURE_ENABLED(prAdapter->rWifiVar.ucRxLdpc))
 		prHtCap->u2HtCapInfo |= HT_CAP_INFO_LDPC_CAP;
 
-	if (IS_FEATURE_ENABLED(prAdapter->rWifiVar.ucRxStbc))
-		prHtCap->u2HtCapInfo |= HT_CAP_INFO_RX_STBC_1_SS;
+	if (IS_FEATURE_ENABLED(prAdapter->rWifiVar.ucTxStbc) &&
+			prBssInfo->ucOpTxNss >= 2)
+		prHtCap->u2HtCapInfo |= HT_CAP_INFO_TX_STBC;
+
+	if (IS_FEATURE_ENABLED(prAdapter->rWifiVar.ucRxStbc)) {
+		uint8_t tempRxStbcNss = prAdapter->rWifiVar.ucRxStbcNss;
+
+		if (tempRxStbcNss > supportNss) {
+			DBGLOG(TDLS, WARN,
+				"Apply Nss:%d -> %d as RxStbcNss in HT Cap",
+				tempRxStbcNss, supportNss);
+			tempRxStbcNss = supportNss;
+		}
+
+		if (tempRxStbcNss == 1)
+			prHtCap->u2HtCapInfo |= HT_CAP_INFO_RX_STBC_1_SS;
+		else if (tempRxStbcNss == 2)
+			prHtCap->u2HtCapInfo |= HT_CAP_INFO_RX_STBC_2_SS;
+		else if (tempRxStbcNss >= 3)
+			prHtCap->u2HtCapInfo |= HT_CAP_INFO_RX_STBC_3_SS;
+	}
+
+	if (IS_FEATURE_ENABLED(prAdapter->rWifiVar.ucRxGf))
+		prHtCap->u2HtCapInfo |= HT_CAP_INFO_HT_GF;
+
+	if (prAdapter->rWifiVar.ucRxMaxMpduLen > VHT_CAP_INFO_MAX_MPDU_LEN_3K)
+		prHtCap->u2HtCapInfo |= HT_CAP_INFO_MAX_AMSDU_LEN;
+
+	if (!fg40mAllowed)
+		prHtCap->u2HtCapInfo &= ~(HT_CAP_INFO_SUP_CHNL_WIDTH |
+				HT_CAP_INFO_SHORT_GI_40M |
+				HT_CAP_INFO_DSSS_CCK_IN_40M);
+
+	/* SM power saving (IEEE 802.11, 2016, 10.2.4)
+	 * A non-AP HT STA may also use SM Power Save bits in the HT
+	 * Capabilities element of its Association Request to achieve
+	 * the same purpose. The latter allows the STA to use only a
+	 * single receive chain immediately after association.
+	 */
+	if (prBssInfo->ucOpRxNss < supportNss)
+		prHtCap->u2HtCapInfo &=
+			~HT_CAP_INFO_SM_POWER_SAVE; /*Set as static power save*/
 
 	prHtCap->ucAmpduParam = AMPDU_PARAM_DEFAULT_VAL;
 
@@ -5503,7 +5592,8 @@ uint32_t rlmFillHtCapIEByAdapter(struct ADAPTER *prAdapter,
 	kalMemZero((void *)&prSupMcsSet->aucRxMcsBitmask[0],
 		   SUP_MCS_RX_BITMASK_OCTET_NUM);
 
-	prSupMcsSet->aucRxMcsBitmask[0] = BITS(0, 7);
+	for (ucIdx = 0; ucIdx < supportNss; ucIdx++)
+		prSupMcsSet->aucRxMcsBitmask[ucIdx] = BITS(0, 7);
 
 	if (fg40mAllowed && IS_FEATURE_ENABLED(prAdapter->rWifiVar.ucMCS32))
 		prSupMcsSet->aucRxMcsBitmask[32 / 8] = BIT(0); /* MCS32 */

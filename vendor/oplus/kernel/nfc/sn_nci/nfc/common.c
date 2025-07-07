@@ -62,10 +62,15 @@ int nfc_parse_dt(struct device *dev, struct platform_configs *nfc_configs,
 			nfc_gpio->dwl_req);
 
 	nfc_gpio->clkreq = of_get_named_gpio(np, DTS_CLKREQ_GPIO_STR, 0);
-	if ((!gpio_is_valid(nfc_gpio->clkreq)))
+	if ((!gpio_is_valid(nfc_gpio->clkreq))) {
 		pr_warn("%s: clkreq gpio invalid %d\n", __func__,
 			nfc_gpio->clkreq);
-
+	} else {
+		//#ifdef OPLUS_BUG_STABILITY
+		//IS_ENABLED(CONFIG_NXP_NFC_CLK_REQ_HIGH)
+		nfc_configs->sys_idle_clkreq = false;
+		//#endif /*OPLUS_BUG_STABILITY*/
+	}
 	pr_info("%s: %d, %d, %d, %d\n", __func__, nfc_gpio->irq, nfc_gpio->ven,
 		nfc_gpio->dwl_req, nfc_gpio->clkreq);
 	return 0;

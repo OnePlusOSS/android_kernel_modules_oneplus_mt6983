@@ -1,0 +1,8 @@
+
+config UNISOC_IOLIMIT
+    tristate "vfs io limit support"
+    depends on BLK_CGROUP
+    help
+      Provide a blkio policy implementing for io bandwidth while a process
+      in the cgroup buffer write.
+

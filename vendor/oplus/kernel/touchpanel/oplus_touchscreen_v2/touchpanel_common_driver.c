@@ -2139,6 +2139,28 @@ static void init_panel_config(struct device *dev, struct touchpanel_data *ts)
 	}
 }
 
+static void tp_healthinfo_init_dts_child_node(struct device *dev, struct touchpanel_data *ts)
+{
+	struct device_node *chip_np;
+	int temp_array[2] = {0};
+	int rc = 0;
+	chip_np = is_support_child_node(dev, ts);
+	if (!chip_np) {
+		return;
+	}
+
+	rc = of_property_read_u32_array(chip_np, "touchpanel,panel-coords", temp_array, 2);
+
+	if (rc) {
+		ts->monitor_data.max_x = 0;
+		ts->monitor_data.max_y = 0;
+
+	} else {
+		ts->monitor_data.max_x = temp_array[0];
+		ts->monitor_data.max_y = temp_array[1];
+	}
+}
+
 /**
  * init_parse_dts - parse dts, get resource defined in Dts
  * @dev: i2c_client->dev using to get device tree
@@ -2276,6 +2298,7 @@ static int init_parse_dts(struct device *dev, struct touchpanel_data *ts)
 	ts->pen_support_opp = of_property_read_bool(np, "pen_support_opp");
 	ts->bus_ready_check_support = of_property_read_bool(np, "bus_ready_check_support");
 	TP_INFO(ts->tp_index, "bus_ready_check_support is %d\n", ts->bus_ready_check_support);
+	ts->aiunit_game_info_support = of_property_read_bool(np, "aiunit_game_info_support");
 
 	ts->tp_lcd_suspend_in_lp_support = of_property_read_bool(np, "tp_lcd_suspend_in_lp_support");
 	TP_INFO(ts->tp_index, "tp_lcd_suspend_in_lp_support is %d\n", ts->tp_lcd_suspend_in_lp_support);
@@ -2922,6 +2945,12 @@ static int init_parse_dts(struct device *dev, struct touchpanel_data *ts)
 	}
 	else {
 		TPD_BOOT_INFO("touch_environment:%s\n", ts->touch_environment);
+	}
+
+	rc = of_property_read_u32(np, "touchpanel,aiunit_game_valid_bits", &ts->aiunit_game_valid_bits);
+	if (rc) {
+		TP_BOOT_INFO(ts->tp_index, "tp aiunit game valid bits not specified\n");
+		ts->aiunit_game_valid_bits = 19;
 	}
 
 	init_panel_config(dev, ts);
@@ -3769,6 +3798,12 @@ int register_common_touch_device(struct touchpanel_data *pdata)
 			TP_INFO(ts->tp_index, "health info init failed.\n");
 		}
 
+		chip_np = is_support_child_node(ts->dev, ts);
+
+		if (chip_np) {
+			tp_healthinfo_init_dts_child_node(ts->dev, ts);
+		}
+
 		ts->monitor_data.health_monitor_support = true;
 		ts->monitor_data.chip_data = ts->chip_data;
 		ts->monitor_data.debug_info_ops = ts->debug_info_ops;
@@ -4165,6 +4200,7 @@ int register_common_touch_device(struct touchpanel_data *pdata)
 	ts->gesture_enable = 0;
 	ts->fd_enable = 0;
 	ts->fp_enable = 0;
+	ts->aiunit_game_enable = 0;
 	ts->fp_info.touch_state = 0;
 	ts->palm_enable = 1;
 	ts->touch_count = 0;

@@ -198,7 +198,6 @@ static ssize_t proc_ux_task_write(struct file *file, const char __user *buf,
 	int pid = 0;
 	int ux_state = 0, ux_orig = 0;
 	int err = 0;
-	static DEFINE_MUTEX(sa_ux_mutex);
 
 	memset(buffer, 0, sizeof(buffer));
 
@@ -236,7 +235,6 @@ static ssize_t proc_ux_task_write(struct file *file, const char __user *buf,
 	if (err)
 		return err;
 
-	mutex_lock(&sa_ux_mutex);
 	if (!strncmp(opt_str[OPT_STR_TYPE], "p", 1) && (ux_state >= 0)) {
 		struct task_struct *ux_task = NULL;
 
@@ -248,6 +246,10 @@ static ssize_t proc_ux_task_write(struct file *file, const char __user *buf,
 			rcu_read_unlock();
 
 			if (ux_task) {
+				if (im_mali(ux_task->comm)) {
+					put_task_struct(ux_task);
+					return -EFAULT;
+				}
 				ux_orig = oplus_get_ux_state(ux_task);
 
 				if ((ux_state & SA_OPT_SET) && oplus_get_inherit_ux(ux_task)) {
@@ -282,7 +284,6 @@ static ssize_t proc_ux_task_write(struct file *file, const char __user *buf,
 		}
 	}
 
-	mutex_unlock(&sa_ux_mutex);
 	return count;
 }
 
@@ -413,6 +414,11 @@ static long write_task_ux(pid_t pid, pid_t tid, int ux_value, bool fromSysOrApp)
 	if (ux_task) {
 		bool need_update = true;
 		int ux_state = -1;
+
+		if (im_mali(ux_task->comm)) {
+			put_task_struct(ux_task);
+			return -EPERM;
+		}
 
 		/* clear inherit type if ux is intentional set */
 		if ((ux_value & (SA_OPT_SET|SA_OPT_RESET)) && oplus_get_inherit_ux(ux_task)) {
@@ -566,15 +572,12 @@ static const struct proc_ops proc_debug_enabled_fops = {
 static int im_flag_set_handle(struct task_struct *task, int im_flag)
 {
 	struct oplus_task_struct *ots = get_oplus_task_struct(task);
-#ifdef CONFIG_LOCKING_PROTECT
 	unsigned long old_im;
-#endif
 
 	if (IS_ERR_OR_NULL(ots))
 		return 0;
-#ifdef CONFIG_LOCKING_PROTECT
+
 	old_im = ots->im_flag;
-#endif
 #ifdef CONFIG_OPLUS_CPU_AUDIO_PERF
 	oplus_sched_assist_audio_perf_addIm(task, im_flag);
 #endif

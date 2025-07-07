@@ -5632,7 +5632,7 @@ void aisFsmRunEventRoamingDiscovery(IN struct ADAPTER *prAdapter,
 	/* TODO: Stop roaming event in FW */
 #if CFG_SUPPORT_WFD
 #if CFG_ENABLE_WIFI_DIRECT
-	{
+	if (prRoamingFsmInfo->eReason != ROAMING_REASON_POOR_RCPI) {
 		/* Check WFD is running */
 		struct WFD_CFG_SETTINGS *prWfdCfgSettings =
 		    (struct WFD_CFG_SETTINGS *)NULL;
