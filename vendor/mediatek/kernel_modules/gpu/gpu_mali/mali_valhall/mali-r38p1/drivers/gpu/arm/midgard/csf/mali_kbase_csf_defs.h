@@ -723,8 +723,13 @@ struct kbase_csf_scheduler_context {
 	u32 num_runnable_grps;
 	struct list_head idle_wait_groups;
 	u32 num_idle_wait_grps;
+#if IS_ENABLED(CONFIG_MALI_MTK_KTHREAD_ENHANCE)
+	struct kthread_worker *sync_update_worker;
+	struct kthread_work sync_update_work;
+#else
 	struct workqueue_struct *sync_update_wq;
 	struct work_struct sync_update_work;
+#endif
 	u32 ngrp_to_schedule;
 	struct kbase_kctx_heap_info heap_info;
 };
@@ -1083,10 +1088,16 @@ struct kbase_csf_scheduler {
 	DECLARE_BITMAP(csg_slots_prio_update, MAX_SUPPORTED_CSGS);
 	unsigned long last_schedule;
 	bool timer_enabled;
+#if IS_ENABLED(CONFIG_MALI_MTK_KTHREAD_ENHANCE)
+	struct kthread_worker *sched_worker;
+	struct kthread_work tick_work;
+	struct kthread_delayed_work tock_work;
+#else
 	struct workqueue_struct *wq;
-	struct hrtimer tick_timer;
 	struct work_struct tick_work;
 	struct delayed_work tock_work;
+#endif
+	struct hrtimer tick_timer;
 	atomic_t pending_tock_work;
 	struct delayed_work ping_work;
 	struct kbase_context *top_ctx;
@@ -1094,8 +1105,13 @@ struct kbase_csf_scheduler {
 	struct kbase_queue_group *active_protm_grp;
 	struct work_struct pmode_exit_wa_work;
 	bool apply_pmode_exit_wa;
+#if IS_ENABLED(CONFIG_MALI_MTK_KTHREAD_ENHANCE)
+	struct kthread_worker *idle_worker;
+	struct kthread_work gpu_idle_work;
+#else
 	struct workqueue_struct *idle_wq;
 	struct work_struct gpu_idle_work;
+#endif
 	bool fast_gpu_idle_handling;
 	atomic_t gpu_no_longer_idle;
 	atomic_t non_idle_offslot_grps;

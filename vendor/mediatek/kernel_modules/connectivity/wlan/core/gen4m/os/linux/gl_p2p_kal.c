@@ -2631,8 +2631,11 @@ void kalP2pIndicateChnlSwitch(IN struct ADAPTER *prAdapter,
 			prP2PInfo->chandefCsa.chan->dfs_state);
 	}
 
+	mutex_lock(&prNetdevice->ieee80211_ptr->mtx);
+
 	/* Ch notify */
 	cfg80211_ch_switch_notify(
 		prNetdevice,
 		&prP2PInfo->chandefCsa);
+	mutex_unlock(&prNetdevice->ieee80211_ptr->mtx);
 }

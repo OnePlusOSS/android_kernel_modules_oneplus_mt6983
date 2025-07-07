@@ -492,7 +492,11 @@ kbase_csf_scheduler_tick_advance_nolock(struct kbase_device *kbdev)
 	if (scheduler->tick_timer_active) {
 		KBASE_KTRACE_ADD(kbdev, SCHEDULER_TICK_ADVANCE, NULL, 0u);
 		scheduler->tick_timer_active = false;
+#if IS_ENABLED(CONFIG_MALI_MTK_KTHREAD_ENHANCE)
+		kthread_queue_work(scheduler->sched_worker, &scheduler->tick_work);
+#else
 		queue_work(scheduler->wq, &scheduler->tick_work);
+#endif
 	} else {
 		KBASE_KTRACE_ADD(kbdev, SCHEDULER_TICK_NOADVANCE, NULL, 0u);
 	}
@@ -533,7 +537,11 @@ static inline void kbase_csf_scheduler_invoke_tick(struct kbase_device *kbdev)
 
 	spin_lock_irqsave(&scheduler->interrupt_lock, flags);
 	if (!scheduler->tick_timer_active)
+#if IS_ENABLED(CONFIG_MALI_MTK_KTHREAD_ENHANCE)
+		kthread_queue_work(scheduler->sched_worker, &scheduler->tick_work);
+#else
 		queue_work(scheduler->wq, &scheduler->tick_work);
+#endif
 	spin_unlock_irqrestore(&scheduler->interrupt_lock, flags);
 }
 
@@ -550,7 +558,11 @@ static inline void kbase_csf_scheduler_invoke_tock(struct kbase_device *kbdev)
 	struct kbase_csf_scheduler *const scheduler = &kbdev->csf.scheduler;
 
 	if (atomic_cmpxchg(&scheduler->pending_tock_work, false, true) == false)
+#if IS_ENABLED(CONFIG_MALI_MTK_KTHREAD_ENHANCE)
+		kthread_mod_delayed_work(scheduler->sched_worker, &scheduler->tock_work, 0);
+#else
 		mod_delayed_work(scheduler->wq, &scheduler->tock_work, 0);
+#endif
 }
 
 /**

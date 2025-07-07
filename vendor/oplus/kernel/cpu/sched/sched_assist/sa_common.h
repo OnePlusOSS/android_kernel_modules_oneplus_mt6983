@@ -153,7 +153,12 @@ enum IM_FLAG_TYPE {
 	IM_FLAG_FORBID_SET_CPU_AFFINITY, /* forbid setting cpu affinity from app */
 	IM_FLAG_SYSTEMSERVER_PID,
 	IM_FLAG_MIDASD,
-	IM_FLAG_LIGHT_THREAD = 15,
+	IM_FLAG_AUDIO_CAMERA_HAL, /* audio mode disable camera hal ux */
+	IM_FLAG_AFFINITY_THREAD,
+	IM_FLAG_TPD_SET_CPU_AFFINITY = 16,
+	IM_FLAG_COMPRESS_THREAD = 17, /* compress thread skips locking protect */
+	IM_FLAG_RENDER_THREAD = 18,
+	IM_FLAG_LIGHT_THREAD,
 	MAX_IM_FLAG_TYPE,
 };
 
@@ -653,6 +658,7 @@ static inline u32 task_wts_sum(struct task_struct *tsk)
 bool is_min_cluster(int cpu);
 bool is_max_cluster(int cpu);
 bool is_mid_cluster(int cpu);
+bool im_mali(const char *comm);
 bool is_top(struct task_struct *p);
 bool task_is_runnable(struct task_struct *task);
 int get_ux_state(struct task_struct *task);

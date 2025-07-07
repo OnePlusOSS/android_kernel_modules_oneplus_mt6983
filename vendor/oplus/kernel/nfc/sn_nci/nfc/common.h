@@ -158,6 +158,10 @@ struct platform_gpio {
 /* NFC Struct to get all the required configs from DTS */
 struct platform_configs {
 	struct platform_gpio gpio;
+	//#ifdef OPLUS_BUG_STABILITY
+	//IS_ENABLED(CONFIG_NXP_NFC_CLK_REQ_HIGH)
+	bool sys_idle_clkreq;
+	//#endif /*OPLUS_BUG_STABILITY*/
 };
 
 /* cold reset Features specific Parameters */

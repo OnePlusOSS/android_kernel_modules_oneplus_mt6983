@@ -912,7 +912,8 @@ KAL_NEED_IMPLEMENT(__FILE__, __func__, __LINE__, _prGlueInfo, _prMacAddr)
 	KAL_NEED_IMPLEMENT(__FILE__, __func__, __LINE__, _prGlueInfo)
 
 #if CFG_SUPPORT_DFS
-#define	kalIndicateChannelSwitch(_prGlueInfo, _eSco, _ucChannelNum) \
+#define	kalIndicateChannelSwitch(_prGlueInfo, _eSco, \
+	_ucChannelNum, _eBand, _ucBssIndex) \
 	KAL_NEED_IMPLEMENT(__FILE__, __func__, __LINE__, _prGlueInfo)
 #endif
 

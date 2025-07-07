@@ -1540,8 +1540,13 @@ static int kbase_pm_l2_update_state(struct kbase_device *kbdev)
 	if (kbdev->pm.backend.invoke_poweroff_wait_wq_when_l2_off &&
 			backend->l2_state == KBASE_L2_OFF) {
 		kbdev->pm.backend.invoke_poweroff_wait_wq_when_l2_off = false;
+#if IS_ENABLED(CONFIG_MALI_MTK_KTHREAD_ENHANCE)
+		kthread_queue_work(kbdev->pm.backend.gpu_poweroff_wait_worker,
+				&kbdev->pm.backend.gpu_poweroff_wait_work);
+#else
 		queue_work(kbdev->pm.backend.gpu_poweroff_wait_wq,
 				&kbdev->pm.backend.gpu_poweroff_wait_work);
+#endif
 	}
 #if IS_ENABLED(CONFIG_MALI_MTK_IRQ_TRACE)
 	mtk_debug_irq_trace_record_end(KBASE_IRQ_GPU, 12);

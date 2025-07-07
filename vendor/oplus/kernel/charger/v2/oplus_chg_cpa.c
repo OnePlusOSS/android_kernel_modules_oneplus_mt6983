@@ -16,6 +16,7 @@
 #include <linux/errno.h>
 #include <linux/delay.h>
 #include <linux/list.h>
+#include <linux/jiffies.h>
 
 #include <oplus_chg.h>
 #include <oplus_chg_module.h>
@@ -34,6 +35,7 @@
 
 #define PROTOCAL_SWITCH_REPLY_TIMEOUT_MS	1000
 #define PROTOCAL_READY_TIMEOUT_MS		200000
+#define WIRED_PLUGOUT_TO_PRESENT_MS		2000
 
 struct oplus_cpa_protocol_info {
 	enum oplus_chg_protocol_type type;
@@ -73,7 +75,6 @@ struct oplus_cpa {
 	uint32_t default_protocol_type;
 	unsigned long ready_protocol_type;
 	uint32_t protocol_supported_type;
-	unsigned long not_ready_protocol_type;
 	struct oplus_cpa_protocol_info protocol_prio_table[CHG_PROTOCOL_MAX];
 	bool def_req;
 	bool request_pending;
@@ -88,6 +89,9 @@ struct oplus_cpa {
 	bool ufcs_online;
 	bool retention_state;
 	bool retention_state_ready;
+
+	bool wired_present;
+	unsigned long wired_plugout_time;
 
 	struct mutex cpa_request_lock;
 	struct mutex start_lock;
@@ -104,7 +108,7 @@ const char * const protocol_name_str[] = {
 	[CHG_PROTOCOL_QC]	= "QC",
 };
 
-static const char *get_protocol_name_str(enum oplus_chg_protocol_type type)
+const char *get_protocol_name_str(enum oplus_chg_protocol_type type)
 {
 	if (type < 0 || type >= CHG_PROTOCOL_MAX)
 		return "Unknown";
@@ -629,54 +633,16 @@ static void oplus_cpa_protocol_switch_timeout_work(struct work_struct *work)
 	}
 }
 
-static int oplus_cpa_set_ready_protocol(struct oplus_cpa *cpa, enum oplus_chg_protocol_type type)
-{
-	struct mms_msg *msg;
-	int rc;
-
-	if ((type >= CHG_PROTOCOL_MAX) || (type <= CHG_PROTOCOL_INVALID)) {
-		chg_err("unsupported protocol type, protocol=%d\n", type);
-		return -EINVAL;
-	}
-
-	clear_bit(type, &cpa->not_ready_protocol_type);
-	msg = oplus_mms_alloc_msg(MSG_TYPE_ITEM, MSG_PRIO_HIGH, CPA_ITEM_NOT_READY_PROTOCOL);
-	if (msg == NULL) {
-		chg_err("alloc msg error\n");
-		return -ENOMEM;
-	}
-	rc = oplus_mms_publish_msg(cpa->cpa_topic, msg);
-	if (rc < 0) {
-		chg_err("publish cpa ready msg error, rc=%d\n", rc);
-		kfree(msg);
-	}
-	return 0;
-}
-
 static void oplus_cpa_protocol_ready_timeout_work(struct work_struct *work)
 {
 	struct delayed_work *dwork = to_delayed_work(work);
 	struct oplus_cpa *cpa = container_of(dwork,
 		struct oplus_cpa, protocol_ready_timeout_work);
-	struct mms_msg *msg;
-	int rc;
 
 	chg_err("wait protocol ready timeout, ready_protocol_type=0x%lx, request_pending=%d\n",
 		cpa->ready_protocol_type, cpa->request_pending);
 
 	vote(cpa->req_lock_votable, DEF_VOTER, false, 0, false);
-	cpa->not_ready_protocol_type = 0;
-
-	msg = oplus_mms_alloc_msg(MSG_TYPE_ITEM, MSG_PRIO_HIGH, CPA_ITEM_NOT_READY_PROTOCOL);
-	if (msg == NULL) {
-		chg_err("alloc msg error\n");
-		return;
-	}
-	rc = oplus_mms_publish_msg(cpa->cpa_topic, msg);
-	if (rc < 0) {
-		chg_err("publish cpa ready msg error, rc=%d\n", rc);
-		kfree(msg);
-	}
 }
 
 static void oplus_cpa_wired_offline_work(struct work_struct *work)
@@ -708,6 +674,14 @@ static void oplus_cpa_wired_offline_work(struct work_struct *work)
 	WRITE_ONCE(cpa->status_reset, true);
 }
 
+static bool oplus_wired_offline_clear_cpa_queue(struct oplus_cpa *cpa)
+{
+	unsigned long old_time;
+
+	old_time = cpa->wired_plugout_time + msecs_to_jiffies(WIRED_PLUGOUT_TO_PRESENT_MS);
+	return time_is_before_jiffies(old_time);
+}
+
 static void oplus_cpa_wired_online_work(struct work_struct *work)
 {
 	struct oplus_cpa *cpa =
@@ -718,8 +692,11 @@ static void oplus_cpa_wired_online_work(struct work_struct *work)
 	if (!READ_ONCE(cpa->status_reset)) {
 		chg_info("cpa status not reset\n");
 		if (cpa->retention_topic) {
-			if (cpa->cc_detect == CC_DETECT_NOTPLUG)
+			if (cpa->cc_detect == CC_DETECT_NOTPLUG ||
+			    oplus_wired_offline_clear_cpa_queue(cpa)) {
+				chg_info("cc_detect or offline clear cpa queue, cc_detect=%d\n", cpa->cc_detect);
 				schedule_work(&cpa->wired_offline_work);
+			}
 		} else {
 			schedule_work(&cpa->wired_offline_work);
 		}
@@ -776,6 +753,12 @@ static void oplus_cpa_wired_subs_callback(struct mms_subscribe *subs,
 				cpa->cc_detect == CC_DETECT_NOTPLUG)
 				schedule_work(&cpa->wired_offline_work);
 			break;
+		case WIRED_ITEM_PRESENT:
+			oplus_mms_get_item_data(cpa->wired_topic, id, &data, false);
+			cpa->wired_present = data.intval;
+			if (!cpa->wired_present)
+				cpa->wired_plugout_time = jiffies;
+			break;
 		default:
 			break;
 		}
@@ -804,6 +787,10 @@ static void oplus_cpa_subscribe_wired_topic(struct oplus_mms *topic, void *prv_d
 	cpa->wired_online = !!data.intval;
 	if (cpa->wired_online)
 		schedule_work(&cpa->chg_type_change_work);
+	oplus_mms_get_item_data(cpa->wired_topic, WIRED_ITEM_PRESENT, &data, true);
+	cpa->wired_present = !!data.intval;
+	if (!cpa->wired_present)
+		cpa->wired_plugout_time = jiffies;
 }
 
 static void oplus_cpa_vooc_subs_callback(struct mms_subscribe *subs,
@@ -1002,25 +989,6 @@ static int oplus_cpa_update_timeout(struct oplus_mms *mms, union mms_msg_data *d
 	return 0;
 }
 
-static int oplus_cpa_update_not_ready_protocol(struct oplus_mms *mms, union mms_msg_data *data)
-{
-	struct oplus_cpa *cpa;
-
-	if (mms == NULL) {
-		chg_err("mms is NULL");
-		return -EINVAL;
-	}
-	if (data == NULL) {
-		chg_err("data is NULL");
-		return -EINVAL;
-	}
-	cpa = oplus_mms_get_drvdata(mms);
-
-	data->intval = (int)cpa->not_ready_protocol_type;
-
-	return 0;
-}
-
 static void oplus_cpa_update(struct oplus_mms *mms, bool publish)
 {
 }
@@ -1042,12 +1010,6 @@ static struct mms_item oplus_cpa_item[] = {
 		.desc = {
 			.item_id = CPA_ITEM_TIMEOUT,
 			.update = oplus_cpa_update_timeout,
-		}
-	},
-	{
-		.desc = {
-			.item_id = CPA_ITEM_NOT_READY_PROTOCOL,
-			.update = oplus_cpa_update_not_ready_protocol,
 		}
 	},
 };
@@ -1252,7 +1214,6 @@ FOUND_NODE:
 				cpa->default_protocol_type |= BIT(data);
 		}
 	}
-	cpa->not_ready_protocol_type = cpa->default_protocol_type;
 
 	return 0;
 }
@@ -1276,7 +1237,6 @@ static int oplus_cpa_probe(struct platform_device *pdev)
 
 	cpa->current_protocol_type = CHG_PROTOCOL_INVALID;
 	cpa->default_protocol_type = BIT(CHG_PROTOCOL_BC12);
-	cpa->not_ready_protocol_type = cpa->default_protocol_type;
 	cpa->protocol_to_be_switched = 0;
 	cpa->protocol_disable_mask = 0;
 	cpa->protocol_supported_type = 0;
@@ -1457,7 +1417,6 @@ int oplus_cpa_protocol_ready(struct oplus_mms *topic, enum oplus_chg_protocol_ty
 
 	cpa = oplus_mms_get_drvdata(topic);
 	set_bit(type, &cpa->ready_protocol_type);
-	oplus_cpa_set_ready_protocol(cpa, type);
 
 	chg_info("%s ready, ready_protocol_type=0x%lx, default_protocol_type=0x%x\n",
 		 get_protocol_name_str(type),

@@ -123,7 +123,10 @@ int i2c_read(struct nfc_dev *nfc_dev, char *buf, size_t count, int timeout)
 	int ret;
 	struct i2c_dev *i2c_dev = &nfc_dev->i2c_dev;
 	struct platform_gpio *nfc_gpio = &nfc_dev->configs.gpio;
-
+ 	//#ifdef OPLUS_BUG_STABILITY
+	//IS_ENABLED(CONFIG_NXP_NFC_CLK_REQ_HIGH)
+	struct platform_configs *nfc_config = &nfc_dev->configs;
+	//#endif /*OPLUS_BUG_STABILITY*/
 	/*pr_debug("%s: reading %zu bytes.\n", __func__, count);*/
 
 	if (timeout > NCI_CMD_RSP_TIMEOUT_MS)
@@ -162,6 +165,17 @@ int i2c_read(struct nfc_dev *nfc_dev, char *buf, size_t count, int timeout)
 					}
 				}
 			}
+			//#ifdef OPLUS_BUG_STABILITY
+			//IS_ENABLED(CONFIG_NXP_NFC_CLK_REQ_HIGH)
+                        if(gpio_is_valid(nfc_gpio->clkreq)) {
+				if (nfc_config->sys_idle_clkreq) {
+					pr_err("%s: NFC sys_idle_clkreq -->recovering  state \n", __func__);
+					nfc_config->sys_idle_clkreq = false;
+        	                        ret = -EREMOTEIO;
+                                        goto err;
+				}
+                        }
+			//#endif /*OPLUS_BUG_STABILITY*/
 			i2c_disable_irq(nfc_dev);
 
 			if (gpio_get_value(nfc_gpio->irq))
@@ -676,6 +690,10 @@ int nfc_i2c_dev_suspend(struct device *device)
 	struct nfc_dev *nfc_dev = i2c_get_clientdata(client);
 	struct i2c_dev *i2c_dev = NULL;
 	struct platform_gpio *nfc_gpio = &nfc_dev->configs.gpio;
+	//#ifdef OPLUS_BUG_STABILITY
+	//IS_ENABLED(CONFIG_NXP_NFC_CLK_REQ_HIGH)
+	struct platform_configs *nfc_config = &nfc_dev->configs;
+	//#endif /*OPLUS_BUG_STABILITY*/
 	if (!nfc_dev) {
 		pr_err("%s: device doesn't exist anymore\n", __func__);
 		return -ENODEV;
@@ -688,9 +706,17 @@ int nfc_i2c_dev_suspend(struct device *device)
 	}
 	pr_debug("%s: irq_wake_up = %d", __func__, i2c_dev->irq_wake_up);
 
-	if(gpio_is_valid(nfc_gpio->clkreq)){
-		pr_debug("%s: clkreq = %d \n",__func__ ,gpio_get_value(nfc_gpio->clkreq));
+	//#ifdef OPLUS_BUG_STABILITY
+	//IS_ENABLED(CONFIG_NXP_NFC_CLK_REQ_HIGH)
+	if(gpio_is_valid(nfc_gpio->clkreq)) {
+		if (gpio_get_value(nfc_gpio->clkreq)) {
+			nfc_config->sys_idle_clkreq = true;
+		} else {
+			nfc_config->sys_idle_clkreq = false;
+		}
+		pr_err("%s: clkreq = %d , sys_idle_clkreq = %d  \n",__func__ ,gpio_get_value(nfc_gpio->clkreq) , nfc_config->sys_idle_clkreq);
 	}
+	//#endif /*OPLUS_BUG_STABILITY*/
 
 	return 0;
 }

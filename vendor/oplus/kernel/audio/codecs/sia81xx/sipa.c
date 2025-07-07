@@ -102,7 +102,7 @@ enum {
 #define SIA81XX_DISABLE_LEVEL				(0)
 
 /* 10us > pulse width > 0.75us */
-#define MIN_OWI_PULSE_GAP_TIME_US			(1)
+#define MIN_OWI_PULSE_GAP_TIME_US			(10)
 #define MAX_OWI_PULSE_GAP_TIME_US			(160)
 #define MAX_OWI_RETRY_TIMES					(10)
 #define MIN_OWI_MODE						(1)

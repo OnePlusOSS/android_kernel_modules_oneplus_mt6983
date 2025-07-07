@@ -4178,11 +4178,19 @@ mtk_cfg80211_change_station(struct wiphy *wiphy,
 			params->ht_capa->mcs.tx_params;
 		rCmdUpdate.fgIsSupHt = TRUE;
 	}
-	/* vht */
 
+	/* vht */
 	if (params->vht_capa != NULL) {
-		/* rCmdUpdate.rVHtCap */
-		/* rCmdUpdate.rVHtCap */
+		rCmdUpdate.rVHtCap.u4CapInfo = params->vht_capa->vht_cap_info;
+		rCmdUpdate.rVHtCap.rVMCS.u2RxMcsMap =
+				params->vht_capa->supp_mcs.rx_mcs_map;
+		rCmdUpdate.rVHtCap.rVMCS.u2RxHighest =
+				params->vht_capa->supp_mcs.rx_highest;
+		rCmdUpdate.rVHtCap.rVMCS.u2TxMcsMap =
+				params->vht_capa->supp_mcs.tx_mcs_map;
+		rCmdUpdate.rVHtCap.rVMCS.u2TxHighest =
+				params->vht_capa->supp_mcs.tx_highest;
+		rCmdUpdate.fgIsSupVht = TRUE;
 	}
 
 	/* update a TDLS peer record */

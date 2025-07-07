@@ -189,6 +189,12 @@ else
     ccflags-y += -DCFG_TRI_TX_RING=0
 endif
 
+ifneq ($(filter 6789, $(WLAN_CHIP_ID)),)
+    ccflags-y += -DCFG_SUPPORT_CUSTOM_CHANNEL=1
+else
+    ccflags-y += -DCFG_SUPPORT_CUSTOM_CHANNEL=0
+endif
+
 ifneq ($(findstring 5_0,$(MTK_COMBO_CHIP)),)
 ccflags-y:=$(filter-out -USOC5_0,$(ccflags-y))
 ccflags-y += -DSOC5_0

@@ -8821,10 +8821,12 @@ void kalFbNotifierUnReg(void)
 void kalIndicateChannelSwitch(IN struct GLUE_INFO *prGlueInfo,
 				IN enum ENUM_CHNL_EXT eSco,
 				IN uint8_t ucChannelNum,
-				IN enum ENUM_BAND eBand)
+				IN enum ENUM_BAND eBand,
+				IN uint8_t ucBssIndex)
 {
 	struct cfg80211_chan_def chandef;
 	struct ieee80211_channel *prChannel = NULL;
+	struct net_device *prDevHandler;
 	enum nl80211_channel_type rChannelType;
 
 #if (CFG_SUPPORT_WIFI_6G == 1)
@@ -8853,6 +8855,13 @@ void kalIndicateChannelSwitch(IN struct GLUE_INFO *prGlueInfo,
 		return;
 	}
 
+	prDevHandler = wlanGetNetDev(prGlueInfo, ucBssIndex);
+	if (!prDevHandler) {
+		DBGLOG(REQ, ERROR, "NetDev is null BssIndex[%d]!\n",
+			ucBssIndex);
+		return;
+	}
+
 	switch (eSco) {
 	case CHNL_EXT_SCN:
 		rChannelType = NL80211_CHAN_NO_HT;
@@ -8875,7 +8884,10 @@ void kalIndicateChannelSwitch(IN struct GLUE_INFO *prGlueInfo,
 	DBGLOG(REQ, STATE, "DFS channel switch to %d\n", ucChannelNum);
 
 	cfg80211_chandef_create(&chandef, prChannel, rChannelType);
+
+	mutex_lock(&prDevHandler->ieee80211_ptr->mtx);
 	cfg80211_ch_switch_notify(prGlueInfo->prDevHandler, &chandef);
+	mutex_unlock(&prDevHandler->ieee80211_ptr->mtx);
 }
 #endif
 

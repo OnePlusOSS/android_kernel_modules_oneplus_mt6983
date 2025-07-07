@@ -544,7 +544,6 @@ enum {
 
 struct gesture_symbol {
 	u8 double_tap                 : 1;
-	u8 single_tap                 : 1;
 	u8 alphabet_line_2_top        : 1;
 	u8 alphabet_line_2_bottom     : 1;
 	u8 alphabet_line_2_left       : 1;
@@ -563,7 +562,8 @@ struct gesture_symbol {
 	u8 alphabet_two_line_2_bottom : 1;
 	u8 alphabet_F                 : 1;
 	u8 alphabet_AT                : 1;
-	u8 reserve0                   : 5;
+	u8 single_tap                 : 1;
+	u8 reserve0                   : 4;
 };
 
 struct report_info_block {

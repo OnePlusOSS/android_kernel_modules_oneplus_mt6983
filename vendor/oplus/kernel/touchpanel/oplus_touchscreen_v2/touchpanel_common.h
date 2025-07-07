@@ -46,6 +46,7 @@
 /*********PART2:Define Area**********************/
 
 #define PAGESIZE 512
+#define MAX_AIINFO_SIZE 4096
 #define MAX_GESTURE_COORD 6
 #define MAX_FINGER_NUM 10
 
@@ -177,6 +178,9 @@
 
 #define MAX_TEMPERATURE             70
 #define MIN_TEMPERATURE             -40
+
+#define MAX_AIUNIT_GET_NUM          30
+#define MAX_AIUNIT_SET_NUM          7
 /*********PART3:Struct Area**********************/
 typedef enum {
 	TYPE_ONCELL = 0,   /*such as synaptic s3706*/
@@ -232,6 +236,16 @@ typedef enum {
 	FW_NORMAL,     /*fw might update, depend on the fw id*/
 	FW_ABNORMAL,   /*fw abnormal, need update*/
 } fw_check_state;
+
+/******For Game Hot Zone******/
+struct tp_aiunit_game_info {
+	u8  gametype;
+	u8  aiunit_game_type;
+	u16 left;
+	u16 top;
+	u16 right;
+	u16 bottom;
+};
 
 typedef enum {
 	FW_UPDATE_SUCCESS,
@@ -1005,6 +1019,11 @@ struct touchpanel_data {
 	bool force_bus_ready_support;                       /*force bus ready to true afer notify*/
 	bool skip_reinit_device_support;                    /*spi need skip complete_all, prevent error in access reg*/
 	bool edge_pull_out_support;                         /*feature used to edge coordinates pull out*/
+	bool aiunit_game_info_support;                      /*feature used to aiunit game info*/
+	u8 aiunit_game_get_num;
+	u8 aiunit_game_set_num;
+	int aiunit_game_enable;
+	u32 aiunit_game_valid_bits;
 	/******For FW update area********/
 	bool lpwg_fw_support;                               /*feature to support low power wakeup gesture firmware and effect firmware are separated.*/
 	bool loading_fw;                                    /*touchpanel FW updating*/
@@ -1098,6 +1117,9 @@ struct touchpanel_data {
 	struct touchpanel_last_x_y_point   last_x_y_point[MAX_FINGER_NUM];        /*last_x_y_point data*/
 	struct exception_data    exception_data;			/*exception_data monitor data*/
 
+	/******For Game Hot Zone*******/
+	struct tp_aiunit_game_info tp_ic_aiunit_game_info[MAX_AIUNIT_SET_NUM];    /*tp ic aiunit game info*/
+	struct tp_aiunit_game_info tp_get_aiunit_game_info[MAX_AIUNIT_GET_NUM];   /*tp get aiunit game info*/
 	/******For prevention area********/
 	struct mutex		report_mutex;                /*mutex for lock input report flow*/
 	struct kernel_grip_info *grip_info;	/*grip setting and resources*/
@@ -1391,6 +1413,7 @@ struct oplus_touchpanel_operations {
 	void (*get_pen_points)       (void *chip_data, struct pen_info *pen_info);
 	int (*pen_uplink_msg)(void *chip_data, u32 buf_len, u8 *buf, u32 *out_len);
 	int (*pen_downlink_msg)(void *chip_data, u32 cmd, u32 buf_len, u8 *buf);
+	void (*aiunit_game_info)(void *chip_data);
 };
 
 struct aging_test_proc_operations {

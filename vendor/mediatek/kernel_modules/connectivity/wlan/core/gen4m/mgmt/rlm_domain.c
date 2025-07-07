@@ -1756,16 +1756,16 @@ struct DOMAIN_INFO_ENTRY *rlmDomainGetDomainInfo(struct ADAPTER *prAdapter)
 
 	if (prAdapter->prDomainInfo)
 		return prAdapter->prDomainInfo;
-    //#ifdef OPLUS_BUG_COMPATIBILITY
-    //PSW.CN.WiFi.BASIC.HARDWARE.2014076, 2021/08/18
-    //Add new region cfg implementation
-    #if (LINUX_VERSION_CODE < KERNEL_VERSION(5, 4, 0))
-    prDomainInfo = oplusGetActiveDomainInfo(prAdapter);
-    if(prDomainInfo) {
-        return prDomainInfo;
-    }
-    #endif
-    //#endif 
+	//#ifdef OPLUS_BUG_COMPATIBILITY
+	//PSW.CN.WiFi.BASIC.HARDWARE.2014076, 2021/08/18
+	//Add new region cfg implementation
+	#if ((LINUX_VERSION_CODE < KERNEL_VERSION(5, 4, 0)) || CFG_SUPPORT_CUSTOM_CHANNEL == 1)
+	prDomainInfo = oplusGetActiveDomainInfo(prAdapter);
+	if(prDomainInfo) {
+		return prDomainInfo;
+	}
+	#endif
+	//#endif
 	prRegInfo = &prAdapter->prGlueInfo->rRegInfo;
 
 	DBGLOG(RLM, TRACE, "eRegChannelListMap=%d, u2CountryCode=0x%04x\n",
@@ -2370,16 +2370,16 @@ void rlmDomainSendPassiveScanInfoCmd(struct ADAPTER *prAdapter)
 	       prAdapter->rWifiVar.u2CountryCode);
 
 	u2TargetCountryCode = prAdapter->rWifiVar.u2CountryCode;
-    //#ifdef OPLUS_BUG_COMPATIBILITY
-    //PSW.CN.WiFi.BASIC.HARDWARE.2014076, 2021/08/18
-    //Add new region cfg implementation
-    #if (LINUX_VERSION_CODE < KERNEL_VERSION(5, 4, 0))
-    if(oplusSendPassiveDomainInfo(prAdapter)){
-        cnmMemFree(prAdapter, prCmd);
-        return;
-    }
-    #endif
-    //#endif /* OPLUS_BUG_COMPATIBILITY */
+	//#ifdef OPLUS_BUG_COMPATIBILITY
+	//PSW.CN.WiFi.BASIC.HARDWARE.2014076, 2021/08/18
+	//Add new region cfg implementation
+	#if ((LINUX_VERSION_CODE < KERNEL_VERSION(5, 4, 0)) || CFG_SUPPORT_CUSTOM_CHANNEL == 1)
+		if(oplusSendPassiveDomainInfo(prAdapter)){
+			cnmMemFree(prAdapter, prCmd);
+		return;
+	}
+	#endif
+	//#endif /* OPLUS_BUG_COMPATIBILITY */
 	for (i = 0; i < REG_DOMAIN_PASSIVE_GROUP_NUM; i++) {
 		prDomainInfo = &arSupportedRegDomains_Passive[i];
 

@@ -1086,12 +1086,27 @@ void unset_inherit_ux(struct task_struct *task, int type)
 }
 EXPORT_SYMBOL_GPL(unset_inherit_ux);
 
-bool im_mali(char *comm)
+#ifndef CONFIG_OPLUS_SYSTEM_KERNEL_QCOM
+bool im_mali(const char *comm)
 {
-	return !strcmp(comm, "mali-event-hand") || !strcmp(comm, "mali-cmar-backe") ||
-		!strcmp(comm, "mali-mem-purge") || !strcmp(comm, "mali-cpu-comman") ||
-		!strcmp(comm, "mali-compiler");
+	if (comm == NULL) {
+		return false;
+	}
+
+	if (!strncmp(comm, "mali-", 5)) {
+		const char *postfix = comm + 5;
+		return !strcmp(postfix, "event-hand") || !strcmp(postfix, "cmar-backe") ||
+			!strcmp(postfix, "mem-purge") || !strcmp(postfix, "cpu-comman") ||
+			!strcmp(postfix, "compiler");
+	}
+	return false;
 }
+#else
+inline bool im_mali(const char *comm) {
+	return false;
+}
+#endif
+
 
 bool cgroup_check_set_sched_assist_boost(char *comm)
 {
@@ -1364,6 +1379,62 @@ bool sa_rt_skip_ux_cpu(int cpu)
 }
 EXPORT_SYMBOL(sa_rt_skip_ux_cpu);
 
+void opt_ss_lock_contention(struct task_struct *p, unsigned long old_im, int new_im)
+{
+	struct rq_flags rf;
+	struct rq *rq;
+	/* bool queued, running; */
+	int ux_state;
+
+	if (new_im == IM_FLAG_SS_LOCK_OWNER) {
+		bool skip_scene = sched_assist_scene(SA_CAMERA);
+
+		if(unlikely(!global_sched_assist_enabled || skip_scene))
+			return;
+	}
+
+	rq = task_rq_lock(p, &rf);
+	update_rq_clock(rq);
+
+	ux_state = oplus_get_ux_state(p);
+	if ((ux_state != 0) && !(ux_state & SA_TYPE_LISTPICK)) {
+		task_rq_unlock(rq, p, &rf);
+		return;
+	}
+
+	/* When p leave critical section, clear the specific ux state and
+	 * remove from ux list if it's ux state is zero.
+	 */
+	if (test_bit(IM_FLAG_SS_LOCK_OWNER, &old_im)) {
+		ux_state &= ~SA_TYPE_LISTPICK;
+		oplus_set_ux_state_lock(p, ux_state, false);
+
+		goto out;
+	}
+
+	ux_state |= SA_TYPE_LISTPICK;
+
+	oplus_set_ux_state_lock(p, ux_state, false);
+
+	/* oplus_set_ux_state_lock do resched_curr if need */
+	/*queued = task_on_rq_queued(p);
+	running = task_current(rq, p);*/
+
+	/* If task is current running, put it into ux list. If not, requeue and resched. */
+	/*if (!running && queued) {
+		resched_curr(rq);
+	}
+
+	if (unlikely(global_debug_enabled & DEBUG_FTRACE))
+		trace_printk("comm=%-12s pid=%d tgid=%d old_im=%d new_im=%d queued=%d running=%d\n",
+			p->comm, p->pid, p->tgid, old_im, new_im, queued, running);*/
+
+out:
+	if (unlikely(global_debug_enabled & DEBUG_FTRACE))
+		trace_printk("comm=%-12s pid=%d tgid=%d old_im=0x%08lx new_im=%d ux_state=%d\n",
+			p->comm, p->pid, p->tgid, old_im, new_im, oplus_get_ux_state(p));
+	task_rq_unlock(rq, p, &rf);
+}
 
 ssize_t oplus_show_cpus(const struct cpumask *mask, char *buf)
 {

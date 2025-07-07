@@ -72,6 +72,9 @@
 #include <soc/oplus/dfr/oplus_bsp_dfr_ubt.h>
 #endif /* CONFIG_OPLUS_BSP_DFR_USERSPACE_BACKTRACE */
 
+#include <linux/blkdev.h>
+#include <linux/notifier.h>
+
 #define SEQ_printf(m, x...)                                                    \
 	do {                                                                   \
 		if (m)                                                         \
@@ -90,6 +93,7 @@
 #define BLOCK_SIZE_EMMC 512
 #define BLOCK_SIZE_UFS 4096
 
+#define SHUTDOWN_MAGIC "ShutDown"
 #define SHUTDOWN_MAGIC_LEN 16
 
 #define ShutDownTO 0x9B
@@ -113,6 +117,10 @@
 #define SHUTDOWN_TIMEOUNT_AM 46
 #define SHUTDOWN_TIMEOUNT_BC 47
 #define SHUTDOWN_STAGE_INIT_POFF 70
+#define SHUTDOWN_STAGE_HARDWARE 100
+#define SHUTDOWN_STAGE_UNKNOWN 101
+#define SHUTDOWN_TRIGGER_RESTORE 102
+#define SHUTDOWN_TRIGGER_STORE 103
 #define SHUTDOWN_RUS_MIN 255
 #define SHUTDOWN_TOTAL_TIME_MIN 60
 #define SHUTDOWN_DEFAULT_NATIVE_TIME 60
@@ -122,6 +130,22 @@
 #define SHUTDOWN_DELAY_ENABLE 192
 #define SHUTDOWN_DELAY_DISABLE 128
 #define KE_LOG_COLLECT_TIMEOUT msecs_to_jiffies(10000)
+
+/* Used to convert the name of a macro definition into a string */
+#define TO_STRING(x) #x
+
+#define PATH_OPLUS_RESERVE_1 "/dev/block/by-name/oplusreserve1"
+#define PARTLABEL_OPLUS_RESERVE_1 "PARTLABEL=oplusreserve1"
+
+#define OPLUS_RESERVE1_SHUDOWN_RECORD_UFS_OFFSET (1305 * 4096)
+#define OPLUS_RESERVE1_SHUDOWN_RECORD_EMMC_OFFSET (9952 * 512)
+
+#define RETRY_COUNT_FOR_GET_DEVICE 3
+#define WAITING_FOR_GET_DEVICE 1000
+
+#define COUNT_SHUTDOWN_STAGE 5
+
+static bool ufs_flag = true;
 
 static struct kmsg_dumper shutdown_kmsg_dumper;
 
@@ -177,6 +201,9 @@ static int shutdown_kthread(void *data)
 unsigned int g_shutdown_flag = 0;
 EXPORT_SYMBOL(g_shutdown_flag);
 
+/* This flag indicates that the checkpoint data from the last shutdown has been successfully restored */
+static int flag_restored = 0;
+
 static int shutdown_detect_func(void *dummy);
 
 static void shutdown_timeout_flag_write(int timeout);
@@ -185,10 +212,319 @@ static int shutdown_timeout_flag_write_now(void *args);
 #if IS_ENABLED (CONFIG_OPLUS_BSP_DFR_USERSPACE_BACKTRACE)
 static void shutdown_dump_ubt(void);
 #endif /* CONFIG_OPLUS_BSP_DFR_USERSPACE_BACKTRACE */
+static void try_restore(void);
 
 extern int creds_change_dac(void);
 extern int shutdown_kernel_log_save(void *args);
 extern void shutdown_dump_android_log(void);
+
+struct shutdown_stage_struct {
+	long stage_id;
+	unsigned long long uptime; /* Milliseconds since the current boot */
+	unsigned long long utc; /* Seconds since 1970/01/01 */
+};
+
+struct shutdown_record_struct {
+	char magic[SHUTDOWN_MAGIC_LEN];
+	unsigned long action; /* Refer to `SYS_RESTART|SYS_HALT|SYS_POWER_OFF` in `include/linux/kernel.h` */
+	struct shutdown_stage_struct stages[COUNT_SHUTDOWN_STAGE];
+};
+
+static struct shutdown_record_struct last_shutdown_record = {0};
+
+static struct shutdown_record_struct current_shutdown_record = {
+	.magic = SHUTDOWN_MAGIC,
+	.stages = {
+		{ SHUTDOWN_STAGE_SYSTEMSERVER },
+		{ SHUTDOWN_STAGE_INIT }, /* Note: Used in reboot scenarios */
+		{ SHUTDOWN_STAGE_INIT_POFF }, /* Note: Used in shutdown scenarios */
+		{ SHUTDOWN_STAGE_KERNEL },
+		{ SHUTDOWN_STAGE_HARDWARE }
+	}
+};
+
+#define LENGTH_SHUTDOWN_RECORD sizeof(current_shutdown_record)
+
+/* This function is copied from the function with the same name in oplus_phoenix/oplus_kmsg_wb.c */
+static struct block_device *get_reserve_partition_bdev(void) {
+	struct block_device *bdev = NULL;
+	int retry_wait_for_device = RETRY_COUNT_FOR_GET_DEVICE;
+	dev_t dev;
+#if LINUX_VERSION_CODE >= KERNEL_VERSION(6, 6, 0)
+	int ret = 0;
+#endif
+
+	while (retry_wait_for_device--) {
+#if LINUX_VERSION_CODE >= KERNEL_VERSION(6, 6, 0)
+		ret = lookup_bdev(PATH_OPLUS_RESERVE_1, &dev);
+		if (ret) {
+			pr_err("failed to get bdev! ret = %d\n", ret);
+			msleep_interruptible(WAITING_FOR_GET_DEVICE);
+			continue;
+		}
+#else
+		dev = name_to_dev_t(PARTLABEL_OPLUS_RESERVE_1);
+#endif
+		if (dev != 0) {
+#if LINUX_VERSION_CODE >= KERNEL_VERSION(6, 6, 0)
+			bdev = blkdev_get_by_dev(dev, BLK_OPEN_READ | BLK_OPEN_WRITE | BLK_OPEN_EXCL, THIS_MODULE, NULL);
+#else
+			bdev = blkdev_get_by_dev(dev, FMODE_READ | FMODE_WRITE | FMODE_EXCL, THIS_MODULE);
+#endif
+			if (!IS_ERR(bdev)) {
+				pr_err("success to get dev block\n");
+				return bdev;
+			}
+		}
+		pr_err("Failed to get dev block, retry %d\n", retry_wait_for_device);
+		msleep_interruptible(WAITING_FOR_GET_DEVICE);
+	}
+	pr_err("Failed to get dev block final\n");
+	return NULL;
+}
+
+/*
+ * This function is copied from the function `read_header` in oplus_phoenix/oplus_kmsg_wb.c.
+ * The return value of 0 indicates success, while any other value indicates failure.
+ */
+static int read_flash(struct block_device *bdev, loff_t ki_pos, void *iov_base, size_t iov_len) {
+	struct file dev_map_file;
+	struct kiocb kiocb;
+	struct iov_iter iter;
+	struct kvec iov;
+	int read_size = 0;
+
+	memset(&dev_map_file, 0, sizeof(struct file));
+
+	dev_map_file.f_mapping = bdev->bd_inode->i_mapping;
+	dev_map_file.f_flags = O_DSYNC | __O_SYNC | O_NOATIME;
+	dev_map_file.f_inode = bdev->bd_inode;
+
+	init_sync_kiocb(&kiocb, &dev_map_file);
+	kiocb.ki_pos = ki_pos;
+	iov.iov_base = iov_base;
+	iov.iov_len = iov_len;
+	iov_iter_kvec(&iter, READ, &iov, 1, iov_len);
+
+	read_size = generic_file_read_iter(&kiocb, &iter);
+	if (read_size <= 0) {
+		pr_err("generic_file_read_iter failed, read_size=%d\n", read_size);
+		return read_size;
+	}
+
+	return 0;
+}
+
+#if LINUX_VERSION_CODE > KERNEL_VERSION(5, 15, 0)
+static int blkdev_fsync(struct file *filp, loff_t start, loff_t end,
+						int datasync) {
+	struct inode *bd_inode = filp->f_mapping->host;
+	struct block_device *bdev = I_BDEV(bd_inode);
+	int error;
+
+	error = file_write_and_wait_range(filp, start, end);
+	if (error)
+		return error;
+
+	/*
+	 * There is no need to serialise calls to blkdev_issue_flush with
+	 * i_mutex and doing so causes performance issues with concurrent
+	 * O_SYNC writers to a block device.
+	 */
+	error = blkdev_issue_flush(bdev);
+	if (error == -EOPNOTSUPP)
+		error = 0;
+
+	return error;
+}
+#endif
+
+/*
+ * This function is copied from the function `write_header` in oplus_phoenix/oplus_kmsg_wb.c.
+ * The return value of 0 indicates success, while any other value indicates failure.
+ */
+static int write_flash(struct block_device *bdev, loff_t ki_pos, void *iov_base, size_t iov_len) {
+	struct kiocb kiocb;
+	struct iov_iter iter;
+	struct kvec iov;
+	const struct file_operations f_op = {.fsync = blkdev_fsync};
+	struct file dev_map_file;
+	int ret = 0;
+
+	memset(&dev_map_file, 0, sizeof(struct file));
+
+	dev_map_file.f_mapping = bdev->bd_inode->i_mapping;
+	dev_map_file.f_flags = O_DSYNC | __O_SYNC | O_NOATIME;
+	dev_map_file.f_inode = bdev->bd_inode;
+#if LINUX_VERSION_CODE > KERNEL_VERSION(6, 1, 0)
+	dev_map_file.f_iocb_flags = IOCB_DSYNC;
+#endif
+
+	init_sync_kiocb(&kiocb, &dev_map_file);
+	kiocb.ki_pos = ki_pos;
+	iov.iov_base = iov_base;
+	iov.iov_len = iov_len;
+	iov_iter_kvec(&iter, WRITE, &iov, 1, iov_len);
+
+	ret = generic_write_checks(&kiocb, &iter);
+	if (ret <= 0) {
+		pr_err("generic_write_checks failed, ret=%d\n", ret);
+		return ret;
+	}
+
+#if LINUX_VERSION_CODE > KERNEL_VERSION(6, 1, 0)
+	ret = generic_perform_write(&kiocb, &iter);
+#else
+	ret = generic_perform_write(&dev_map_file, &iter, kiocb.ki_pos);
+#endif
+	if (ret <= 0) {
+		pr_err("generic_perform_write failed, ret=%d\n", ret);
+		return ret;
+	}
+
+	dev_map_file.f_op = &f_op;
+	kiocb.ki_pos += ret;
+
+	ret = generic_write_sync(&kiocb, ret);
+	if (ret < 0) {
+		pr_err("generic_write_sync failed, ret=%d\n", ret);
+		return ret;
+	}
+
+	return 0;
+}
+
+/* The return value of 0 indicates success, while any other value indicates failure. */
+static int clear_last_shutdown_record(struct block_device *bdev) {
+	char buffer[LENGTH_SHUTDOWN_RECORD] = {0};
+	loff_t ki_pos;
+
+	if (ufs_flag) {
+		ki_pos = OPLUS_RESERVE1_SHUDOWN_RECORD_UFS_OFFSET;
+	} else {
+		ki_pos = OPLUS_RESERVE1_SHUDOWN_RECORD_EMMC_OFFSET;
+	}
+
+	return write_flash(bdev, ki_pos, buffer, LENGTH_SHUTDOWN_RECORD);
+}
+
+/* The return value of 0 indicates success, while any other value indicates failure. */
+static int restore_last_shutdown_record(struct block_device *bdev) {
+	loff_t ki_pos;
+	int ret;
+
+	if (ufs_flag) {
+		ki_pos = OPLUS_RESERVE1_SHUDOWN_RECORD_UFS_OFFSET;
+	} else {
+		ki_pos = OPLUS_RESERVE1_SHUDOWN_RECORD_EMMC_OFFSET;
+	}
+
+	ret = read_flash(bdev, ki_pos, &last_shutdown_record, LENGTH_SHUTDOWN_RECORD);
+	if (ret) {
+		pr_err("read_flash failed, ret=%d\n", ret);
+	} else if (strncmp(last_shutdown_record.magic, SHUTDOWN_MAGIC, sizeof(SHUTDOWN_MAGIC) - 1)) {
+		last_shutdown_record.magic[sizeof(SHUTDOWN_MAGIC) - 1] = '\0'; /* Avoid continuous printing */
+		pr_err("magic invalid: %s\n", last_shutdown_record.magic);
+	} else {
+		pr_info("magic valid\n");
+	}
+
+	return clear_last_shutdown_record(bdev);
+}
+
+/* To get the millisecond value from the start of the kernel boot. */
+static unsigned long long get_uptime_ms(void) {
+	struct timespec64 ts = {0};
+	ktime_get_boottime_ts64(&ts);
+	return (unsigned long long)ts.tv_sec * 1000 + ts.tv_nsec / 1000000;
+}
+
+static void record_shutdown_stage(long stage_id) {
+	size_t i;
+	struct timespec64 ts;
+
+	for (i = 0; i < COUNT_SHUTDOWN_STAGE; i++) {
+		if (current_shutdown_record.stages[i].stage_id == stage_id) {
+			current_shutdown_record.stages[i].uptime = get_uptime_ms();
+
+			ktime_get_real_ts64(&ts);
+			current_shutdown_record.stages[i].utc = ts.tv_sec;
+
+			break;
+		}
+	}
+}
+
+/*
+ * This function is used in the reboot notifier callback.
+ * Note: To ensure other callbacks are not affected, it always returns NOTIFY_DONE
+ */
+static int store_current_shutdown_record(struct notifier_block *nb, unsigned long action, void *data) {
+	loff_t ki_pos;
+	struct block_device *bdev;
+
+	record_shutdown_stage(SHUTDOWN_STAGE_HARDWARE);
+
+	current_shutdown_record.action = action;
+
+	bdev = get_reserve_partition_bdev();
+	if (!bdev) {
+		pr_err("get_reserve_partition_bdev fail, err=%ld\n", PTR_ERR(bdev));
+
+		return NOTIFY_DONE;
+	}
+
+	if (ufs_flag) {
+		ki_pos = OPLUS_RESERVE1_SHUDOWN_RECORD_UFS_OFFSET;
+	} else {
+		ki_pos = OPLUS_RESERVE1_SHUDOWN_RECORD_EMMC_OFFSET;
+	}
+
+	write_flash(bdev, ki_pos, &current_shutdown_record, LENGTH_SHUTDOWN_RECORD);
+
+#if LINUX_VERSION_CODE >= KERNEL_VERSION(6, 6, 0)
+	blkdev_put(bdev, NULL);
+#else
+	blkdev_put(bdev, FMODE_READ | FMODE_WRITE | FMODE_EXCL);
+#endif
+
+	return NOTIFY_DONE;
+}
+
+struct notifier_block reboot_nb = {
+	.notifier_call = store_current_shutdown_record,
+	.priority = INT_MIN, /* The lowest priority, to be called last */
+};
+
+static char * get_shutdown_stage_name(long stage_id) {
+	switch (stage_id) {
+	case SHUTDOWN_STAGE_KERNEL:
+		return TO_STRING(SHUTDOWN_STAGE_KERNEL);
+	case SHUTDOWN_STAGE_INIT:
+		return TO_STRING(SHUTDOWN_STAGE_INIT);
+	case SHUTDOWN_STAGE_SYSTEMSERVER:
+		return TO_STRING(SHUTDOWN_STAGE_SYSTEMSERVER);
+	case SHUTDOWN_STAGE_INIT_POFF:
+		return TO_STRING(SHUTDOWN_STAGE_INIT_POFF);
+	case SHUTDOWN_STAGE_HARDWARE:
+		return TO_STRING(SHUTDOWN_STAGE_HARDWARE);
+	default:
+		return TO_STRING(SHUTDOWN_STAGE_UNKNOWN);
+	}
+}
+
+static char * get_action_name(long action) {
+	switch (action) {
+	case SYS_RESTART:
+		return TO_STRING(SYS_RESTART);
+	case SYS_HALT:
+		return TO_STRING(SYS_HALT);
+	case SYS_POWER_OFF:
+		return TO_STRING(SYS_POWER_OFF);
+	default:
+		return TO_STRING(SHUTDOWN_STAGE_UNKNOWN);
+	}
+}
 
 #if (LINUX_VERSION_CODE < KERNEL_VERSION(5, 10, 0))
 static struct timespec current_kernel_time(void)
@@ -241,6 +577,8 @@ static ssize_t shutdown_detect_trigger(struct file *filp, const char *ubuf,
 	if (ret < 0) {
 		return ret;
 	}
+
+	record_shutdown_stage(val);
 
 	if (val == SHUTDOWN_STAGE_INIT_POFF) {
 		is_shutdows = true;
@@ -414,6 +752,12 @@ static ssize_t shutdown_detect_trigger(struct file *filp, const char *ubuf,
 	case SHUTDOWN_TIMEOUNT_BC:
 		pr_err("shutdown_detect_timeout: SendShutdownBroadcast timeout\n");
 		break;
+	case SHUTDOWN_TRIGGER_RESTORE:/* 102 */
+		try_restore();
+		break;
+	case SHUTDOWN_TRIGGER_STORE:/* 103 */
+		store_current_shutdown_record(NULL, 0, NULL);
+		break;
 	default:
 		break;
 	}
@@ -431,6 +775,29 @@ static ssize_t shutdown_detect_trigger(struct file *filp, const char *ubuf,
 
 static int shutdown_detect_show(struct seq_file *m, void *v)
 {
+	size_t i;
+	struct rtc_time tm;
+
+	SEQ_printf(m, "=== Last shutdown record ===\n");
+	if (!strncmp(last_shutdown_record.magic, SHUTDOWN_MAGIC, SHUTDOWN_MAGIC_LEN)) {
+		SEQ_printf(m, "SHUTDOWN_ACTION | %ld:%s\n", last_shutdown_record.action, get_action_name(last_shutdown_record.action));
+
+		for (i = 0; i < COUNT_SHUTDOWN_STAGE; i++) {
+			if (last_shutdown_record.stages[i].uptime != 0) {
+				/* Need to add 8 hours because China Standard Time (CST) is 8 hours ahead of UTC */
+				rtc_time64_to_tm(last_shutdown_record.stages[i].utc + 8 * 3600, &tm);
+
+				SEQ_printf(m, "%s | %llu | %04d/%02d/%02d %02d:%02d:%02d\n",
+						get_shutdown_stage_name(last_shutdown_record.stages[i].stage_id),
+						last_shutdown_record.stages[i].uptime,
+						tm.tm_year + 1900, tm.tm_mon + 1, tm.tm_mday, tm.tm_hour, tm.tm_min, tm.tm_sec);
+			}
+		}
+	} else {
+		SEQ_printf(m, "SHUTDOWN_MAGIC_INVALID\n");
+	}
+	SEQ_printf(m, "=== Last shutdown record ===\n\n");
+
 	SEQ_printf(m, "=== shutdown_detect controller ===\n");
 	SEQ_printf(m, "0:   shutdown_detect abort\n");
 	SEQ_printf(m, "20:   shutdown_detect systemcall reboot phase\n");
@@ -543,7 +910,7 @@ static int shutdown_timeout_flag_write_now(void *args)
 
 	offsize = OPLUS_SHUTDOWN_FLAG_OFFSET;
 
-	strncpy(shutdown_flag.magic, "ShutDown", SHUTDOWN_MAGIC_LEN);
+	strncpy(shutdown_flag.magic, SHUTDOWN_MAGIC, SHUTDOWN_MAGIC_LEN);
 	if (gtimeout) {
 		shutdown_flag.shutdown_err = ShutDownTO;
 	} else {
@@ -742,14 +1109,57 @@ static void shutdown_timer_func(struct timer_list *t)
 	return;
 }
 
+static int restore_thread(void *arg)
+{
+	struct block_device *bdev = NULL;
+	int ret;
+
+	/* Get the last shutdown record from oplusreserve1 */
+	bdev = get_reserve_partition_bdev();
+	if (!bdev) {
+		pr_err("get_reserve_partition_bdev fail, err=%ld\n", PTR_ERR(bdev));
+	} else {
+		ret = restore_last_shutdown_record(bdev);
+		if (ret) {
+			pr_err("restore_last_shutdown_record fail, ret=%d\n", ret);
+		} else {
+			pr_info("Last shutdown checkpoint data has been successfully restored");
+			flag_restored = 1;
+		}
+
+#if LINUX_VERSION_CODE >= KERNEL_VERSION(6, 6, 0)
+		blkdev_put(bdev, NULL);
+#else
+		blkdev_put(bdev, FMODE_READ | FMODE_WRITE | FMODE_EXCL);
+#endif
+	}
+
+	return 0;
+}
+
+static void try_restore(void) {
+	struct task_struct *tsk;
+
+	if (flag_restored) {
+	pr_err("The last shutdown checkpoint data has been restored.");
+		return;
+	}
+
+	tsk = kthread_run(restore_thread, NULL, "restore_thread");
+	if (!tsk) {
+		pr_err("kthread init failed\n");
+	}
+}
+
 static int __init init_shutdown_detect_ctrl(void)
 {
 	struct proc_dir_entry *pe;
+
 	pr_err("shutdown_detect:register shutdown_detect interface\n");
 	pe = proc_create("shutdown_detect", 0664, NULL, &shutdown_detect_fops);
 	if (!pe) {
 		pr_err("shutdown_detect:Failed to register shutdown_detect interface\n");
-		return -ENOMEM;
+		goto EXIT;
 	}
 #if (LINUX_VERSION_CODE < KERNEL_VERSION(4, 9, 0))
 	wake_lock_init(&shutdown_wakelock, WAKE_LOCK_SUSPEND, "shutdown_wakelock");
@@ -764,10 +1174,24 @@ static int __init init_shutdown_detect_ctrl(void)
 #if IS_ENABLED (CONFIG_OPLUS_BSP_DFR_USERSPACE_BACKTRACE)
 	dump_userspace_init("ubt,shutdown");
 #endif /* CONFIG_OPLUS_BSP_DFR_USERSPACE_BACKTRACE */
+
+	/* For recording the current shutdown record */
+	register_reboot_notifier(&reboot_nb);
+
+EXIT:
+	try_restore();
+
 	return 0;
 }
 
 device_initcall(init_shutdown_detect_ctrl);
+
+static void __exit exit_shutdown_detect_ctrl(void)
+{
+	pr_err("shutdown_detect:unregister shutdown_detect interface\n");
+}
+
+module_exit(exit_shutdown_detect_ctrl);
 
 #if IS_MODULE(CONFIG_OPLUS_FEATURE_SHUTDOWN_DETECT)
 MODULE_IMPORT_NS(VFS_internal_I_am_really_a_filesystem_and_am_NOT_a_driver);

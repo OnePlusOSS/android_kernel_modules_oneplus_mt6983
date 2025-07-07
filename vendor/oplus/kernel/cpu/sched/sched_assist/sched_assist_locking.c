@@ -275,72 +275,7 @@ void oplus_replace_locking_task_fair(struct rq *rq, struct task_struct **p,
 	}
 	spin_unlock_irqrestore(orq->locking_list_lock, irqflag);
 }
-static DEFINE_SPINLOCK(depth_lock);
-void record_lock_starttime(struct task_struct *p, unsigned long settime)
-{
-	struct oplus_task_struct *ots = get_oplus_task_struct(p);
 
-	if (test_task_is_rt(p)) {
-		return;
-	}
-
-	ots = get_oplus_task_struct(p);
-	if (IS_ERR_OR_NULL(ots)) {
-		return;
-	}
-
-	if (ots->locking_depth > 32) {
-		ots->locking_start_time = 0;
-		return;
-	}
-
-	if (settime > 0) {
-		spin_lock(&depth_lock);
-		ots->locking_depth++;
-		spin_unlock(&depth_lock);
-		goto set;
-	}
-
-	if (unlikely(ots->locking_depth <= 0)) {
-		ots->locking_depth = 0;
-		goto set;
-	}
-
-	spin_lock(&depth_lock);
-	--(ots->locking_depth);
-	spin_unlock(&depth_lock);
-
-	if (ots->locking_depth) {
-		return;
-	}
-
-set:
-	ots->locking_start_time = settime;
-}
-EXPORT_SYMBOL(record_lock_starttime);
-
-void opt_ss_lock_contention(struct task_struct *p, unsigned long old_im, int new_im)
-{
-	if(new_im == IM_FLAG_SS_LOCK_OWNER) {
-		bool skip_scene = sched_assist_scene(SA_CAMERA);
-
-		if(unlikely(!global_sched_assist_enabled || skip_scene))
-			return;
-	}
-
-	/*if the task leave the critical section. clear the locking_state*/
-	if (test_bit(IM_FLAG_SS_LOCK_OWNER, &old_im)) {
-		record_lock_starttime(p, 0);
-		goto out;
-	}
-
-	record_lock_starttime(p, jiffies);
-
-out:
-	if (unlikely(global_debug_enabled & DEBUG_FTRACE))
-		trace_printk("4.comm=%-12s pid=%d tgid=%d old_im=0x%08lx new_im=%d\n",
-			p->comm, p->pid, p->tgid, old_im, new_im);
-}
 static inline void update_locking_time(unsigned long time, bool in_cs)
 {
 	struct oplus_task_struct *ots;
@@ -353,14 +288,8 @@ static inline void update_locking_time(unsigned long time, bool in_cs)
 	if (IS_ERR_OR_NULL(ots))
 		return;
 
-	/*
-	 * We are not really acquired the lock and going into critical section,
-	 * do not update locking depth.
-	 */
-	if (!in_cs) {
-		ots->lk_tick_hit = 0;
+	if (!in_cs)
 		goto set;
-    }
 
 	/*
 	 * Current has acquired the lock, increase it's locking depth.
