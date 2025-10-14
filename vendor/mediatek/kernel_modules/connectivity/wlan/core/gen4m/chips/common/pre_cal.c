@@ -436,7 +436,7 @@ void wlanGetEpaElnaFromNvram(
 	*pu1DataPointer = pu1Addr;
 
 	if (((*pu4DataLen) & 0x3) != 0) {
-		DBGLOG(INIT, WARN,
+		DBGLOG(INIT, INFO,
 			"NVRAM datapointer Len adjust to 4 byte alignment(%x->%x)\n",
 			*pu4DataLen,
 			*pu4DataLen + 4 - ((*pu4DataLen) & 0x3));

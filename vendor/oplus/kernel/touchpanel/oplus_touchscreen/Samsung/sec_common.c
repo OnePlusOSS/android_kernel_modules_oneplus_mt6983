@@ -473,7 +473,7 @@ static ssize_t proc_curved_control_read(struct file *file, char __user *user_buf
     if (!sec_ops->get_curved_rejsize)
         return count;
 
-    sprintf(page, "%d\n", sec_ops->get_curved_rejsize(ts->chip_data));
+	sprintf(page, "%u\n", sec_ops->get_curved_rejsize(ts->chip_data));
     ret = simple_read_from_buffer(user_buf, count, ppos, page, strlen(page));
 
     return ret;

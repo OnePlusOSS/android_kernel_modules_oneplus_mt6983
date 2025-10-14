@@ -989,7 +989,7 @@ uint32_t halDumpRegInArray(struct ADAPTER *prAdapter,
 
 void haldumpMacInfo(struct ADAPTER *prAdapter)
 {
-#define BUF_SIZE 1024
+#define BUF_SIZE 2048
 #define LOOP_COUNT 30
 	uint32_t i = 0, j = 0, pos = 0;
 	uint32_t u4RegValue1 = 0, u4RegValue2 = 0, u4RegValue3 = 0;
@@ -1146,41 +1146,82 @@ void haldumpMacInfo(struct ADAPTER *prAdapter)
 	HAL_MCR_WR(prAdapter, 0x820F082C, 0xF);
 	HAL_MCR_WR(prAdapter, 0x80025100, 0x1F);
 	HAL_MCR_WR(prAdapter, 0x80025104, 0x04040404);
+
+	kalMemZero(buf, BUF_SIZE);
+	pos = 0;
 	for (i = 0; i < LOOP_COUNT; i++) {
 		/* [15:11]:tx_que_num */
 		HAL_MCR_WR(prAdapter, 0x80025108, 0x4d4dacac);
-		HAL_MCR_RD(prAdapter, 0x820F0024, &u4RegValue1);
-		DBGLOG(HAL, INFO,
-			"ARB_DBG: B[0]Set 0x80025108 = 0x4d4dacac read 0x820F0024=0x%x\n",
-			u4RegValue1);
+		pos = halDumpRegToBuffer(prAdapter,
+			buf, BUF_SIZE, pos, 0x80025108);
+		if (pos == -1)
+			break;
+		pos = halDumpRegToBuffer(prAdapter,
+			buf, BUF_SIZE, pos, 0x820F0024);
+		if (pos == -1)
+			break;
+	}
+	DBGLOG(HAL, INFO, "Dump ARB CR[tx_que_num(30)]: %s\n", buf);
+
+	kalMemZero(buf, BUF_SIZE);
+	pos = 0;
+	for (i = 0; i < LOOP_COUNT; i++) {
 		/* queue freeze flag */
 		HAL_MCR_WR(prAdapter, 0x80025108, 0x6c6c6d6d);
-		HAL_MCR_RD(prAdapter, 0x820F0024, &u4RegValue1);
-		DBGLOG(HAL, INFO,
-			"ARB_DBG: B[0]Set 0x80025108 = 0x6c6c6d6d read 0x820F0024=0x%x\n",
-			u4RegValue1);
+		pos = halDumpRegToBuffer(prAdapter,
+			buf, BUF_SIZE, pos, 0x80025108);
+		if (pos == -1)
+			break;
+		pos = halDumpRegToBuffer(prAdapter,
+			buf, BUF_SIZE, pos, 0x820F0024);
+		if (pos == -1)
+			break;
 	}
+	DBGLOG(HAL, INFO, "Dump ARB CR[queue freeze flag(30)] %s\n", buf);
+	kalMemZero(buf, BUF_SIZE);
+	pos = 0;
 
 	for (i = 0; i < LOOP_COUNT; i++) {
 		/* ARB debug flags */
 		for (j = 0; j < ARRAY_SIZE(cr_arb_debug_flag_loop); j++) {
 			HAL_MCR_WR(prAdapter, 0x80025108,
 				cr_arb_debug_flag_loop[j]);
-			HAL_MCR_RD(prAdapter, 0x820F0024, &u4RegValue1);
-			DBGLOG(HAL, INFO,
-				"ARB_DBG: B[0]Set 0x80025108 = 0x%x read 0x820F0024=0x%x\n",
-				cr_arb_debug_flag_loop[j], u4RegValue1);
+			pos = halDumpRegToBuffer(prAdapter,
+				buf, BUF_SIZE, pos, 0x80025108);
+			if (pos == -1)
+				break;
+			pos = halDumpRegToBuffer(prAdapter,
+				buf, BUF_SIZE, pos, 0x820F0024);
+			if (pos == -1)
+				break;
 		}
+		DBGLOG(HAL, INFO, "Dump ARB CR[ARB debug flags #%d] %s\n",
+			i, buf);
+		kalMemZero(buf, BUF_SIZE);
+		pos = 0;
+
 		/* ARB queue status */
 		HAL_MCR_WR(prAdapter, 0x80025108, 0x04040505);
+		pos = halDumpRegToBuffer(prAdapter,
+			buf, BUF_SIZE, pos, 0x80025108);
+		if (pos == -1)
+			pos = 0;
 		for (j = 0; j < ARRAY_SIZE(cr_arb_queue_sel_loop); j++) {
 			HAL_MCR_WR(prAdapter, 0x820f3060,
 				cr_arb_queue_sel_loop[j]);
-			HAL_MCR_RD(prAdapter, 0x820F0024, &u4RegValue1);
-			DBGLOG(HAL, INFO,
-				"ARB_DBG: B[0]Set 0x80025108 = 0x04040505 Set 0x820f3060 = 0x%x read 0x820F0024=0x%x\n",
-				cr_arb_queue_sel_loop[j], u4RegValue1);
+			pos = halDumpRegToBuffer(prAdapter,
+				buf, BUF_SIZE, pos, 0x820f3060);
+			if (pos == -1)
+				break;
+			pos = halDumpRegToBuffer(prAdapter,
+				buf, BUF_SIZE, pos, 0x820F0024);
+			if (pos == -1)
+				break;
 		}
+		DBGLOG(HAL, INFO, "Dump ARB CR[ARB queue stats #%d] %s\n",
+			i, buf);
+		kalMemZero(buf, BUF_SIZE);
+		pos = 0;
 	}
 
 	if (buf)

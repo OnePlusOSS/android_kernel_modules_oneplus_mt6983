@@ -2060,6 +2060,10 @@ static void ft3681_main_register_read(struct seq_file *s, void *chip_data)
 	ft3681_read_reg(FT3681_REG_MODULE_ID, &regvalue);
 	seq_printf(s, "PANEL ID:0x%02x\n", regvalue);
 
+	/*Health register(0x01)*/
+	ft3681_read_reg(0x01, &regvalue);
+	seq_printf(s, "Health register(0x01):0x%02x\n", regvalue);
+
 	return;
 }
 
@@ -3729,7 +3733,6 @@ raw_fail:
 
 buf_fail:
 	focal_esd_check_enable(ts_data, true);
-
 }
 
 
@@ -4164,17 +4167,11 @@ static int ft3681_spi_resume(struct device *dev)
 
 static const struct spi_device_id tp_id[] = {
 	{ TPD_DEVICE, 0 },
-#ifdef CONFIG_TOUCHPANEL_MTK_PLATFORM
-	{ "oplus,tp_noflash", 0 },
-#endif
 	{ }
 };
 
 static struct of_device_id tp_match_table[] = {
 	{ .compatible = TPD_DEVICE, },
-#ifdef CONFIG_TOUCHPANEL_MTK_PLATFORM
-	{ .compatible = "oplus,tp_noflash", },
-#endif
 	{ },
 };
 

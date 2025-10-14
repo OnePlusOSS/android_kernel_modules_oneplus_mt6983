@@ -7,7 +7,7 @@
 #include "cts_test.h"
 #include "cts_strerror.h"
 #include "cts_sysfs.h"
-#include "../touchpanel_common.h"
+#include "../../touchpanel_common.h"
 
 
 struct chipone_ts_data *chipone_ts_data = NULL;
@@ -547,7 +547,7 @@ int cts_plat_reset_device(struct cts_platform_data *pdata)
     gpio_set_value(pdata->rst_gpio, 0);
     mdelay(10);
     gpio_set_value(pdata->rst_gpio, 1);
-    mdelay(40);
+    mdelay(50);
     return 0;
 }
 
@@ -689,7 +689,7 @@ static int cts_get_touch_points(void *chip_data,
         TPD_INFO("<E> Get touch info failed %d(%s)\n", ret, cts_strerror(ret));
         return ret;
     }
-
+    num = touch_info->num_msg;
     TPD_DEBUG("<D> Process touch %d msgs\n", num);
     if (num == 0 || num > CFG_CTS_MAX_TOUCH_NUM) {
         return 0;
@@ -892,8 +892,8 @@ static int cts_reset(void *chip_data)
 {
     struct chipone_ts_data *cts_data = (struct chipone_ts_data *)chip_data;
     int ret;
-
-    cts_plat_reset_device(cts_data->pdata);
+    mdelay(10);
+    /* cts_plat_reset_device(cts_data->pdata); */
 
     ret = cts_fw_update(chip_data, NULL, false);
     if (ret == FW_UPDATE_SUCCESS) {

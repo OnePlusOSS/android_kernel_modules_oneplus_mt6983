@@ -534,7 +534,6 @@ struct syna_tcm_hcd {
 	unsigned int grip_darkzone_y;
 	unsigned int grip_darkzone_v2_x;
 	unsigned int grip_darkzone_v2_y;
-	unsigned int error_state_count;
 
 	bool irq_trigger_hdl_support;
 	bool health_monitor_support;

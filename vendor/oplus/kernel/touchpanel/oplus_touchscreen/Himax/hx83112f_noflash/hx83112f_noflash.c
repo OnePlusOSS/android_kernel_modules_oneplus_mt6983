@@ -2164,8 +2164,6 @@ int hx83112f_hx_test_data_pop_out(struct chip_data_hx83112f *chip_info,
     pos = pos + (int)(strlen(g_Test_list_log));
 
 	vfs_write(raw_file, rslt_buf, hx83112f_g_1kind_raw_size * hx83112f_hx_criteria_item * sizeof(char), &pos);
-    if (raw_file != NULL)
-        filp_close(raw_file, NULL);
 
     set_fs(fs);
 
@@ -2880,7 +2878,7 @@ int hx83112f_mpTestFunc(struct chip_data_hx83112f *chip_info, uint8_t checktype,
     case HIMAX_INSPECTION_MICRO_OPEN:
         for (i = 0; i < (chip_info->hw_res->TX_NUM * chip_info->hw_res->RX_NUM); i++) {
 			if (hx83112f_isread_csv == false) {
-                if (RAW[i] > M_OPENMAX || RAW[i] < M_OPENMIN) {
+                if (RAW[i] > M_OPENMAX) {
                     TPD_INFO("%s: micro open test FAIL\n", __func__);
                     ret =  RESULT_ERR;
                 }
@@ -2902,7 +2900,7 @@ int hx83112f_mpTestFunc(struct chip_data_hx83112f *chip_info, uint8_t checktype,
     case HIMAX_INSPECTION_SHORT:
         for (i = 0; i < (chip_info->hw_res->TX_NUM * chip_info->hw_res->RX_NUM); i++) {
 			if (hx83112f_isread_csv == false) {
-                if (RAW[i] > SHORTMAX || RAW[i] < SHORTMIN) {
+                if (RAW[i] > SHORTMAX) {
                     TPD_INFO("%s: short test FAIL\n", __func__);
                     ret = RESULT_ERR;
                 }
@@ -2973,7 +2971,7 @@ int hx83112f_mpTestFunc(struct chip_data_hx83112f *chip_info, uint8_t checktype,
     case HIMAX_INSPECTION_LPWUG_RAWDATA:
         for (i = 0; i < (chip_info->hw_res->TX_NUM * chip_info->hw_res->RX_NUM); i++) {
 			if (hx83112f_isread_csv == false) {
-                if (RAW[i] > CRITERIA_LPWUG_RAWDATA_MAX || RAW[i] < LPWUG_RAWDATA_MIN) {
+                if (RAW[i] > CRITERIA_LPWUG_RAWDATA_MAX) {
                     TPD_INFO("%s: HIMAX_INSPECTION_LPWUG_RAWDATA FAIL\n", __func__);
                     ret = THP_AFE_INSPECT_ERAW;
                 }
@@ -2992,7 +2990,7 @@ int hx83112f_mpTestFunc(struct chip_data_hx83112f *chip_info, uint8_t checktype,
         hx83112f_get_noise_base();
         weight = hx83112f_get_noise_weight();
 		if (hx83112f_isread_csv == false) {
-            if (weight > LPWUG_NOISEMAX || weight < LPWUG_NOISE_MIN) {
+			if (weight > LPWUG_NOISEMAX) {
                 TPD_INFO("%s: HIMAX_INSPECTION_LPWUG_NOISE FAIL\n", __func__);
                 ret = THP_AFE_INSPECT_ENOISE;
             }
@@ -3009,7 +3007,7 @@ int hx83112f_mpTestFunc(struct chip_data_hx83112f *chip_info, uint8_t checktype,
     case HIMAX_INSPECTION_LPWUG_IDLE_RAWDATA:
         for (i = 0; i < (chip_info->hw_res->TX_NUM * chip_info->hw_res->RX_NUM); i++) {
 			if (hx83112f_isread_csv == false) {
-                if (RAW[i] > CRITERIA_LPWUG_IDLE_RAWDATA_MAX || RAW[i] < LPWUG_IDLE_RAWDATA_MIN) {
+                if (RAW[i] > CRITERIA_LPWUG_IDLE_RAWDATA_MAX) {
                     TPD_INFO("%s: HIMAX_INSPECTION_LPWUG_IDLE_RAWDATA FAIL\n", __func__);
                     ret = THP_AFE_INSPECT_ERAW;
                 }
@@ -3070,9 +3068,6 @@ int hx83112f_mpTestFunc(struct chip_data_hx83112f *chip_info, uint8_t checktype,
 RET_OUT:
     if (rslt_log) {
         kfree(rslt_log);
-    }
-    if (start_log) {
-        kfree(start_log);
     }
     return RESULT_ERR;
 }
@@ -4381,20 +4376,20 @@ void hx83112f_diag_parse_raw_data(struct hx83112f_report_data *hx83112f_hx_touch
 
 bool hx83112f_diag_check_sum(struct hx83112f_report_data *hx83112f_hx_touch_data) /*return checksum value  */
 {
-    uint16_t check_sum_cal = 0;
-    int i;
+	uint16_t check_sum_cal = 0;
+	int i = 0;
 
-    //Check 128th byte CRC
-    for (i = 0, check_sum_cal = 0; i < (hx83112f_hx_touch_data->touch_all_size - hx83112f_hx_touch_data->touch_info_size); i = i + 2) {
-        check_sum_cal += (hx83112f_hx_touch_data->hx_rawdata_buf[i + 1] * 256 + hx83112f_hx_touch_data->hx_rawdata_buf[i]);
-    }
-    if (check_sum_cal % 0x10000 != 0) {
-        TPD_INFO("%s fail=%2X \n", __func__, check_sum_cal);
-        return 0;
-        //goto bypass_checksum_failed_packet;
-    }
+	/* Check 128th byte CRC */
+	for (i = 0; i < (hx83112f_hx_touch_data->touch_all_size - hx83112f_hx_touch_data->touch_info_size); i = i + 2) {
+		check_sum_cal += (hx83112f_hx_touch_data->hx_rawdata_buf[i + 1] * 256 + hx83112f_hx_touch_data->hx_rawdata_buf[i]);
+	}
+	if (check_sum_cal % 0x10000 != 0) {
+		TPD_INFO("%s fail=%2X \n", __func__, check_sum_cal);
+		return 0;
+		/* goto bypass_checksum_failed_packet; */
+	}
 
-    return 1;
+	return 1;
 }
 
 static size_t hx83112f_proc_diag_write(struct file *file, const char *buff, size_t len, loff_t *pos)

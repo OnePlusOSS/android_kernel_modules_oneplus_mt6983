@@ -4091,6 +4091,11 @@ void aisPostponedEventOfDisconnTimeout(IN struct ADAPTER *prAdapter,
 	    !fgIsPostponeTimeout &&
 	    !(prAisFsmInfo->ucConnTrialCount >
 			prAisFsmInfo->ucConnTrialCountLimit)) {
+		/* reset PowerSave mode when reconnect */
+		nicConfigPowerSaveProfile(prAdapter,
+					  prAisBssInfo->ucBssIndex,
+					  Param_PowerModeFast_PSP,
+					  FALSE, PS_CALLER_COMMON);
 		DBGLOG(AIS, INFO,
 		       "DelayTimeOfDisconnect, don't report disconnect\n");
 		return;

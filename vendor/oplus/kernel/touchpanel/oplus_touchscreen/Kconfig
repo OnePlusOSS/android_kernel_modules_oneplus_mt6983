@@ -28,6 +28,11 @@ config OPLUS_TP_APK
 	help
 	  Say Y here if you use apk for TP.
 
+config TOUCHPANEL_ALGORITHM
+	bool "touch alogoritm in driver support"
+	help
+	  Say Y here if you use touch alogoritm in driver.
+
 config TOUCHPANEL_MULTI_NOFLASH
 	bool "Multiple noflash TPs using"
 	help
@@ -108,4 +113,8 @@ endif
 
 if TOUCHPANEL_ILITEK
 source "drivers/input/touchscreen/oplus_touchscreen/ilitek/Kconfig"
+endif
+
+if TOUCHPANEL_CHIPONE
+source "drivers/input/touchscreen/oplus_touchscreen/chipone/Kconfig"
 endif

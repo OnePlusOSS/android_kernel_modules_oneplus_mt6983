@@ -110,6 +110,7 @@ struct kbase_csf_trace_buffers {
 	struct list_head list;
 	struct kbase_csf_mapping mcu_rw;
 	struct kbase_csf_mapping mcu_write;
+	struct mutex dump_lock;
 };
 
 /**

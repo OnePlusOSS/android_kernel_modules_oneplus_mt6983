@@ -207,9 +207,9 @@ struct fts_ts_data {
 };
 
 
-extern struct fts_ts_data *fts_data;
+extern struct fts_ts_data *fts8006s_data;
 
-int fts_test_entry(struct fts_ts_data *ts_data, bool black_screen);
+int fts8006s_test_entry(struct fts_ts_data *ts_data, bool black_screen);
 int fts_read(struct spi_device *spi, u8 *cmd, u32 cmdlen, u8 *data, u32 datalen);
 int fts_read_reg(struct spi_device *spi, u8 addr, u8 *value);
 int fts_write(struct spi_device *spi, u8 *writebuf, u32 writelen);

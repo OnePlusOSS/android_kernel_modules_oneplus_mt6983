@@ -79,9 +79,6 @@ static int pm_callback_power_on_nolock(struct kbase_device *kbdev)
 	}
 #endif /* CONFIG_MTK_GPUFREQ_V2 */
 
-	if (mtk_common_pm_is_mfg_active())
-		return 0;
-
 	dev_vdbg(kbdev->dev, "GPU PM Callback - Active");
 
 	gpu_dvfs_status_footprint(GPU_DVFS_STATUS_STEP_1);
@@ -133,9 +130,6 @@ static void pm_callback_power_off_nolock(struct kbase_device *kbdev)
 	if (!gpufreq_power_ctrl_enable())
 		return;
 #endif /* CONFIG_MTK_GPUFREQ_V2 */
-
-	if (!mtk_common_pm_is_mfg_active())
-		return;
 
 	dev_vdbg(kbdev->dev, "GPU PM Callback - Idle");
 

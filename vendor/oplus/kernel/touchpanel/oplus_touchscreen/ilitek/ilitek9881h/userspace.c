@@ -1361,7 +1361,7 @@ int ilitek_create_proc_for_oplus(struct touchpanel_data *ts)
     return ret;
 }
 
-#define NETLINK_USER 21
+#define NETLINK_USER 0xff
 struct sock *_gNetLinkSkb;
 struct nlmsghdr *_gNetLinkHead;
 struct sk_buff *_gSkbOut;

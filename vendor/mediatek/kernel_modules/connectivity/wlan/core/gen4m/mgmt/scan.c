@@ -1530,11 +1530,11 @@ void scanParsingRnrElement(IN struct ADAPTER *prAdapter,
 	IN struct BSS_DESC *prBssDesc, IN uint8_t *pucIE)
 {
 	uint8_t *pucProfileIE, i = 0, j = 0, ucNewLink = FALSE;
-	uint8_t ucShortSsidOffset, ucBssParamOffset;
-	uint8_t ucBssidNum = 0, ucCurrentLength = 0, ucShortSsidNum = 0;
+	uint8_t ucShortSsidOffset, ucBssParamOffset, ucTbttInfoType;
+	uint8_t ucBssidNum = 0, ucShortSsidNum = 0;
 	uint8_t ucRnrChNum, ucHasBssid = FALSE, ucScanEnable = TRUE;
 	uint8_t aucNullAddr[] = NULL_MAC_ADDR;
-	uint16_t u2TbttInfoCount, u2TbttInfoLength;
+	uint16_t u2TbttInfoCount, u2TbttInfoLength, u2CurrentLength = 0;
 	struct SCAN_INFO *prScanInfo;
 	struct NEIGHBOR_AP_INFO *prNeighborAPInfo = NULL;
 	struct NEIGHBOR_AP_INFO_FIELD *prNeighborAPInfoField;
@@ -1550,8 +1550,8 @@ void scanParsingRnrElement(IN struct ADAPTER *prAdapter,
 		return;
 	}
 
-	while (ucCurrentLength < IE_LEN(pucIE)) {
-		pucProfileIE = &IE_ID_EXT(pucIE) + ucCurrentLength;
+	while (u2CurrentLength < IE_LEN(pucIE)) {
+		pucProfileIE = &IE_ID_EXT(pucIE) + u2CurrentLength;
 		prNeighborAPInfoField =
 			(struct NEIGHBOR_AP_INFO_FIELD *)pucProfileIE;
 
@@ -1566,29 +1566,44 @@ void scanParsingRnrElement(IN struct ADAPTER *prAdapter,
 		u2TbttInfoLength = (prNeighborAPInfoField->u2TbttInfoHdr &
 						TBTT_INFO_HDR_LENGTH)
 						>> TBTT_INFO_HDR_LENGTH_OFFSET;
+		ucTbttInfoType = (prNeighborAPInfoField->u2TbttInfoHdr &
+						TBTT_INFO_HDR_FIELD_TYPE);
 
+		/* Check Tbtt Info type is valid or not*/
+		if (ucTbttInfoType != 0) {
+			DBGLOG(SCN, ERROR,
+				"Invalid TBTT info type=%d,["MACSTR"]\n",
+				ucTbttInfoType,
+				MAC2STR(prBssDesc->aucBSSID));
+			return;
+		}
 		/* Check Tbtt Info length is valid or not*/
 		if (!scanValidRnrTbttInfo(u2TbttInfoLength)) {
-			DBGLOG(SCN, ERROR, "Invalid TBTT info length = %d\n",
-				u2TbttInfoLength);
+			DBGLOG(SCN, ERROR,
+				"Invalid TBTT info length=%d,["MACSTR"]\n",
+				u2TbttInfoLength,
+				MAC2STR(prBssDesc->aucBSSID));
 			return;
 		}
 		/* If opClass is not 6G, no need to do extra scan
 		 * directly check next neighborAPInfo if exist
 		 */
 		if (!IS_6G_OP_CLASS(prNeighborAPInfoField->ucOpClass)) {
-			DBGLOG(SCN, TRACE, "RNR op class(%d) is not 6G\n",
-				prNeighborAPInfoField->ucOpClass);
+			DBGLOG(SCN, INFO,
+				"RNR op class(%d) is not 6G,Len=(%d,%d),TbttInfo(%d,%d)\n",
+				prNeighborAPInfoField->ucOpClass,
+				IE_LEN(pucIE), u2CurrentLength,
+				u2TbttInfoCount, u2TbttInfoLength);
 
 			/* Calculate next NeighborAPInfo's index if exists */
-			ucCurrentLength += 4 +
+			u2CurrentLength += 4 +
 				(u2TbttInfoCount * u2TbttInfoLength);
 			continue;
 		} else {
 			/* RNR bring 6G channel, but chip not support 6G */
 			/* Calculate next NeighborAPInfo's index if exists */
 #if !(CFG_SUPPORT_WIFI_6G)
-			ucCurrentLength += 4 +
+			u2CurrentLength += 4 +
 				(u2TbttInfoCount * u2TbttInfoLength);
 			continue;
 #endif
@@ -1672,7 +1687,7 @@ void scanParsingRnrElement(IN struct ADAPTER *prAdapter,
 				ucNewLink = FALSE;
 			}
 			/* Calculate next NeighborAPInfo's index if exists */
-			ucCurrentLength += 4 +
+			u2CurrentLength += 4 +
 				(u2TbttInfoCount * u2TbttInfoLength);
 			continue;
 		}
@@ -1720,9 +1735,9 @@ void scanParsingRnrElement(IN struct ADAPTER *prAdapter,
 				*/
 				DBGLOG(SCN, WARN,
 					"RNR w/o BSSID, length(%d,%d),TBTT(%d,%d)\n",
-					IE_LEN(pucIE), ucCurrentLength,
+					IE_LEN(pucIE), u2CurrentLength,
 					u2TbttInfoCount, u2TbttInfoLength);
-				ucCurrentLength += 4 +
+				u2CurrentLength += 4 +
 				        (u2TbttInfoCount * u2TbttInfoLength);
 				continue;
 			}
@@ -1801,7 +1816,7 @@ void scanParsingRnrElement(IN struct ADAPTER *prAdapter,
 						ucBssidNum);
 		}
 		/* Calculate next NeighborAPInfo's index if exists */
-		ucCurrentLength += 4 + (u2TbttInfoCount * u2TbttInfoLength);
+		u2CurrentLength += 4 + (u2TbttInfoCount * u2TbttInfoLength);
 
 		/* Only handle RnR with BSSID */
 		if (ucHasBssid && ucScanEnable) {

@@ -1982,8 +1982,8 @@ static void kcpu_queue_cmds_timeout_worker(struct work_struct *data)
 
 #if IS_ENABLED(CONFIG_MALI_MTK_LOG_BUFFER)
 	mtk_logbuffer_type_print(kctx->kbdev, MTK_LOGBUFFER_TYPE_ALL,
-		"%s: KCPU queue fence command timeouts(%d ms)! ctx=%d_%d queue_idx=%u cmd_type=%u start_offset=%u\n",
-		__func__,  COMMAND_TIMEOUT_MS, kctx->tgid, kctx->id, kcpu_queue->id, cmd->type, kcpu_queue->start_offset);
+		"%s: KCPU queue fence command timeouts(%d ms)! ctx=%d_%d queue_idx=%u cmd_type=%u start_offset=%u protected_mode=%d\n",
+		__func__,  COMMAND_TIMEOUT_MS, kctx->tgid, kctx->id, kcpu_queue->id, cmd->type, kcpu_queue->start_offset, kctx->kbdev->protected_mode);
 #endif /* CONFIG_MALI_MTK_LOG_BUFFER */
 
 #if IS_ENABLED(CONFIG_MALI_MTK_DEBUG)

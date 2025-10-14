@@ -34,6 +34,7 @@
 #include "mali_kbase_csf_tl_reader.h"
 #include "backend/gpu/mali_kbase_clk_rate_trace_mgr.h"
 #include <csf/ipa_control/mali_kbase_csf_ipa_control.h>
+#include <mali_kbase_hwaccess_time.h>
 
 #include <linux/list.h>
 #include <linux/slab.h>
@@ -577,7 +578,7 @@ static int parse_memory_setup_entry(struct kbase_device *kbdev,
 	} else {
 		ret = kbase_mem_pool_alloc_pages(
 			&kbdev->mem_pools.small[KBASE_MEM_GROUP_CSF_FW],
-			num_pages, phys, false);
+			num_pages, phys, false, NULL);
 		if (ret < 0)
 			goto out;
 	}
@@ -1241,6 +1242,90 @@ u32 kbase_csf_firmware_global_output(
 	return val;
 }
 
+#define CSHW_BASE 0x0030000
+#define CSHW_CSHWIF_0 0x4000 /* () CSHWIF 0 registers */
+#define CSHWIF(n) (CSHW_BASE + CSHW_CSHWIF_0 + (n)*256)
+#define CSHWIF_REG(n, r) (CSHWIF(n) + r)
+#define NR_HW_INTERFACES 4
+
+static void dump_hwif_registers(struct kbase_device *kbdev)
+{
+	unsigned long flags;
+	unsigned int i;
+
+	spin_lock_irqsave(&kbdev->hwaccess_lock, flags);
+	for (i = 0; kbdev->pm.backend.gpu_powered && (i < NR_HW_INTERFACES); i++) {
+		u64 cmd_ptr = kbase_reg_read(kbdev, CSHWIF_REG(i, 0x0)) |
+		((u64)kbase_reg_read(kbdev, CSHWIF_REG(i, 0x4)) << 32);
+
+		if (!cmd_ptr)
+			continue;
+		dev_err(kbdev->dev, "Register dump of CSHWIF %d\n", i);
+		dev_err(kbdev->dev, "CMD_PTR: %llx CMD_PTR_END: %llx STATUS: %x JASID: %x EMUL_INSTR: %llx WAIT_STATUS: %x SB_SET_SEL: %x SB_SEL: %x\n",
+			cmd_ptr,
+			kbase_reg_read(kbdev, CSHWIF_REG(i, 0x8)) | ((u64)kbase_reg_read(kbdev, CSHWIF_REG(i, 0xC)) << 32),
+			kbase_reg_read(kbdev, CSHWIF_REG(i, 0x24)),
+			kbase_reg_read(kbdev, CSHWIF_REG(i, 0x34)),
+			kbase_reg_read(kbdev, CSHWIF_REG(i, 0x60)) | ((u64)kbase_reg_read(kbdev, CSHWIF_REG(i, 0x64)) << 32),
+			kbase_reg_read(kbdev, CSHWIF_REG(i, 0x74)),
+			kbase_reg_read(kbdev, CSHWIF_REG(i, 0x78)),
+			kbase_reg_read(kbdev, CSHWIF_REG(i, 0x7C)));
+		dev_err(kbdev->dev, "CMD_COUNTER: %x EVT_RAW: %x EVT_IRQ_STATUS: %x EVT_HALT_STATUS: %x FAULT_STATUS: %x FAULT_ADDR: %llx\n",
+			kbase_reg_read(kbdev, CSHWIF_REG(i, 0x80)),
+			kbase_reg_read(kbdev, CSHWIF_REG(i, 0x98)),
+			kbase_reg_read(kbdev, CSHWIF_REG(i, 0xA4)),
+			kbase_reg_read(kbdev, CSHWIF_REG(i, 0xAC)),
+			kbase_reg_read(kbdev, CSHWIF_REG(i, 0xB0)),
+			kbase_reg_read(kbdev, CSHWIF_REG(i, 0xB8)) | ((u64)kbase_reg_read(kbdev, CSHWIF_REG(i, 0xBC)) << 32));
+		dev_err(kbdev->dev, "\n");
+	}
+	spin_unlock_irqrestore(&kbdev->hwaccess_lock, flags);
+}
+
+#define CSHW_IT_COMP_REG(r) (CSHW_BASE + 0x1000 + r)
+#define CSHW_IT_FRAG_REG(r) (CSHW_BASE + 0x2000 + r)
+#define CSHW_IT_TILER_REG(r)(CSHW_BASE + 0x3000 + r)
+
+static void dump_iterator_registers(struct kbase_device *kbdev)
+{
+	unsigned long flags;
+
+	spin_lock_irqsave(&kbdev->hwaccess_lock, flags);
+	if (kbdev->pm.backend.gpu_powered) {
+		dev_err(kbdev->dev, "Compute  CTRL: %x STATUS: %x JASID: %u IRQ_RAW: %8x IRQ_STATUS: %8x EP_EVT_STATUS: %x BLOCKED_SB_ENTRY: %8x SUSPEND_BUF %llx\n",
+			kbase_reg_read(kbdev, CSHW_IT_COMP_REG(0x0)),
+			kbase_reg_read(kbdev, CSHW_IT_COMP_REG(0x4)),
+			kbase_reg_read(kbdev, CSHW_IT_COMP_REG(0x8)),
+			kbase_reg_read(kbdev, CSHW_IT_COMP_REG(0xD0)),
+			kbase_reg_read(kbdev, CSHW_IT_COMP_REG(0xDC)),
+			kbase_reg_read(kbdev, CSHW_IT_COMP_REG(0xA4)),
+			kbase_reg_read(kbdev, CSHW_IT_COMP_REG(0xA0)),
+			kbase_reg_read(kbdev, CSHW_IT_COMP_REG(0x80)) | ((u64)kbase_reg_read(kbdev, CSHW_IT_COMP_REG(0x84)) << 32));
+		dev_err(kbdev->dev, "Fragment CTRL: %x STATUS: %x JASID: %u IRQ_RAW: %8x IRQ_STATUS: %8x EP_EVT_STATUS: %x BLOCKED_SB_ENTRY: %8x SUSPEND_BUF %llx\n",
+			kbase_reg_read(kbdev, CSHW_IT_FRAG_REG(0x0)),
+			kbase_reg_read(kbdev, CSHW_IT_FRAG_REG(0x4)),
+			kbase_reg_read(kbdev, CSHW_IT_FRAG_REG(0x8)),
+			kbase_reg_read(kbdev, CSHW_IT_FRAG_REG(0xD0)),
+			kbase_reg_read(kbdev, CSHW_IT_FRAG_REG(0xDC)),
+			kbase_reg_read(kbdev, CSHW_IT_FRAG_REG(0xA4)),
+			kbase_reg_read(kbdev, CSHW_IT_FRAG_REG(0xA0)),
+			kbase_reg_read(kbdev, CSHW_IT_FRAG_REG(0x80)) | ((u64)kbase_reg_read(kbdev, CSHW_IT_FRAG_REG(0x84)) << 32));
+		dev_err(kbdev->dev, "Tiler    CTRL: %x STATUS: %x JASID: %u IRQ_RAW: %8x IRQ_STATUS: %8x EP_EVT_STATUS: %x BLOCKED_SB_ENTRY: %8x SUSPEND_BUF %llx\n",
+			kbase_reg_read(kbdev, CSHW_IT_TILER_REG(0x0)),
+			kbase_reg_read(kbdev, CSHW_IT_TILER_REG(0x4)),
+			kbase_reg_read(kbdev, CSHW_IT_TILER_REG(0x8)),
+			kbase_reg_read(kbdev, CSHW_IT_TILER_REG(0xD0)),
+			kbase_reg_read(kbdev, CSHW_IT_TILER_REG(0xDC)),
+			kbase_reg_read(kbdev, CSHW_IT_TILER_REG(0xA4)),
+			kbase_reg_read(kbdev, CSHW_IT_TILER_REG(0xA0)),
+			kbase_reg_read(kbdev, CSHW_IT_TILER_REG(0x80)) | ((u64)kbase_reg_read(kbdev, CSHW_IT_TILER_REG(0x84)) << 32));
+		dev_err(kbdev->dev, "\n");
+	}
+	spin_unlock_irqrestore(&kbdev->hwaccess_lock, flags);
+}
+
+void kbase_csf_dump_firmware_trace_buffer(struct kbase_device *kbdev);
+
 /**
  * handle_internal_firmware_fatal - Handler for CS internal firmware fault.
  *
@@ -1252,6 +1337,17 @@ u32 kbase_csf_firmware_global_output(
 static void handle_internal_firmware_fatal(struct kbase_device *const kbdev)
 {
 	int as;
+	static int dump = 0;
+
+	/* dump fw and tracebuffer only once */
+	if (!dump) {
+		dump++;
+		dump_hwif_registers(kbdev);
+		dump_iterator_registers(kbdev);
+		// dev_err(kbdev->dev, "[mali-debug] FW dump start");
+		// kbase_csf_dump_firmware_trace_buffer(kbdev);
+		// dev_err(kbdev->dev, "[mali-debug] FW dump end");
+	}
 
 	for (as = 0; as < kbdev->nr_hw_address_spaces; as++) {
 		unsigned long flags;
@@ -2396,7 +2492,7 @@ int kbase_csf_firmware_mcu_shared_mapping_init(
 
 	ret = kbase_mem_pool_alloc_pages(
 		&kbdev->mem_pools.small[KBASE_MEM_GROUP_CSF_FW],
-		num_pages, phys, false);
+		num_pages, phys, false, NULL);
 	if (ret <= 0)
 		goto phys_mem_pool_alloc_error;
 

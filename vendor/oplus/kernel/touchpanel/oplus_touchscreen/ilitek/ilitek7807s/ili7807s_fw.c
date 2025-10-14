@@ -98,72 +98,72 @@ static int calc_hw_dma_crc(u32 start_addr, u32 block_size)
     int count = 50;
     u32 busy = 0;
 
-    if (ilits->chip->dma_reset) {
+    if (ilits7807s->chip->dma_reset) {
         ILI_DBG("operate dma reset in reg after tp reset\n");
 
-        if (ili_ice_mode_write(0x40040, 0x00800000, 4) < 0) {
+        if (ili7807s_ice_mode_write(0x40040, 0x00800000, 4) < 0) {
             ILI_ERR("Failed to open DMA reset\n");
         }
 
-        if (ili_ice_mode_write(0x40040, 0x00000000, 4) < 0) {
+        if (ili7807s_ice_mode_write(0x40040, 0x00000000, 4) < 0) {
             ILI_ERR("Failed to close DMA reset\n");
         }
     }
 
     /* dma1 src1 address */
-    if (ili_ice_mode_write(0x072104, start_addr, 4) < 0) {
+    if (ili7807s_ice_mode_write(0x072104, start_addr, 4) < 0) {
         ILI_ERR("Write dma1 src1 address failed\n");
     }
 
     /* dma1 src1 format */
-    if (ili_ice_mode_write(0x072108, 0x80000001, 4) < 0) {
+    if (ili7807s_ice_mode_write(0x072108, 0x80000001, 4) < 0) {
         ILI_ERR("Write dma1 src1 format failed\n");
     }
 
     /* dma1 dest address */
-    if (ili_ice_mode_write(0x072114, 0x0002725C, 4) < 0) {
+    if (ili7807s_ice_mode_write(0x072114, 0x0002725C, 4) < 0) {
         ILI_ERR("Write dma1 src1 format failed\n");
     }
 
     /* dma1 dest format */
-    if (ili_ice_mode_write(0x072118, 0x80000000, 4) < 0) {
+    if (ili7807s_ice_mode_write(0x072118, 0x80000000, 4) < 0) {
         ILI_ERR("Write dma1 dest format failed\n");
     }
 
     /* Block size*/
-    if (ili_ice_mode_write(0x07211C, block_size, 4) < 0) {
+    if (ili7807s_ice_mode_write(0x07211C, block_size, 4) < 0) {
         ILI_ERR("Write block size (%d) failed\n",
                 block_size);
     }
 
     /* crc off */
-    if (ili_ice_mode_write(0x041016, 0x00, 1) < 0) {
+    if (ili7807s_ice_mode_write(0x041016, 0x00, 1) < 0) {
         ILI_INFO("Write crc of failed\n");
     }
 
     /* dma crc */
-    if (ili_ice_mode_write(0x041017, 0x03, 1) < 0) {
+    if (ili7807s_ice_mode_write(0x041017, 0x03, 1) < 0) {
         ILI_ERR("Write dma 1 crc failed\n");
     }
 
     /* Dma1 stop */
-    if (ili_ice_mode_write(0x072100, 0x02000000,
+    if (ili7807s_ice_mode_write(0x072100, 0x02000000,
                            4) < 0) {
         ILI_ERR("Write dma1 stop failed\n");
     }
 
     /* crc on */
-    if (ili_ice_mode_write(0x041016, 0x01, 1) < 0) {
+    if (ili7807s_ice_mode_write(0x041016, 0x01, 1) < 0) {
         ILI_ERR("Write crc on failed\n");
     }
 
     /* clr int */
-    if (ili_ice_mode_write(0x048006, 0x2, 1) < 0) {
+    if (ili7807s_ice_mode_write(0x048006, 0x2, 1) < 0) {
         ILI_ERR("Write clr int failed\n");
     }
 
     /* Dma1 start */
-    if (ili_ice_mode_write(0x072100, 0x01000000,
+    if (ili7807s_ice_mode_write(0x072100, 0x01000000,
                            4) < 0) {
         ILI_ERR("Write dma1 start failed\n");
     }
@@ -172,7 +172,7 @@ static int calc_hw_dma_crc(u32 start_addr, u32 block_size)
     while (count > 0) {
         mdelay(1);
 
-        if (ili_ice_mode_read(0x048006, &busy,
+        if (ili7807s_ice_mode_read(0x048006, &busy,
                               sizeof(u8)) < 0) {
             ILI_ERR("Read busy error\n");
         }
@@ -191,7 +191,7 @@ static int calc_hw_dma_crc(u32 start_addr, u32 block_size)
         return -1;
     }
 
-    if (ili_ice_mode_read(0x04101C, &busy,
+    if (ili7807s_ice_mode_read(0x04101C, &busy,
                           sizeof(u32)) < 0) {
         ILI_ERR("Read dma crc error\n");
         return -1;
@@ -231,13 +231,13 @@ static int ilitek_tddi_fw_iram_read(u8 *buf,
         cmd[2] = (char)((addr & 0x0000FF00) >> 8);
         cmd[1] = (char)((addr & 0x000000FF));
 
-        if (ilits->wrapper(cmd, 4, NULL, 0, OFF,
+        if (ilits7807s->wrapper(cmd, 4, NULL, 0, OFF,
                            OFF) < 0) {
             ILI_ERR("Failed to write iram data\n");
             return -ENODEV;
         }
 
-        if (ilits->wrapper(NULL, 0, buf + cnt * limit,
+        if (ilits7807s->wrapper(NULL, 0, buf + cnt * limit,
                            tmp_len, OFF, OFF) < 0) {
             ILI_ERR("Failed to Read iram data\n");
             return -ENODEV;
@@ -249,18 +249,18 @@ static int ilitek_tddi_fw_iram_read(u8 *buf,
     return 0;
 }
 
-int ili_fw_dump_iram_data(u32 start, u32 end,
+int ili7807s_fw_dump_iram_data(u32 start, u32 end,
                           bool save, bool mcu)
 {
     struct file *f = NULL;
     mm_segment_t old_fs;
     loff_t pos = 0;
     int i, ret = 0;
-    int len, tmp = ili_debug_en;
-    bool ice = atomic_read(&ilits->ice_stat);
+    int len, tmp = ili7807s_debug_en;
+    bool ice = atomic_read(&ilits7807s->ice_stat);
 
     if (!ice) {
-        ret = ili_ice_mode_ctrl(ENABLE, mcu);
+        ret = ili7807s_ice_mode_ctrl(ENABLE, mcu);
 
         if (ret < 0) {
             ILI_ERR("Enable ice mode failed\n");
@@ -277,10 +277,10 @@ int ili_fw_dump_iram_data(u32 start, u32 end,
     }
 
     for (i = 0; i < MAX_HEX_FILE_SIZE; i++) {
-        ilits->update_buf[i] = 0xFF;
+        ilits7807s->update_buf[i] = 0xFF;
     }
 
-    ret = ilitek_tddi_fw_iram_read(ilits->update_buf,
+    ret = ilitek_tddi_fw_iram_read(ilits7807s->update_buf,
                                    start, len);
 
     if (ret < 0) {
@@ -302,22 +302,22 @@ int ili_fw_dump_iram_data(u32 start, u32 end,
         old_fs = get_fs();
         set_fs(KERNEL_DS);
         pos = 0;
-        vfs_write(f, ilits->update_buf, len, &pos);
+        vfs_write(f, ilits7807s->update_buf, len, &pos);
         set_fs(old_fs);
         filp_close(f, NULL);
         ILI_INFO("Save iram data to %s\n",
                  DUMP_IRAM_PATH);
     } else {
-        ili_debug_en = DEBUG_ALL;
-        ili_dump_data(ilits->update_buf, 8, len, 0,
+        ili7807s_debug_en = DEBUG_ALL;
+        ili7807s_dump_data(ilits7807s->update_buf, 8, len, 0,
                       "IRAM");
-        ili_debug_en = tmp;
+        ili7807s_debug_en = tmp;
     }
 
 out:
 
     if (!ice) {
-        if (ili_ice_mode_ctrl(DISABLE, mcu) < 0) {
+        if (ili7807s_ice_mode_ctrl(DISABLE, mcu) < 0) {
             ILI_ERR("Enable ice mode failed after code reset\n");
         }
     }
@@ -349,38 +349,38 @@ static int ilitek_tddi_fw_iram_program(u32 start,
                 }
             }
 
-            ilits->update_buf[0] = SPI_WRITE;
-            ilits->update_buf[1] = 0x25;
-            ilits->update_buf[2] = (char)((addr &
+            ilits7807s->update_buf[0] = SPI_WRITE;
+            ilits7807s->update_buf[1] = 0x25;
+            ilits7807s->update_buf[2] = (char)((addr &
                                            0x000000FF));
-            ilits->update_buf[3] = (char)((addr & 0x0000FF00)
+            ilits7807s->update_buf[3] = (char)((addr & 0x0000FF00)
                                           >> 8);
-            ilits->update_buf[4] = (char)((addr & 0x00FF0000)
+            ilits7807s->update_buf[4] = (char)((addr & 0x00FF0000)
                                           >> 16);
 
             for (j = 0; j < split_len; j++) {
-                ilits->update_buf[5 + j] = w_buf[i + j];
+                ilits7807s->update_buf[5 + j] = w_buf[i + j];
             }
 
             if (fix_4_alignment) {
                 ILI_INFO("org split_len = 0x%X\n", split_len);
                 ILI_INFO("idev->update_buf[5 + 0x%X] = 0x%X\n",
-                         split_len - 4, ilits->update_buf[5 + split_len -
+                         split_len - 4, ilits7807s->update_buf[5 + split_len -
                                                             4]);
                 ILI_INFO("idev->update_buf[5 + 0x%X] = 0x%X\n",
-                         split_len - 3, ilits->update_buf[5 + split_len -
+                         split_len - 3, ilits7807s->update_buf[5 + split_len -
                                                             3]);
                 ILI_INFO("idev->update_buf[5 + 0x%X] = 0x%X\n",
-                         split_len - 2, ilits->update_buf[5 + split_len -
+                         split_len - 2, ilits7807s->update_buf[5 + split_len -
                                                             2]);
                 ILI_INFO("idev->update_buf[5 + 0x%X] = 0x%X\n",
-                         split_len - 1, ilits->update_buf[5 + split_len -
+                         split_len - 1, ilits7807s->update_buf[5 + split_len -
                                                             1]);
 
                 for (j = 0; j < (4 - (split_len % 4)); j++) {
-                    ilits->update_buf[5 + j + split_len] = 0xFF;
+                    ilits7807s->update_buf[5 + j + split_len] = 0xFF;
                     ILI_INFO("idev->update_buf[5 + 0x%X] = 0x%X\n",
-                             j + split_len, ilits->update_buf[5 + j +
+                             j + split_len, ilits7807s->update_buf[5 + j +
                                                                 split_len]);
                 }
 
@@ -389,8 +389,8 @@ static int ilitek_tddi_fw_iram_program(u32 start,
                 ILI_INFO("fix split_len = 0x%X\n", split_len);
             }
 
-            if (ilits->spi_write_then_read(ilits->spi,
-                                           ilits->update_buf, split_len + 5, NULL, 0)) {
+            if (ilits7807s->spi_write_then_read(ilits7807s->spi,
+                                           ilits7807s->update_buf, split_len + 5, NULL, 0)) {
                 ILI_ERR("Failed to write data via SPI in host download (%x)\n",
                         split_len + 5);
                 return -EIO;
@@ -398,18 +398,18 @@ static int ilitek_tddi_fw_iram_program(u32 start,
         }
     } else {
         for (i = 0; i < MAX_HEX_FILE_SIZE; i++) {
-            ilits->update_buf[i] = 0xFF;
+            ilits7807s->update_buf[i] = 0xFF;
         }
 
-        ilits->update_buf[0] = SPI_WRITE;
-        ilits->update_buf[1] = 0x25;
-        ilits->update_buf[2] = (char)((start &
+        ilits7807s->update_buf[0] = SPI_WRITE;
+        ilits7807s->update_buf[1] = 0x25;
+        ilits7807s->update_buf[2] = (char)((start &
                                        0x000000FF));
-        ilits->update_buf[3] = (char)((start & 0x0000FF00)
+        ilits7807s->update_buf[3] = (char)((start & 0x0000FF00)
                                       >> 8);
-        ilits->update_buf[4] = (char)((start & 0x00FF0000)
+        ilits7807s->update_buf[4] = (char)((start & 0x00FF0000)
                                       >> 16);
-        memcpy(&ilits->update_buf[5], w_buf, w_len);
+        memcpy(&ilits7807s->update_buf[5], w_buf, w_len);
 
         if (w_len % 4 != 0) {
             ILI_INFO("org w_len = %d\n", w_len);
@@ -419,8 +419,8 @@ static int ilitek_tddi_fw_iram_program(u32 start,
         }
 
         /* It must be supported by platforms that have the ability to transfer all data at once. */
-        if (ilits->spi_write_then_read(ilits->spi,
-                                       ilits->update_buf, w_len + 5, NULL, 0) < 0) {
+        if (ilits7807s->spi_write_then_read(ilits7807s->spi,
+                                       ilits7807s->update_buf, w_len + 5, NULL, 0) < 0) {
             ILI_ERR("Failed to write data via SPI in host download (%x)\n",
                     w_len + 5);
             return -EIO;
@@ -438,31 +438,31 @@ static int ilitek_tddi_fw_iram_upgrade(u8 *pfw,
     u8 *fw_ptr = NULL, crc_temp[4], crc_len = 4;
     bool iram_crc_err = false;
 
-    if (!ilits->ddi_rest_done) {
-        if (ilits->actual_tp_mode !=
+    if (!ilits7807s->ddi_rest_done) {
+        if (ilits7807s->actual_tp_mode !=
             P5_X_FW_GESTURE_MODE) {
-            ili_reset_ctrl(ilits->reset);
-            ilits->ignore_first_irq = true;
+            ili7807s_reset_ctrl(ilits7807s->reset);
+            ilits7807s->ignore_first_irq = true;
         } else {
-            ilits->ignore_first_irq = false;
+            ilits7807s->ignore_first_irq = false;
         }
 
-        ret = ili_ice_mode_ctrl(ENABLE, mcu);
+        ret = ili7807s_ice_mode_ctrl(ENABLE, mcu);
 
         if (ret < 0) {
             return -EFW_ICE_MODE;
         }
     } else {
         /* Restore it if the wq of load_fw_ddi has been called. */
-        ilits->ddi_rest_done = false;
+        ilits7807s->ddi_rest_done = false;
     }
 
     /* Point to pfw with different addresses for getting its block data. */
     fw_ptr = pfw;
 
-    if (ilits->actual_tp_mode == P5_X_FW_TEST_MODE) {
+    if (ilits7807s->actual_tp_mode == P5_X_FW_TEST_MODE) {
         mode = MP;
-    } else if (ilits->actual_tp_mode ==
+    } else if (ilits7807s->actual_tp_mode ==
                P5_X_FW_GESTURE_MODE) {
         mode = GESTURE;
         crc_len = 0;
@@ -516,29 +516,29 @@ static int ilitek_tddi_fw_iram_upgrade(u8 *pfw,
 
             if ((crc != dma) || iram_crc_err) {
                 ILI_ERR("CRC Error! print iram data with first 16 bytes\n");
-                ili_fw_dump_iram_data(0x0, 0xF, false, OFF);
+                ili7807s_fw_dump_iram_data(0x0, 0xF, false, OFF);
                 return -EFW_CRC;
             }
         }
     }
 
-    if (ilits->actual_tp_mode !=
+    if (ilits7807s->actual_tp_mode !=
         P5_X_FW_GESTURE_MODE) {
-        if (ili_reset_ctrl(TP_IC_CODE_RST) < 0) {
+        if (ili7807s_reset_ctrl(TP_IC_CODE_RST) < 0) {
             ILI_ERR("TP Code reset failed during iram programming\n");
             ret = -EFW_REST;
             return ret;
         }
     }
 
-    if (ili_ice_mode_ctrl(DISABLE, mcu) < 0) {
+    if (ili7807s_ice_mode_ctrl(DISABLE, mcu) < 0) {
         ILI_ERR("Disable ice mode failed after code reset\n");
         ret = -EFW_ICE_MODE;
     }
 
     /* Waiting for fw ready sending first cmd */
-    if (!ilits->info_from_hex
-        || (ilits->chip->core_ver < CORE_VER_1410)) {
+    if (!ilits7807s->info_from_hex
+        || (ilits7807s->chip->core_ver < CORE_VER_1410)) {
         mdelay(100);
     }
 
@@ -547,13 +547,19 @@ static int ilitek_tddi_fw_iram_upgrade(u8 *pfw,
 
 static int ilitek_fw_calc_file_crc(u8 *pfw)
 {
-    int i;
+    int i, block_num = 0;
     u32 ex_addr, data_crc, file_crc;
 
     for (i = 0; i < ARRAY_SIZE(fbi); i++) {
-        if (fbi[i].end == 0) {
+        if (fbi[i].len >= MAX_HEX_FILE_SIZE) {
+	    ILI_ERR("Content of fw file is invalid. (fbi[%d].len=0x%x)\n", i, fbi[i].len);
+            return -1;
+	}
+
+        if (fbi[i].end <= 4) {
             continue;
         }
+        block_num++;
 
         ex_addr = fbi[i].end;
         data_crc = CalculateCRC32(fbi[i].start,
@@ -568,6 +574,12 @@ static int ilitek_fw_calc_file_crc(u8 *pfw)
                     i, data_crc, file_crc);
             return -1;
         }
+    }
+
+    if (fbi[MP].end <= 1 * K || fbi[AP].end <= 1 * K || (block_num == 0)) {
+        ILI_ERR("Content of fw file is broken. fbi[AP].end = 0x%x, fbi[MP].end = 0x%x, block_num = %d\n",
+			fbi[AP].end, fbi[MP].end, block_num);
+        return -1;
     }
 
     ILI_INFO("Content of fw file is correct\n");
@@ -670,36 +682,36 @@ static int ilitek_tddi_fw_update_block_info(
     fw_info_addr = fbi[AP].end - INFO_HEX_ST_ADDR;
     ILI_INFO("Parsing hex info start addr = 0x%x\n",
              fw_info_addr);
-    ipio_memcpy(ilits->fw_info, (pfw + fw_info_addr),
-                sizeof(ilits->fw_info), sizeof(ilits->fw_info));
+    ipio_memcpy(ilits7807s->fw_info, (pfw + fw_info_addr),
+                sizeof(ilits7807s->fw_info), sizeof(ilits7807s->fw_info));
     /* copy fw mp ver */
     fw_mp_ver_addr = fbi[MP].end - INFO_MP_HEX_ADDR;
     ILI_INFO("Parsing hex mp ver addr = 0x%x\n",
              fw_mp_ver_addr);
-    ipio_memcpy(ilits->fw_mp_ver,
-                pfw + fw_mp_ver_addr, sizeof(ilits->fw_mp_ver),
-                sizeof(ilits->fw_mp_ver));
+    ipio_memcpy(ilits7807s->fw_mp_ver,
+                pfw + fw_mp_ver_addr, sizeof(ilits7807s->fw_mp_ver),
+                sizeof(ilits7807s->fw_mp_ver));
     /* copy fw core ver */
-    ilits->chip->core_ver = (ilits->fw_info[68] << 24)
-                            | (ilits->fw_info[69] << 16) |
-                            (ilits->fw_info[70] << 8) | ilits->fw_info[71];
+    ilits7807s->chip->core_ver = (ilits7807s->fw_info[68] << 24)
+                            | (ilits7807s->fw_info[69] << 16) |
+                            (ilits7807s->fw_info[70] << 8) | ilits7807s->fw_info[71];
     ILI_INFO("New FW Core version = %x\n",
-             ilits->chip->core_ver);
+             ilits7807s->chip->core_ver);
     /* Get hex fw vers */
-    tfd.new_fw_cb = (ilits->fw_info[48] << 24) |
-                    (ilits->fw_info[49] << 16) |
-                    (ilits->fw_info[50] << 8) | ilits->fw_info[51];
+    tfd.new_fw_cb = (ilits7807s->fw_info[48] << 24) |
+                    (ilits7807s->fw_info[49] << 16) |
+                    (ilits7807s->fw_info[50] << 8) | ilits7807s->fw_info[51];
     /* Get hex report info block*/
-    ipio_memcpy(&ilits->rib, ilits->fw_info,
-                sizeof(ilits->rib), sizeof(ilits->rib));
+    ipio_memcpy(&ilits7807s->rib, ilits7807s->fw_info,
+                sizeof(ilits7807s->rib), sizeof(ilits7807s->rib));
     ILI_INFO("report_info_block : nReportByPixel = %d, nIsHostDownload = %d, nIsSPIICE = %d, nIsSPISLAVE = %d\n",
-             ilits->rib.nReportByPixel,
-             ilits->rib.nIsHostDownload, ilits->rib.nIsSPIICE,
-             ilits->rib.nIsSPISLAVE);
+             ilits7807s->rib.nReportByPixel,
+             ilits7807s->rib.nIsHostDownload, ilits7807s->rib.nIsSPIICE,
+             ilits7807s->rib.nIsSPISLAVE);
     ILI_INFO("report_info_block : nIsI2C = %d, nReserved00 = %d, nReserved01 = %x, nReserved02 = %x,  nReserved03 = %x\n",
-             ilits->rib.nIsI2C, ilits->rib.nReserved00,
-             ilits->rib.nReserved01, ilits->rib.nReserved02,
-             ilits->rib.nReserved03);
+             ilits7807s->rib.nIsI2C, ilits7807s->rib.nReserved00,
+             ilits7807s->rib.nReserved01, ilits7807s->rib.nReserved02,
+             ilits7807s->rib.nReserved03);
     /* Calculate update address */
     ILI_INFO("New FW ver = 0x%x\n", tfd.new_fw_cb);
     ILI_INFO("star_addr = 0x%06X, end_addr = 0x%06X, Block Num = %d\n",
@@ -713,22 +725,22 @@ static int ilitek_tddi_fw_ili_convert(u8 *pfw)
     int b0_addr = 0, b0_num = 0;
     const unsigned char *CTPM_FW = NULL;
 
-    if (!ilits->p_firmware_headfile) {
+    if (!ilits7807s->p_firmware_headfile) {
         ILI_ERR("get idev->p_firmware_headfile is NULL\n");
         return -1;
     }
 
-    if (!ilits->p_firmware_headfile->firmware_data
-        || ilits->p_firmware_headfile->firmware_size <=
+    if (!ilits7807s->p_firmware_headfile->firmware_data
+        || ilits7807s->p_firmware_headfile->firmware_size <=
         ILI_FILE_HEADER
-        || ilits->p_firmware_headfile->firmware_size >=
+        || ilits7807s->p_firmware_headfile->firmware_size >=
         MAX_HEX_FILE_SIZE) {
         ILI_ERR("get idev->p_firmware_headfile error\n");
         return -1;
     }
 
-    CTPM_FW = ilits->p_firmware_headfile->firmware_data;
-    size = ilits->p_firmware_headfile->firmware_size;
+    CTPM_FW = ilits7807s->p_firmware_headfile->firmware_data;
+    size = ilits7807s->p_firmware_headfile->firmware_size;
 
     if (size < ILI_FILE_HEADER
         || size > MAX_HEX_FILE_SIZE) {
@@ -793,7 +805,7 @@ static int ilitek_tddi_fw_ili_convert(u8 *pfw)
                     fbi[num].end, fbi[num].fix_mem_start);
 
             if (num == GESTURE) {
-                ilits->gesture_load_code = true;
+                ilits7807s->gesture_load_code = true;
             }
         }
     }
@@ -855,7 +867,7 @@ static int ilitek_tddi_fw_hex_convert(u8 *phex,
                     num, fbi[num].start, fbi[num].end);
 
             if (num == GESTURE) {
-                ilits->gesture_load_code = true;
+                ilits7807s->gesture_load_code = true;
             }
 
             block++;
@@ -922,7 +934,7 @@ static int ilitek_tdd_fw_hex_open(u8 op, u8 *pfw)
     mm_segment_t old_fs;
     loff_t pos = 0;
 
-    if (!ilits->oplus_fw_update) {
+    if (!ilits7807s->oplus_fw_update) {
         ILI_INFO("Open file method = %s, path = %s\n",
                  "FILP_OPEN", DEF_FW_FILP_PATH);
         f = filp_open(DEF_FW_FILP_PATH, O_RDONLY, 0644);
@@ -944,14 +956,14 @@ static int ilitek_tdd_fw_hex_open(u8 op, u8 *pfw)
             goto out;
         }
 
-        ilits->tp_fw.size = 0;
-        ilits->tp_fw.data = vmalloc(fsize);
+        ilits7807s->tp_fw.size = 0;
+        ilits7807s->tp_fw.data = vmalloc(fsize);
 
-        if (ERR_ALLOC_MEM(ilits->tp_fw.data)) {
+        if (ERR_ALLOC_MEM(ilits7807s->tp_fw.data)) {
             ILI_ERR("Failed to allocate tp_fw by vmalloc, try again\n");
-            ilits->tp_fw.data = vmalloc(fsize);
+            ilits7807s->tp_fw.data = vmalloc(fsize);
 
-            if (ERR_ALLOC_MEM(ilits->tp_fw.data)) {
+            if (ERR_ALLOC_MEM(ilits7807s->tp_fw.data)) {
                 ILI_ERR("Failed to allocate tp_fw after retry\n");
                 filp_close(f, NULL);
                 ret = -ENOMEM;
@@ -963,16 +975,16 @@ static int ilitek_tdd_fw_hex_open(u8 op, u8 *pfw)
         old_fs = get_fs();
         set_fs(KERNEL_DS);
         pos = 0;
-        vfs_read(f, (u8 *)ilits->tp_fw.data, fsize, &pos);
+        vfs_read(f, (u8 *)ilits7807s->tp_fw.data, fsize, &pos);
         set_fs(old_fs);
         filp_close(f, NULL);
-        ilits->tp_fw.size = fsize;
+        ilits7807s->tp_fw.size = fsize;
     } else {
         ILI_INFO("oplus fw update already request firmware\n");
     }
 
-    if (ERR_ALLOC_MEM(ilits->tp_fw.data)
-        || ilits->tp_fw.size <= 0) {
+    if (ERR_ALLOC_MEM(ilits7807s->tp_fw.data)
+        || ilits7807s->tp_fw.size <= 0) {
         ILI_ERR("fw data/size is invaild\n");
         ret = -1;
         goto out;
@@ -980,24 +992,24 @@ static int ilitek_tdd_fw_hex_open(u8 op, u8 *pfw)
 
     /* Convert hex and copy data from tp_fw.data to pfw */
     if (ilitek_tddi_fw_hex_convert((u8 *)
-                                   ilits->tp_fw.data, ilits->tp_fw.size, pfw) < 0) {
+                                   ilits7807s->tp_fw.data, ilits7807s->tp_fw.size, pfw) < 0) {
         ILI_ERR("Convert hex file failed\n");
         ret = -1;
     }
 
 out:
-    ili_vfree((void **) & (ilits->tp_fw.data));
+    ili_vfree((void **) & (ilits7807s->tp_fw.data));
     return ret;
 }
 
-int ili_fw_upgrade(int op)
+int ili7807s_fw_upgrade(int op)
 {
     int i, ret = 0, retry = 3;
     static bool set_esd_check = true;
 
-    if (ilits->oplus_fw_update
-        || ilits->force_fw_update || ERR_ALLOC_MEM(pfw)) {
-        ilits->gesture_load_code = false;
+    if (ilits7807s->oplus_fw_update
+        || ilits7807s->force_fw_update || ERR_ALLOC_MEM(pfw)) {
+        ilits7807s->gesture_load_code = false;
 
         if (ERR_ALLOC_MEM(pfw)) {
             ili_vfree((void **)&pfw);
@@ -1024,7 +1036,7 @@ int ili_fw_upgrade(int op)
              * fw from ILI file. We should force them to check
              * hex files if they attempt to update via device node.
              */
-            if (ilits->node_update) {
+            if (ilits7807s->node_update) {
                 ILI_ERR("Ignore update from ILI file\n");
                 ili_vfree((void **)&pfw);
                 return -EFW_CONVERT_FILE;
@@ -1042,14 +1054,14 @@ int ili_fw_upgrade(int op)
             goto out;
         }
 
-        if (ilits->chip->core_ver >= CORE_VER_1470
-            && ilits->rib.nIsHostDownload == 0) {
+        if (ilits7807s->chip->core_ver >= CORE_VER_1470
+            && ilits7807s->rib.nIsHostDownload == 0) {
             ILI_ERR("hex file interface no match error\n");
             return -EFW_INTERFACE;
         }
     }
 
-	if (!ilits->eng_flow) {
+	if (!ilits7807s->eng_flow) {
 	    do {
 	        ret = ilitek_tddi_fw_iram_upgrade(pfw, OFF);
 
@@ -1064,17 +1076,17 @@ int ili_fw_upgrade(int op)
 	        ILI_ERR("Failed to upgrade fw %d times, erasing iram\n",
 	                retry);
 
-	        if (ili_reset_ctrl(ilits->reset) < 0) {
+	        if (ili7807s_reset_ctrl(ilits7807s->reset) < 0) {
 	            ILI_ERR("TP reset failed while erasing data\n");
 	        }
 
-	        ilits->xch_num = 0;
-	        ilits->ych_num = 0;
+	        ilits7807s->xch_num = 0;
+	        ilits7807s->ych_num = 0;
 	        return ret;
 	    }
 	} else {
 		ILI_ERR("eng_flow do reset!\n");
-		ili_reset_ctrl(ilits->reset);
+		ili7807s_reset_ctrl(ilits7807s->reset);
 		mdelay(50);
 	}
 
@@ -1083,20 +1095,20 @@ int ili_fw_upgrade(int op)
     /*Waiting for fw ready sending first cmd*/
     mdelay(50);
 out:
-    ilits->sleep_type = NOT_SLEEP_MODE;
-    ili_ic_get_core_ver();
-    ili_ic_get_protocl_ver();
-    ili_ic_get_fw_ver();
-    ili_ic_get_tp_info();
-    ili_ic_get_panel_info();
+    ilits7807s->sleep_type = NOT_SLEEP_MODE;
+    ili7807s_ic_get_core_ver();
+    ili7807s_ic_get_protocl_ver();
+    ili7807s_ic_get_fw_ver();
+    ili7807s_ic_get_tp_info();
+    ili7807s_ic_get_panel_info();
 #ifdef CONFIG_OPLUS_TP_APK
 
-    if (ilits->debug_mode_sta
-        && ilits->actual_tp_mode !=
+    if (ilits7807s->debug_mode_sta
+        && ilits7807s->actual_tp_mode !=
         P5_X_FW_GESTURE_MODE) {
-        if (ilits->ts->apk_op
-            && ilits->ts->apk_op->apk_debug_set) {
-            ilits->ts->apk_op->apk_debug_set((void *)ilits,
+        if (ilits7807s->ts->apk_op
+            && ilits7807s->ts->apk_op->apk_debug_set) {
+            ilits7807s->ts->apk_op->apk_debug_set((void *)ilits7807s,
                                              true);
         }
     }
@@ -1105,7 +1117,7 @@ out:
 
     if (set_esd_check) {
         set_esd_check = false;
-        //ilits->esd_check_enabled = true;
+        //ilits7807s->esd_check_enabled = true;
     }
 
     return ret;

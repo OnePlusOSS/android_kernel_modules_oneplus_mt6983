@@ -107,7 +107,7 @@
 
 #define DUMP(fmt, arg...)       \
     do {                \
-        if (ili_debug_en)   \
+        if (ili7807s_debug_en)   \
             pr_cont(fmt, ##arg);    \
     } while (0)
 
@@ -167,7 +167,7 @@ struct open_test_para {
     int gain;
     int cbk_step;
     int cint;
-} open_para;
+} open_para_7807s;
 
 struct shor_test_para {
     int tvch;
@@ -175,7 +175,7 @@ struct shor_test_para {
     int variation;
     int rinternal;
     int cint;
-} short_para;
+} short_para_7807s;
 
 static struct core_mp_test_data {
     u32 chip_pid;
@@ -365,13 +365,13 @@ static int isspace_t(int x)
 
 static void dump_benchmark_data(s32 *max_ptr, s32 *min_ptr)
 {
-    ili_dump_data(max_ptr, 32, core_mp.frame_len, core_mp.xch_len, "Dump Benchmark Max : ");
-    ili_dump_data(min_ptr, 32, core_mp.frame_len, core_mp.xch_len, "Dump Benchmark Min : ");
+    ili7807s_dump_data(max_ptr, 32, core_mp.frame_len, core_mp.xch_len, "Dump Benchmark Max : ");
+    ili7807s_dump_data(min_ptr, 32, core_mp.frame_len, core_mp.xch_len, "Dump Benchmark Min : ");
 }
 
 static void dump_node_type_buffer(s32 *node_ptr, u8 *name)
 {
-    ili_dump_data(node_ptr, 32, core_mp.frame_len, 0, "Dump NodeType : ");
+    ili7807s_dump_data(node_ptr, 32, core_mp.frame_len, 0, "Dump NodeType : ");
 }
 
 static int parser_get_ini_key_value(char *section, char *key, char *value)
@@ -417,7 +417,7 @@ static void parser_ini_nodetype(s32 *type_ptr, char *desp, int frame_len)
                 if (record != '.') {
                     memset(str, 0, sizeof(str));
                     ipio_memcpy(str, &ini_info[i].key_value[index1], (j - index1), sizeof(str));
-                    temp = ili_katoi(str);
+                    temp = ili7807s_katoi(str);
 
                     /* Over boundary, end to calculate. */
                     if (count >= frame_len) {
@@ -460,7 +460,7 @@ static void parser_ini_benchmark(s32 *max_ptr, s32 *min_ptr, int8_t type, char *
                 if (record != '.') {
                     memset(str, 0, sizeof(str));
                     ipio_memcpy(str, &ini_info[i].key_value[index1], (j - index1), sizeof(str));
-                    temp = ili_katoi(str);
+                    temp = ili7807s_katoi(str);
                     data[(count % 4)] = temp;
 
                     /* Over boundary, end to calculate. */
@@ -519,7 +519,7 @@ static int parser_get_tdf_value(char *str, int catalog)
         }
     }
 
-    ans = ili_katoi(s);
+    ans = ili7807s_katoi(s);
 
     /* Multiply by 100 to shift out of decimal point */
     if (catalog == SHORT_TEST) {
@@ -826,7 +826,7 @@ static int ilitek_tddi_mp_ini_parser(const char *path)
     loff_t pos = 0;
     ILI_INFO("ini file path = %s\n", path);
 
-    if (request_firmware(&ini, path, ilits->dev) < 0) {
+    if (request_firmware(&ini, path, ilits7807s->dev) < 0) {
         ILI_ERR("Request ini file failed try to open %s\n", DEF_INI_NAME_PATH);
         f = filp_open(DEF_INI_NAME_PATH, O_RDONLY, 644);
 
@@ -1095,7 +1095,7 @@ static void mp_print_csv_header(char *csv, int *csv_len, int *csv_line, int file
     tmp_line++;
     tmp_len += snprintf(csv + tmp_len, CSV_FILE_SIZE - tmp_len,
                         "This is %s module\n",
-                        ilits->ts->panel_data.manufacture_info.manufacture);
+                        ilits7807s->ts->panel_data.manufacture_info.manufacture);
     tmp_line++;
     tmp_len += snprintf(csv + tmp_len, (file_size - tmp_len), "Firmware Version ,0x%x\n",
                         core_mp.fw_ver);
@@ -1192,7 +1192,7 @@ static void mp_print_csv_cdc_cmd(char *csv, int *csv_len, int index, int file_si
         /* Print short parameters */
         if (ipio_strcmp(name, "short test") == 0) {
             tmp_len += snprintf(csv + tmp_len, (file_size - tmp_len), "Variation = ,%d\n",
-                                short_para.variation);
+                                short_para_7807s.variation);
         }
 
         /* Print td second command */
@@ -1385,10 +1385,10 @@ static s32 open_c_formula(int inCap1DAC, int inCap1Raw, int accuracy)
     int inFoutRange_half = 8192;
     int inVadc_range = 36;
     int inVbk = 39;
-    int inCbk_step = open_para.cbk_step;/* from mp.ini */
-    int inCint = open_para.cint;/* from mp.ini */
-    int inVdrv = open_para.tvch - open_para.tvcl;/* from mp.ini */
-    int inGain = open_para.gain;/*  from mp.ini */
+    int inCbk_step = open_para_7807s.cbk_step;/* from mp.ini */
+    int inCint = open_para_7807s.cint;/* from mp.ini */
+    int inVdrv = open_para_7807s.tvch - open_para_7807s.tvcl;/* from mp.ini */
+    int inGain = open_para_7807s.gain;/*  from mp.ini */
     int inMagnification = 10;
     int inPartDac = 0;
     int inPartRaw = 0;
@@ -1445,11 +1445,11 @@ static void allnode_open_cdc_result(int index, int *buf, int *dac, int *raw)
 
     if (ipio_strcmp(desp, "open test(integration)_sp") == 0) {
         for (i = 0; i < core_mp.frame_len; i++) {
-            buf[i] = open_sp_formula(dac[i], raw[i], open_para.tvch, open_para.tvcl);
+            buf[i] = open_sp_formula(dac[i], raw[i], open_para_7807s.tvch, open_para_7807s.tvcl);
         }
     } else if (ipio_strcmp(desp, "open test_c") == 0) {
         if (parser_get_int_data(desp, "accuracy", str, sizeof(str)) > 0) {
-            accuracy = ili_katoi(str);
+            accuracy = ili7807s_katoi(str);
         }
 
         for (i = 0; i < core_mp.frame_len; i++) {
@@ -1462,13 +1462,13 @@ static int codeToOhm(s32 *ohm, s32 *Code, u16 *v_tdf, u16 *h_tdf)
 {
     u16 id = core_mp.chip_id;
     u8 type = core_mp.chip_type;
-    int inTVCH = short_para.tvch;
-    int inTVCL = short_para.tvcl;
-    int inVariation = short_para.variation;
+    int inTVCH = short_para_7807s.tvch;
+    int inTVCL = short_para_7807s.tvcl;
+    int inVariation = short_para_7807s.variation;
     int inTDF1 = 0;
     int inTDF2 = 0;
-    int inCint = short_para.cint;
-    int inRinternal = short_para.rinternal;
+    int inCint = short_para_7807s.cint;
+    int inRinternal = short_para_7807s.rinternal;
     s32 temp = 0;
     int j = 0;
 
@@ -1542,19 +1542,19 @@ static int short_test(int index, int frame_index)
     h_tdf[0] = tItems[index].h_tdf_1;
     h_tdf[1] = tItems[index].h_tdf_2;
     parser_get_int_data("short test", "tvch", str, sizeof(str));
-    short_para.tvch = ili_katoi(str);
+    short_para_7807s.tvch = ili7807s_katoi(str);
     parser_get_int_data("short test", "tvcl", str, sizeof(str));
-    short_para.tvcl = ili_katoi(str);
+    short_para_7807s.tvcl = ili7807s_katoi(str);
     parser_get_int_data("short test", "variation", str, sizeof(str));
-    short_para.variation = ili_katoi(str);
+    short_para_7807s.variation = ili7807s_katoi(str);
     parser_get_int_data("short test", "cint", str, sizeof(str));
-    short_para.cint = ili_katoi(str);
+    short_para_7807s.cint = ili7807s_katoi(str);
     parser_get_int_data("short test", "rinternal", str, sizeof(str));
-    short_para.rinternal = ili_katoi(str);
+    short_para_7807s.rinternal = ili7807s_katoi(str);
 
     /* 9881N, 9881O, 7807Q, 7807S not support cbk_step and cint read from mp.ini */
     if ((pid != 0x988117) && (pid != 0x988118) && (pid != 0x78071A) && (pid != 0x78071C)) {
-        if ((short_para.cint == 0) || (short_para.rinternal == 0)) {
+        if ((short_para_7807s.cint == 0) || (short_para_7807s.rinternal == 0)) {
             ILI_ERR("Failed to get short parameter");
             core_mp.lost_parameter = true;
             return -1;
@@ -1562,15 +1562,15 @@ static int short_test(int index, int frame_index)
     }
 
     ILI_INFO("TVCH = %d, TVCL = %d, Variation = %d, V_TDF1 = %d, V_TDF2 = %d, H_TDF1 = %d, H_TDF2 = %d, Cint = %d, Rinternal = %d\n"
-             , short_para.tvch, short_para.tvcl, short_para.variation, tItems[index].v_tdf_1,
-             tItems[index].v_tdf_2, tItems[index].h_tdf_1, tItems[index].h_tdf_2, short_para.cint,
-             short_para.rinternal);
+             , short_para_7807s.tvch, short_para_7807s.tvcl, short_para_7807s.variation, tItems[index].v_tdf_1,
+             tItems[index].v_tdf_2, tItems[index].h_tdf_1, tItems[index].h_tdf_2, short_para_7807s.cint,
+             short_para_7807s.rinternal);
 
     if (core_mp.protocol_ver >= PROTOCOL_VER_540) {
         /* Calculate code to ohm and save to tItems[index].buf */
-        ili_dump_data(frame_buf, 10, core_mp.frame_len, core_mp.xch_len, "Short Raw 1");
+        ili7807s_dump_data(frame_buf, 10, core_mp.frame_len, core_mp.xch_len, "Short Raw 1");
         codeToOhm(&tItems[index].buf[frame_index * core_mp.frame_len], frame_buf, v_tdf, h_tdf);
-        ili_dump_data(&tItems[index].buf[frame_index * core_mp.frame_len], 10, core_mp.frame_len,
+        ili7807s_dump_data(&tItems[index].buf[frame_index * core_mp.frame_len], 10, core_mp.frame_len,
                       core_mp.xch_len, "Short Ohm 1");
     } else {
         for (j = 0; j < core_mp.frame_len; j++) {
@@ -1610,14 +1610,14 @@ static int allnode_key_cdc_data(int index)
         goto out;
     }
 
-    ret = ilits->wrapper(cmd, sizeof(cmd), ori, len, ON, ON);
+    ret = ilits7807s->wrapper(cmd, sizeof(cmd), ori, len, ON, ON);
 
     if (ret < 0) {
         ILI_ERR(" fail to get cdc data\n");
         goto out;
     }
 
-    ili_dump_data(ori, 8, len, 0, "Key CDC original");
+    ili7807s_dump_data(ori, 8, len, 0, "Key CDC original");
 
     if (key_buf == NULL) {
         key_buf = kcalloc(core_mp.key_len, sizeof(s32), GFP_KERNEL);
@@ -1653,7 +1653,7 @@ static int allnode_key_cdc_data(int index)
         }
     }
 
-    ili_dump_data(key_buf, 32, core_mp.frame_len, core_mp.xch_len, "Key CDC combined data");
+    ili7807s_dump_data(key_buf, 32, core_mp.frame_len, core_mp.xch_len, "Key CDC combined data");
 out:
     ili_kfree((void **)&ori);
     return ret;
@@ -1755,7 +1755,7 @@ static int allnode_open_cdc_data(int mode, int *buf)
     }
 
     parser_get_u8_array(str, cmd, 16, sizeof(cmd));
-    ili_dump_data(cmd, 8, sizeof(cmd), 0, "Open SP command");
+    ili7807s_dump_data(cmd, 8, sizeof(cmd), 0, "Open SP command");
     /* Allocate a buffer for the original */
     ori = kcalloc(len, sizeof(u8), GFP_KERNEL);
 
@@ -1766,20 +1766,20 @@ static int allnode_open_cdc_data(int mode, int *buf)
     }
 
     /* Get original frame(cdc) data */
-	if (!ilits->eng_flow) {
-		if (ilits->wrapper(cmd, core_mp.cdc_len, ori, len, ON, ON) < 0) {
+	if (!ilits7807s->eng_flow) {
+		if (ilits7807s->wrapper(cmd, core_mp.cdc_len, ori, len, ON, ON) < 0) {
 			ILI_ERR("Failed to get cdc data\n");
 			ret = -EMP_GET_CDC;
 			goto out;
 		}
 	} else {
 		msleep(200);
-		if (ilits->wrapper(cmd, core_mp.cdc_len, ori, len, OFF, OFF) < 0) {
+		if (ilits7807s->wrapper(cmd, core_mp.cdc_len, ori, len, OFF, OFF) < 0) {
 			ILI_ERR("Failed to get cdc data\n");
 		}
     }
 
-    ili_dump_data(ori, 8, len, 0, "Open SP CDC original");
+    ili7807s_dump_data(ori, 8, len, 0, "Open SP CDC original");
 
     /* Convert original data to the physical one in each node */
     for (i = 0; i < core_mp.frame_len; i++) {
@@ -1813,7 +1813,7 @@ static int allnode_open_cdc_data(int mode, int *buf)
         }
     }
 
-    ili_dump_data(buf, 10, core_mp.frame_len,  core_mp.xch_len, "Open SP CDC combined");
+    ili7807s_dump_data(buf, 10, core_mp.frame_len,  core_mp.xch_len, "Open SP CDC combined");
 out:
     ili_kfree((void **)&ori);
     return ret;
@@ -1875,7 +1875,7 @@ static int allnode_peak_to_peak_cdc_data(int index)
         goto out;
     }
 
-    ili_dump_data(cmd, 8, core_mp.cdc_len, 0, "Mutual CDC command");
+    ili7807s_dump_data(cmd, 8, core_mp.cdc_len, 0, "Mutual CDC command");
 
     for (k = 0; k < rd_frame_num; k++) {
         if (k == 0) {
@@ -1887,20 +1887,20 @@ static int allnode_peak_to_peak_cdc_data(int index)
         memset(ori, 0, len);
 
         /* Get original frame(cdc) data */
-		if (!ilits->eng_flow) {
-			if (ilits->wrapper(cmd, cmd_len, ori, len, ON, ON) < 0) {
+		if (!ilits7807s->eng_flow) {
+			if (ilits7807s->wrapper(cmd, cmd_len, ori, len, ON, ON) < 0) {
 				ILI_ERR("Failed to get cdc data\n");
 				ret = -EMP_GET_CDC;
 				goto out;
 			}
 		} else {
 			msleep(200);
-			if (ilits->wrapper(cmd, cmd_len, ori, len, OFF, OFF) < 0) {
+			if (ilits7807s->wrapper(cmd, cmd_len, ori, len, OFF, OFF) < 0) {
 				ILI_ERR("Failed to get cdc data\n");
 			}
         }
 
-        ili_dump_data(ori, 8, len, 0, "Mutual CDC original");
+        ili7807s_dump_data(ori, 8, len, 0, "Mutual CDC original");
 
         /* Convert original data to the physical one in each node */
         for (i = 0; i < core_mp.frame_len; i++) {
@@ -1921,11 +1921,11 @@ static int allnode_peak_to_peak_cdc_data(int index)
     }
 
     if (tItems[index].bch_mrk_multi) {
-        ili_dump_data(frm_buf[0], 32, core_mp.frame_len, core_mp.xch_len, "Mutual CDC combined[0]/frame1");
-        ili_dump_data(frm_buf[1], 32, core_mp.frame_len, core_mp.xch_len, "Mutual CDC combined[1]/frame2");
-        ili_dump_data(frm_buf[2], 32, core_mp.frame_len, core_mp.xch_len, "Mutual CDC combined[2]/frame3");
+        ili7807s_dump_data(frm_buf[0], 32, core_mp.frame_len, core_mp.xch_len, "Mutual CDC combined[0]/frame1");
+        ili7807s_dump_data(frm_buf[1], 32, core_mp.frame_len, core_mp.xch_len, "Mutual CDC combined[1]/frame2");
+        ili7807s_dump_data(frm_buf[2], 32, core_mp.frame_len, core_mp.xch_len, "Mutual CDC combined[2]/frame3");
     } else {
-        ili_dump_data(frm_buf[0], 32, core_mp.frame_len, core_mp.xch_len, "Mutual CDC combined[0]/frame1");
+        ili7807s_dump_data(frm_buf[0], 32, core_mp.frame_len, core_mp.xch_len, "Mutual CDC combined[0]/frame1");
     }
 
 out:
@@ -1958,7 +1958,7 @@ static int allnode_mutual_cdc_data(int index)
         goto out;
     }
 
-    ili_dump_data(cmd, 8, core_mp.cdc_len, 0, "Mutual CDC command");
+    ili7807s_dump_data(cmd, 8, core_mp.cdc_len, 0, "Mutual CDC command");
     /* Allocate a buffer for the original */
     ori = kcalloc(len, sizeof(u8), GFP_KERNEL);
 
@@ -1969,20 +1969,20 @@ static int allnode_mutual_cdc_data(int index)
     }
 
     /* Get original frame(cdc) data */
-	if (!ilits->eng_flow) {
-		if (ilits->wrapper(cmd, core_mp.cdc_len, ori, len, ON, ON) < 0) {
+	if (!ilits7807s->eng_flow) {
+		if (ilits7807s->wrapper(cmd, core_mp.cdc_len, ori, len, ON, ON) < 0) {
 			ILI_ERR("Failed to get cdc data\n");
 			ret = -EMP_GET_CDC;
 			goto out;
 		}
 	} else {
 		msleep(200);
-		if (ilits->wrapper(cmd, core_mp.cdc_len, ori, len, OFF, OFF) < 0) {
+		if (ilits7807s->wrapper(cmd, core_mp.cdc_len, ori, len, OFF, OFF) < 0) {
 			ILI_ERR("Failed to get cdc data\n");
 		}
     }
 
-    ili_dump_data(ori, 8, len, 0, "Mutual CDC original");
+    ili7807s_dump_data(ori, 8, len, 0, "Mutual CDC original");
 
     if (frame_buf == NULL) {
         frame_buf = kcalloc(core_mp.frame_len, sizeof(s32), GFP_KERNEL);
@@ -2033,7 +2033,7 @@ static int allnode_mutual_cdc_data(int index)
         }
     }
 
-    ili_dump_data(frame_buf, 32, core_mp.frame_len, core_mp.xch_len, "Mutual CDC combined");
+    ili7807s_dump_data(frame_buf, 32, core_mp.frame_len, core_mp.xch_len, "Mutual CDC combined");
 out:
     ili_kfree((void **)&ori);
     return ret;
@@ -2268,7 +2268,7 @@ static int pin_test(int index)
         /* test HIGH level*/
         cmd[0] = tItems[index].cmd;
         cmd[1] = 0x1;
-        ret = ilits->wrapper(cmd, 2, NULL, 0, OFF, OFF);
+        ret = ilits7807s->wrapper(cmd, 2, NULL, 0, OFF, OFF);
 
         if (ret < 0) {
             ILI_ERR("Write command failed\n");
@@ -2276,7 +2276,7 @@ static int pin_test(int index)
             goto out;
         }
 
-        ret =  ilits->detect_int_stat(false);
+        ret =  ilits7807s->detect_int_stat(false);
 
         if (ret < 0) {
             ret = -EMP_INT;
@@ -2285,7 +2285,7 @@ static int pin_test(int index)
 
         /* test LOW level*/
         cmd[1] = 0x0;
-        ret = ilits->wrapper(cmd, 2, NULL, 0, OFF, OFF);
+        ret = ilits7807s->wrapper(cmd, 2, NULL, 0, OFF, OFF);
 
         if (ret < 0) {
             ILI_ERR("Write command failed\n");
@@ -2293,7 +2293,7 @@ static int pin_test(int index)
             goto out;
         }
 
-        ret =  ilits->detect_int_stat(false);
+        ret =  ilits7807s->detect_int_stat(false);
 
         if (ret < 0) {
             ret = -EMP_INT;
@@ -2305,8 +2305,8 @@ static int pin_test(int index)
         ILI_INFO("MP IRQ Rising Trigger Test\n");
         cmd[1] = 0x2;
         cmd[2] = tItems[index].delay_time;
-        atomic_set(&ilits->cmd_int_check, ENABLE);
-        ret = ilits->wrapper(cmd, 3, NULL, 0, OFF, OFF);
+        atomic_set(&ilits7807s->cmd_int_check, ENABLE);
+        ret = ilits7807s->wrapper(cmd, 3, NULL, 0, OFF, OFF);
 
         if (ret < 0) {
             ILI_ERR("Write command failed\n");
@@ -2314,7 +2314,7 @@ static int pin_test(int index)
             goto out;
         }
 
-        ret = ilits->detect_int_stat(false);
+        ret = ilits7807s->detect_int_stat(false);
 
         if (ret < 0) {
             ret = -EMP_INT;
@@ -2322,8 +2322,8 @@ static int pin_test(int index)
         }
 
         ILI_INFO("MP IRQ Falling Trigger Test\n");
-        atomic_set(&ilits->cmd_int_check, ENABLE);
-        ret = ilits->wrapper(cmd, 3, NULL, 0, OFF, OFF);
+        atomic_set(&ilits7807s->cmd_int_check, ENABLE);
+        ret = ilits7807s->wrapper(cmd, 3, NULL, 0, OFF, OFF);
 
         if (ret < 0) {
             ILI_ERR("Write command failed\n");
@@ -2331,7 +2331,7 @@ static int pin_test(int index)
             goto out;
         }
 
-        ret = ilits->detect_int_stat(false);
+        ret = ilits7807s->detect_int_stat(false);
 
         if (ret < 0) {
             ret = -EMP_INT;
@@ -2347,7 +2347,7 @@ out:
     }
 
     ILI_INFO("Change to defualt IRQ trigger type\n");
-    atomic_set(&ilits->cmd_int_check, DISABLE);
+    atomic_set(&ilits7807s->cmd_int_check, DISABLE);
     return ret;
 }
 
@@ -2595,20 +2595,20 @@ static int open_test_sp(int index)
     parser_ini_nodetype(tItems[index].node_type, NODE_TYPE_KEY_NAME, core_mp.frame_len);
     dump_node_type_buffer(tItems[index].node_type, "node type");
     parser_get_int_data(tItems[index].desp, "charge_aa", str, sizeof(str));
-    Charge_AA = ili_katoi(str);
+    Charge_AA = ili7807s_katoi(str);
     parser_get_int_data(tItems[index].desp, "charge_border", str, sizeof(str));
-    Charge_Border = ili_katoi(str);
+    Charge_Border = ili7807s_katoi(str);
     parser_get_int_data(tItems[index].desp, "charge_notch", str, sizeof(str));
-    Charge_Notch = ili_katoi(str);
+    Charge_Notch = ili7807s_katoi(str);
     parser_get_int_data(tItems[index].desp, "full open", str, sizeof(str));
-    full_open_rate = ili_katoi(str);
+    full_open_rate = ili7807s_katoi(str);
     parser_get_int_data(tItems[index].desp, "tvch", str, sizeof(str));
-    open_para.tvch = ili_katoi(str);
+    open_para_7807s.tvch = ili7807s_katoi(str);
     parser_get_int_data(tItems[index].desp, "tvcl", str, sizeof(str));
-    open_para.tvcl = ili_katoi(str);
+    open_para_7807s.tvcl = ili7807s_katoi(str);
     ILI_DBG("AA = %d, Border = %d, Notch = %d, full_open_rate = %d, tvch = %d, tvcl = %d\n",
             Charge_AA, Charge_Border, Charge_Notch,
-            full_open_rate, open_para.tvch, open_para.tvcl);
+            full_open_rate, open_para_7807s.tvch, open_para_7807s.tvcl);
 
     for (i = 0; i < tItems[index].frame_count; i++) {
         open[i].tdf_700 = kcalloc(core_mp.frame_len, sizeof(s32), GFP_KERNEL);
@@ -2666,9 +2666,9 @@ static int open_test_sp(int index)
                         core_mp.frame_len * sizeof(s32));
         }
 
-        ili_dump_data(open[i].cbk_700, 10, core_mp.frame_len, core_mp.xch_len, "cbk 700");
-        ili_dump_data(open[i].cbk_250, 10, core_mp.frame_len, core_mp.xch_len, "cbk 250");
-        ili_dump_data(open[i].cbk_200, 10, core_mp.frame_len, core_mp.xch_len, "cbk 200");
+        ili7807s_dump_data(open[i].cbk_700, 10, core_mp.frame_len, core_mp.xch_len, "cbk 700");
+        ili7807s_dump_data(open[i].cbk_250, 10, core_mp.frame_len, core_mp.xch_len, "cbk 250");
+        ili7807s_dump_data(open[i].cbk_200, 10, core_mp.frame_len, core_mp.xch_len, "cbk 200");
 
         for (y = 0; y < core_mp.ych_len; y++) {
             for (x = 0; x < core_mp.xch_len; x++) {
@@ -2678,8 +2678,8 @@ static int open_test_sp(int index)
             }
         }
 
-        ili_dump_data(open[i].charg_rate, 10, core_mp.frame_len, core_mp.xch_len, "origin charge rate");
-        ili_dump_data(open[i].full_Open, 10, core_mp.frame_len, core_mp.xch_len, "origin full open");
+        ili7807s_dump_data(open[i].charg_rate, 10, core_mp.frame_len, core_mp.xch_len, "origin charge rate");
+        ili7807s_dump_data(open[i].full_Open, 10, core_mp.frame_len, core_mp.xch_len, "origin full open");
         addr = 0;
 
         for (y = 0; y < core_mp.ych_len; y++) {
@@ -2694,7 +2694,7 @@ static int open_test_sp(int index)
             }
         }
 
-        ili_dump_data(&tItems[index].buf[(i * core_mp.frame_len)], 10, core_mp.frame_len, core_mp.xch_len,
+        ili7807s_dump_data(&tItems[index].buf[(i * core_mp.frame_len)], 10, core_mp.frame_len, core_mp.xch_len,
                       "after full_open_rate_compare");
         addr = 0;
 
@@ -2706,7 +2706,7 @@ static int open_test_sp(int index)
             }
         }
 
-        ili_dump_data(&tItems[index].buf[(i * core_mp.frame_len)], 10, core_mp.frame_len, core_mp.xch_len,
+        ili7807s_dump_data(&tItems[index].buf[(i * core_mp.frame_len)], 10, core_mp.frame_len, core_mp.xch_len,
                       "after compare charge rate");
         compare_MaxMin_result(index, &tItems[index].buf[(i * core_mp.frame_len)]);
     }
@@ -2799,19 +2799,19 @@ static int open_test_cap(int index)
     }
 
     parser_get_int_data(tItems[index].desp, "gain", str, sizeof(str));
-    open_para.gain = ili_katoi(str);
+    open_para_7807s.gain = ili7807s_katoi(str);
     parser_get_int_data(tItems[index].desp, "tvch", str, sizeof(str));
-    open_para.tvch = ili_katoi(str);
+    open_para_7807s.tvch = ili7807s_katoi(str);
     parser_get_int_data(tItems[index].desp, "tvcl", str, sizeof(str));
-    open_para.tvcl = ili_katoi(str);
+    open_para_7807s.tvcl = ili7807s_katoi(str);
     parser_get_int_data(tItems[index].desp, "cbk_step", str, sizeof(str));
-    open_para.cbk_step = ili_katoi(str);
+    open_para_7807s.cbk_step = ili7807s_katoi(str);
     parser_get_int_data(tItems[index].desp, "cint", str, sizeof(str));
-    open_para.cint = ili_katoi(str);
+    open_para_7807s.cint = ili7807s_katoi(str);
 
     /* 9881N, 9881O, 7807Q, 7807S not support cbk_step and cint read from mp.ini */
     if ((pid != 0x988117) && (pid != 0x988118) && (pid != 0x78071A) && (pid != 0x78071C)) {
-        if ((open_para.cbk_step == 0) || (open_para.cint == 0)) {
+        if ((open_para_7807s.cbk_step == 0) || (open_para_7807s.cint == 0)) {
             ILI_ERR("Failed to get open parameter");
             ret = -EMP_PARA_NULL;
             core_mp.lost_parameter = true;
@@ -2819,8 +2819,8 @@ static int open_test_cap(int index)
         }
     }
 
-    ILI_INFO("gain = %d, tvch = %d, tvcl = %d, cbk_step = %d, cint = %d\n", open_para.gain,
-             open_para.tvch, open_para.tvcl, open_para.cbk_step, open_para.cint);
+    ILI_INFO("gain = %d, tvch = %d, tvcl = %d, cbk_step = %d, cint = %d\n", open_para_7807s.gain,
+             open_para_7807s.tvch, open_para_7807s.tvcl, open_para_7807s.cbk_step, open_para_7807s.cint);
 
     for (i = 0; i < tItems[index].frame_count; i++) {
         open[i].cap_dac = kcalloc(core_mp.frame_len, sizeof(s32), GFP_KERNEL);
@@ -2853,7 +2853,7 @@ static int open_test_cap(int index)
                         core_mp.frame_len * sizeof(s32));
         }
 
-        ili_dump_data(open[i].dcl_cap, 10, core_mp.frame_len, core_mp.xch_len, "DCL_Cap");
+        ili7807s_dump_data(open[i].dcl_cap, 10, core_mp.frame_len, core_mp.xch_len, "DCL_Cap");
         addr = 0;
 
         for (y = 0; y < core_mp.ych_len; y++) {
@@ -2997,7 +2997,7 @@ static int mp_test_data_sort_average(s32 *oringin_data, int index, s32 *avg_resu
     u32down_frame = tItems[index].frame_count * tItems[index].lowest_percentage / 100;
     ILI_DBG("Up=%d, Down=%d -%s\n", u32up_frame, u32down_frame, tItems[index].desp);
 
-    if (ili_debug_en) {
+    if (ili7807s_debug_en) {
         pr_cont("\n[Show Original frist%d and last%d node data]\n", len, len);
 
         for (i = 0; i < core_mp.frame_len; i++) {
@@ -3028,7 +3028,7 @@ static int mp_test_data_sort_average(s32 *oringin_data, int index, s32 *avg_resu
         }
     }
 
-    if (ili_debug_en) {
+    if (ili7807s_debug_en) {
         pr_cont("\n[After sorting frist%d and last%d node data]\n", len, len);
 
         for (i = 0; i < core_mp.frame_len; i++) {
@@ -3054,7 +3054,7 @@ static int mp_test_data_sort_average(s32 *oringin_data, int index, s32 *avg_resu
         avg_result[i] = u32sum_raw_data[i] / (tItems[index].frame_count - u32down_frame - u32up_frame);
     }
 
-    if (ili_debug_en) {
+    if (ili7807s_debug_en) {
         pr_cont("\n[Average result frist%d and last%d node data]\n", len, len);
 
         for (i = 0; i < core_mp.frame_len; i++) {
@@ -3499,7 +3499,7 @@ static int mp_show_result(bool lcm_on)
             dev_mkdir(CSV_LCM_ON_NG_PATH, S_IRUGO | S_IWUSR);
 #if 1
             snprintf(csv_name, sizeof(csv_name), "%s/%s_lcm_on_%s_%s.csv", CSV_LCM_ON_NG_PATH, \
-                     ilits->ts->panel_data.manufacture_info.manufacture, get_date_time_str(), ret_fail_name);
+                     ilits7807s->ts->panel_data.manufacture_info.manufacture, get_date_time_str(), ret_fail_name);
 #else
             snprintf(csv_name, sizeof(csv_name), "%s/lcm_on_%s_%s.csv", CSV_LCM_ON_NG_PATH, \
                      get_date_time_str(), ret_fail_name);
@@ -3508,7 +3508,7 @@ static int mp_show_result(bool lcm_on)
             dev_mkdir(CSV_LCM_OFF_NG_PATH, S_IRUGO | S_IWUSR);
 #if 1
             snprintf(csv_name, sizeof(csv_name), "%s/%s_lcm_off_%s_%s.csv", CSV_LCM_OFF_NG_PATH, \
-                     ilits->ts->panel_data.manufacture_info.manufacture, get_date_time_str(), ret_fail_name);
+                     ilits7807s->ts->panel_data.manufacture_info.manufacture, get_date_time_str(), ret_fail_name);
 #else
             snprintf(csv_name, sizeof(csv_name), "%s/lcm_off_%s_%s.csv", CSV_LCM_OFF_NG_PATH, \
                      get_date_time_str(), ret_fail_name);
@@ -3527,7 +3527,7 @@ static int mp_show_result(bool lcm_on)
             dev_mkdir(CSV_LCM_ON_OK_PATH, S_IRUGO | S_IWUSR);
 #if 1
             snprintf(csv_name, sizeof(csv_name), "%s/%s_lcm_on_%s_%s.csv", CSV_LCM_ON_OK_PATH, \
-                     ilits->ts->panel_data.manufacture_info.manufacture, get_date_time_str(), ret_pass_name);
+                     ilits7807s->ts->panel_data.manufacture_info.manufacture, get_date_time_str(), ret_pass_name);
 #else
             snprintf(csv_name, sizeof(csv_name), "%s/lcm_on_%s_%s.csv", CSV_LCM_ON_OK_PATH, \
                      get_date_time_str(), ret_pass_name);
@@ -3536,7 +3536,7 @@ static int mp_show_result(bool lcm_on)
             dev_mkdir(CSV_LCM_OFF_OK_PATH, S_IRUGO | S_IWUSR);
 #if 1
             snprintf(csv_name, sizeof(csv_name), "%s/%s_lcm_off_%s_%s.csv", CSV_LCM_OFF_OK_PATH, \
-                     ilits->ts->panel_data.manufacture_info.manufacture, get_date_time_str(), ret_pass_name);
+                     ilits7807s->ts->panel_data.manufacture_info.manufacture, get_date_time_str(), ret_pass_name);
 #else
             snprintf(csv_name, sizeof(csv_name), "%s/lcm_off_%s_%s.csv", CSV_LCM_OFF_OK_PATH, \
                      get_date_time_str(), ret_pass_name);
@@ -3582,19 +3582,19 @@ static void ilitek_tddi_mp_init_item(void)
 {
     int i = 0;
     memset(&core_mp, 0, sizeof(core_mp));
-    memset(&open_para, 0, sizeof(open_para));
-    memset(&short_para, 0, sizeof(short_para));
-    core_mp.chip_pid = ilits->chip->pid;
-    core_mp.chip_id = ilits->chip->id;
-    core_mp.chip_type = ilits->chip->type;
-    core_mp.chip_ver = ilits->chip->ver;
-    core_mp.fw_ver = ilits->chip->fw_ver;
-    core_mp.protocol_ver = ilits->protocol->ver;
-    core_mp.core_ver = ilits->chip->core_ver;
-    core_mp.cdc_len = ilits->protocol->cdc_len;
-    core_mp.no_bk_shift = ilits->chip->no_bk_shift;
-    core_mp.xch_len = ilits->xch_num;
-    core_mp.ych_len = ilits->ych_num;
+    memset(&open_para_7807s, 0, sizeof(open_para_7807s));
+    memset(&short_para_7807s, 0, sizeof(short_para_7807s));
+    core_mp.chip_pid = ilits7807s->chip->pid;
+    core_mp.chip_id = ilits7807s->chip->id;
+    core_mp.chip_type = ilits7807s->chip->type;
+    core_mp.chip_ver = ilits7807s->chip->ver;
+    core_mp.fw_ver = ilits7807s->chip->fw_ver;
+    core_mp.protocol_ver = ilits7807s->protocol->ver;
+    core_mp.core_ver = ilits7807s->chip->core_ver;
+    core_mp.cdc_len = ilits7807s->protocol->cdc_len;
+    core_mp.no_bk_shift = ilits7807s->chip->no_bk_shift;
+    core_mp.xch_len = ilits7807s->xch_num;
+    core_mp.ych_len = ilits7807s->ych_num;
     core_mp.frame_len = core_mp.xch_len * core_mp.ych_len;
     core_mp.stx_len = 0;
     core_mp.srx_len = 0;
@@ -3602,7 +3602,7 @@ static void ilitek_tddi_mp_init_item(void)
     core_mp.st_len = 0;
     core_mp.tdf = 240;
     core_mp.busy_cdc = INT_CHECK;
-    core_mp.retry = ilits->mp_retry;
+    core_mp.retry = ilits7807s->mp_retry;
     core_mp.td_retry = false;
     core_mp.final_result = MP_DATA_FAIL;
     core_mp.lost_benchmark = false;
@@ -3610,7 +3610,7 @@ static void ilitek_tddi_mp_init_item(void)
     core_mp.all_pass = false;
     ILI_INFO("============== TP & Panel info ================\n");
     ILI_INFO("Driver version = %s\n", DRIVER_VERSION);
-    //ILI_INFO("TP Module = %s\n", ilits->md_name);
+    //ILI_INFO("TP Module = %s\n", ilits7807s->md_name);
     ILI_INFO("CHIP = 0x%x\n", core_mp.chip_pid);
     ILI_INFO("Firmware version = %x\n", core_mp.fw_ver);
     ILI_INFO("Protocol version = %x\n", core_mp.protocol_ver);
@@ -3719,23 +3719,23 @@ static void mp_test_run(int index)
     char str[512] = {0};
     /* Get parameters from ini */
     parser_get_int_data(tItems[i].desp, "spec option", str, sizeof(str));
-    tItems[i].spec_option = ili_katoi(str);
+    tItems[i].spec_option = ili7807s_katoi(str);
     parser_get_int_data(tItems[i].desp, "type option", str, sizeof(str));
-    tItems[i].type_option = ili_katoi(str);
+    tItems[i].type_option = ili7807s_katoi(str);
     parser_get_int_data(tItems[i].desp, "frame count", str, sizeof(str));
-    tItems[i].frame_count = ili_katoi(str);
+    tItems[i].frame_count = ili7807s_katoi(str);
     parser_get_int_data(tItems[i].desp, "trimmed mean", str, sizeof(str));
-    tItems[i].trimmed_mean = ili_katoi(str);
+    tItems[i].trimmed_mean = ili7807s_katoi(str);
     parser_get_int_data(tItems[i].desp, "lowest percentage", str, sizeof(str));
-    tItems[i].lowest_percentage = ili_katoi(str);
+    tItems[i].lowest_percentage = ili7807s_katoi(str);
     parser_get_int_data(tItems[i].desp, "highest percentage", str, sizeof(str));
-    tItems[i].highest_percentage = ili_katoi(str);
+    tItems[i].highest_percentage = ili7807s_katoi(str);
     parser_get_int_data(tItems[i].desp, "goldenmode", str, sizeof(str));
-    tItems[i].goldenmode = ili_katoi(str);
+    tItems[i].goldenmode = ili7807s_katoi(str);
     parser_get_int_data(tItems[i].desp, "max min mode", str, sizeof(str));
-    tItems[i].max_min_mode = ili_katoi(str);
+    tItems[i].max_min_mode = ili7807s_katoi(str);
     parser_get_int_data(tItems[i].desp, "retry count", str, sizeof(str));
-    tItems[i].retry_cnt = ili_katoi(str);
+    tItems[i].retry_cnt = ili7807s_katoi(str);
 
     if (tItems[i].goldenmode && (tItems[i].spec_option != tItems[i].goldenmode)) {
         core_mp.lost_benchmark = true;
@@ -3744,11 +3744,11 @@ static void mp_test_run(int index)
     /* Get pin test delay time */
     if (tItems[i].catalog == PIN_TEST) {
         parser_get_int_data(tItems[i].desp, "test int pin", str, sizeof(str));
-        tItems[i].test_int_pin = ili_katoi(str);
+        tItems[i].test_int_pin = ili7807s_katoi(str);
         parser_get_int_data(tItems[i].desp, "int pulse test", str, sizeof(str));
-        tItems[i].int_pulse_test = ili_katoi(str);
+        tItems[i].int_pulse_test = ili7807s_katoi(str);
         parser_get_int_data(tItems[i].desp, "delay time", str, sizeof(str));
-        tItems[i].delay_time = ili_katoi(str);
+        tItems[i].delay_time = ili7807s_katoi(str);
     }
 
     /* Get TDF value from ini */
@@ -3771,21 +3771,21 @@ static void mp_test_run(int index)
     /* Get threshold from ini structure in parser */
     if (ipio_strcmp(tItems[i].desp, "tx/rx delta") == 0) {
         parser_get_int_data(tItems[i].desp, "tx max", str, sizeof(str));
-        core_mp.TxDeltaMax = ili_katoi(str);
+        core_mp.TxDeltaMax = ili7807s_katoi(str);
         parser_get_int_data(tItems[i].desp, "tx min", str, sizeof(str));
-        core_mp.TxDeltaMin = ili_katoi(str);
+        core_mp.TxDeltaMin = ili7807s_katoi(str);
         parser_get_int_data(tItems[i].desp, "rx max", str, sizeof(str));
-        core_mp.RxDeltaMax = ili_katoi(str);
+        core_mp.RxDeltaMax = ili7807s_katoi(str);
         parser_get_int_data(tItems[i].desp, "rx min", str, sizeof(str));
-        core_mp.RxDeltaMin = ili_katoi(str);
+        core_mp.RxDeltaMin = ili7807s_katoi(str);
         ILI_DBG("%s: Tx Max = %d, Tx Min = %d, Rx Max = %d,  Rx Min = %d\n",
                 tItems[i].desp, core_mp.TxDeltaMax, core_mp.TxDeltaMin,
                 core_mp.RxDeltaMax, core_mp.RxDeltaMin);
     } else {
         parser_get_int_data(tItems[i].desp, "max", str, sizeof(str));
-        tItems[i].max = ili_katoi(str);
+        tItems[i].max = ili7807s_katoi(str);
         parser_get_int_data(tItems[i].desp, "min", str, sizeof(str));
-        tItems[i].min = ili_katoi(str);
+        tItems[i].min = ili7807s_katoi(str);
     }
 
     /* Get pin test delay time */
@@ -3821,8 +3821,8 @@ static void mp_test_run(int index)
     if (ipio_strcmp(tItems[i].desp, "peak to peak_td (lcm off)") == 0 &&
         tItems[i].item_result == MP_DATA_FAIL) {
         parser_get_int_data(tItems[i].desp, "recheck ptop lcm off", str, sizeof(str));
-        ILI_INFO("Peak to Peak TD retry = %d\n", ili_katoi(str));
-        core_mp.td_retry = ili_katoi(str);
+        ILI_INFO("Peak to Peak TD retry = %d\n", ili7807s_katoi(str));
+        core_mp.td_retry = ili7807s_katoi(str);
 
         if (core_mp.td_retry) {
             mp_p2p_td_retry_after_ra_fail(i);
@@ -3955,7 +3955,7 @@ static void mp_copy_ret_to_apk(char *buf, struct seq_file *s, char *message)
         }
     }
 
-    ilits->mp_ret_len = len;
+    ilits7807s->mp_ret_len = len;
 
     if (0 == test_failed_items) {
         if (!ERR_ALLOC_MEM(message)) {
@@ -3983,7 +3983,7 @@ static int mp_sort_item(bool lcm_on)
             }
 
             parser_get_int_data(tItems[j].desp, "enable", str, sizeof(str));
-            tItems[j].run = ili_katoi(str);
+            tItems[j].run = ili7807s_katoi(str);
 
             if (tItems[j].run != 1 || tItems[j].lcm != lcm_on) {
                 continue;
@@ -4008,15 +4008,15 @@ static void ilitek_tddi_mp_all_pass_check(void)
     u8 cmd[1] = {0xFD};
     u8 temp[3] = {0};
 
-	if (ilits->eng_flow) {
+	if (ilits7807s->eng_flow) {
 		core_mp.all_pass = true;
 		ILI_INFO("eng_flow MP test\n");
 		return;
 	}
-    ilits->wait_int_timeout = 20;
+    ilits7807s->wait_int_timeout = 20;
 
     do {
-        ret = ilits->wrapper(cmd, 1, temp, 3, ON, OFF);
+        ret = ilits7807s->wrapper(cmd, 1, temp, 3, ON, OFF);
 
         if (ret < 0) {
             ILI_ERR("Write MP All Pass command failed\n");
@@ -4028,7 +4028,7 @@ static void ilitek_tddi_mp_all_pass_check(void)
         }
     } while (--retry >= 0);
 
-    ilits->wait_int_timeout = MP_INT_TIMEOUT;
+    ilits7807s->wait_int_timeout = MP_INT_TIMEOUT;
 
     if (retry <= 0) {
         ILI_ERR("MP All Pass command failed, normal mode\n");
@@ -4036,7 +4036,7 @@ static void ilitek_tddi_mp_all_pass_check(void)
         return;
     }
 
-    if (temp[2] == ili_calc_packet_checksum(temp, sizeof(temp) - 1) &&
+    if (temp[2] == ili7807s_calc_packet_checksum(temp, sizeof(temp) - 1) &&
         temp[0] == 0xFD && temp[1] == 0x02) {           //0xFD:back door command header, 0x02:Normal mode
         core_mp.all_pass = true;
         ILI_ERR("MP mode check: Back door mode, MP All Pass\n");
@@ -4046,21 +4046,21 @@ static void ilitek_tddi_mp_all_pass_check(void)
     }
 }
 
-int ili_mp_test_main(char *apk, bool lcm_on, struct seq_file *s, char *message)
+int ili7807s_mp_test_main(char *apk, bool lcm_on, struct seq_file *s, char *message)
 {
     int i, ret = 0;
     char str[128] = {0}, ver[128] = {0};
 
-    if (ilits->xch_num <= 0 || ilits->ych_num <= 0) {
-        ILI_ERR("Invalid frame length (%d, %d)\n", ilits->xch_num, ilits->ych_num);
+    if (ilits7807s->xch_num <= 0 || ilits7807s->ych_num <= 0) {
+        ILI_ERR("Invalid frame length (%d, %d)\n", ilits7807s->xch_num, ilits7807s->ych_num);
 
         if (!ERR_ALLOC_MEM(message)) {
-            snprintf(message, MESSAGE_SIZE, "Invalid frame length (xch %d, ych %d)\n", ilits->xch_num,
-                     ilits->ych_num);
+            snprintf(message, MESSAGE_SIZE, "Invalid frame length (xch %d, ych %d)\n", ilits7807s->xch_num,
+                     ilits7807s->ych_num);
         }
 
         if (!ERR_ALLOC_MEM(s)) {
-            seq_printf(s, "Invalid frame length (xch %d, ych %d)\n", ilits->xch_num, ilits->ych_num);
+            seq_printf(s, "Invalid frame length (xch %d, ych %d)\n", ilits7807s->xch_num, ilits7807s->ych_num);
         }
 
         ret = -EMP_INVAL;
@@ -4088,7 +4088,7 @@ int ili_mp_test_main(char *apk, bool lcm_on, struct seq_file *s, char *message)
 
     ilitek_tddi_mp_init_item();
     ilitek_tddi_mp_all_pass_check();
-    ret = ilitek_tddi_mp_ini_parser(ilits->test_limit_name);
+    ret = ilitek_tddi_mp_ini_parser(ilits7807s->test_limit_name);
 
     if (ret < 0) {
         ILI_ERR("Failed to parsing INI file\n");
@@ -4109,15 +4109,15 @@ int ili_mp_test_main(char *apk, bool lcm_on, struct seq_file *s, char *message)
     parser_get_ini_key_value("pv5_4 command", "protocol", str);
     snprintf(ver, sizeof(ver), "0x%s", str);
 
-    if ((ili_str2hex(ver)) != (core_mp.protocol_ver >> 8)) {
-        ILI_ERR("ERROR! MP Protocol version is invaild, 0x%x\n", ili_str2hex(ver));
+    if ((ili7807s_str2hex(ver)) != (core_mp.protocol_ver >> 8)) {
+        ILI_ERR("ERROR! MP Protocol version is invaild, 0x%x\n", ili7807s_str2hex(ver));
 
         if (!ERR_ALLOC_MEM(message)) {
-            snprintf(message, MESSAGE_SIZE, "ERROR! MP Protocol version is invaild, 0x%x\n", ili_str2hex(ver));
+            snprintf(message, MESSAGE_SIZE, "ERROR! MP Protocol version is invaild, 0x%x\n", ili7807s_str2hex(ver));
         }
 
         if (!ERR_ALLOC_MEM(s)) {
-            seq_printf(s, "ERROR! MP Protocol version is invaild, 0x%x\n", ili_str2hex(ver));
+            seq_printf(s, "ERROR! MP Protocol version is invaild, 0x%x\n", ili7807s_str2hex(ver));
         }
 
         ret = -EMP_PROTOCOL;
@@ -4142,7 +4142,7 @@ int ili_mp_test_main(char *apk, bool lcm_on, struct seq_file *s, char *message)
 
 #if MP_INT_LEVEL
 
-    if (ili_ic_int_trigger_ctrl(true) < 0) {
+    if (ili7807s_ic_int_trigger_ctrl(true) < 0) {
         ILI_ERR("Failed to set INT as Level trigger\n");
 
         if (!ERR_ALLOC_MEM(message)) {
@@ -4186,7 +4186,7 @@ out:
     mp_test_free();
 #if MP_INT_LEVEL
 
-    if (ili_ic_int_trigger_ctrl(false) < 0) {
+    if (ili7807s_ic_int_trigger_ctrl(false) < 0) {
         ILI_ERR("Failed to set INT back to pluse trigger\n");
 
         if (!ERR_ALLOC_MEM(message)) {

@@ -71,6 +71,8 @@ static fw_update_state nvt_fw_update_sub(void *chip_data, const struct firmware 
 static fw_update_state nvt_fw_update(void *chip_data, const struct firmware *fw, bool force);
 static int nvt_reset(void *chip_data);
 static int nvt_get_chip_info(void *chip_data);
+static int nvt_get_touch_points_high_reso(void *chip_data, struct point_info *points, int max_num);
+static int nvt_get_touch_points(void *chip_data, struct point_info *points, int max_num);
 
 static struct chip_data_nt36672c *g_chip_info = NULL;
 static size_t fw_need_write_size = 0;
@@ -531,42 +533,54 @@ static void nvt_read_pid_noflash(struct chip_data_nt36672c *chip_info)
 
 static int32_t nvt_get_fw_info_noflash(struct chip_data_nt36672c *chip_info)
 {
-    uint8_t buf[64] = {0};
-    uint32_t retry_count = 0;
-    int32_t ret = 0;
+	uint8_t buf[64] = {0};
+	uint32_t retry_count = 0;
+	int32_t ret = 0;
+	struct touchpanel_data *ts = spi_get_drvdata(chip_info->s_client);
 
 info_retry:
-    //---set xdata index to EVENT BUF ADDR---
-    nvt_set_page(chip_info, chip_info->trim_id_table.mmap->EVENT_BUF_ADDR | EVENT_MAP_FWINFO);
+	/*---set xdata index to EVENT BUF ADDR---*/
+	nvt_set_page(chip_info, chip_info->trim_id_table.mmap->EVENT_BUF_ADDR | EVENT_MAP_FWINFO);
 
-    //---read fw info---
-    buf[0] = EVENT_MAP_FWINFO;
-    CTP_SPI_READ(chip_info->s_client, buf, 17);
-    chip_info->fw_ver = buf[1];
-    chip_info->fw_sub_ver = buf[14];
-    TPD_INFO("fw_ver = 0x%x, fw_type = 0x%x\n", chip_info->fw_ver, chip_info->fw_sub_ver);
+	/*---read fw info---*/
+	buf[0] = EVENT_MAP_FWINFO;
+	CTP_SPI_READ(chip_info->s_client, buf, 17);
+	chip_info->fw_ver = buf[1];
+	chip_info->fw_sub_ver = buf[14];
+	TPD_INFO("fw_ver = 0x%x, fw_type = 0x%x\n", chip_info->fw_ver, chip_info->fw_sub_ver);
 
-    //---clear x_num, y_num if fw info is broken---
-    if ((buf[1] + buf[2]) != 0xFF) {
-        TPD_INFO("FW info is broken! fw_ver=0x%02X, ~fw_ver=0x%02X\n", buf[1], buf[2]);
-        chip_info->fw_ver = 0;
+	/*---clear x_num, y_num if fw info is broken---*/
+	if ((buf[1] + buf[2]) != 0xFF) {
+		TPD_INFO("FW info is broken! fw_ver=0x%02X, ~fw_ver=0x%02X\n", buf[1], buf[2]);
+		chip_info->fw_ver = 0;
 
-        if(retry_count < 3) {
-            retry_count++;
-            TPD_INFO("retry_count=%d\n", retry_count);
-            goto info_retry;
-        } else {
-            TPD_INFO("Set default fw_ver=0, x_num=18, y_num=32, abs_x_max=1080, abs_y_max=1920, max_button_num=0!\n");
-            ret = -1;
-        }
-    } else {
-        ret = 0;
-    }
+		if(retry_count < 3) {
+			retry_count++;
+			TPD_INFO("retry_count=%d\n", retry_count);
+			goto info_retry;
+		} else {
+			TPD_INFO("Set default fw_ver=0, x_num=18, y_num=32, abs_x_max=1080, abs_y_max=1920, max_button_num=0!\n");
+			ret = -1;
+		}
+	} else {
+		chip_info->fw_eventbuf_prot = buf[13];
+		chip_info->nvt_pid = (uint16_t)((buf[36] << 8) | buf[35]);
+		TPD_INFO("fw_ver=0x%02X, fw_type=0x%02X, fw_eventbuf_prot=0x%02X\n",
+		chip_info->fw_ver, chip_info->fw_sub_ver,
+		chip_info->fw_eventbuf_prot);
+		ret = 0;
+	}
 
-    //---Get Novatek PID---
-    nvt_read_pid_noflash(chip_info);
+	if (chip_info->fw_eventbuf_prot == NVT_EVENTBUF_PROT_HIGH_RESO) {
+		ts->ts_ops->get_touch_points = nvt_get_touch_points_high_reso;
+	} else {
+		ts->ts_ops->get_touch_points = nvt_get_touch_points;
+	}
 
-    return ret;
+	/*---Get Novatek PID---*/
+	nvt_read_pid_noflash(chip_info);
+
+	return ret;
 }
 
 static uint32_t byte_to_word(const uint8_t *data)
@@ -1151,6 +1165,8 @@ static int32_t nvt_check_crc_done_ilm_err(struct chip_data_nt36672c *chip_info)
 
 	TPD_INFO("CRC DONE, ILM DLM FLAG = 0x%02X\n", buf[1]);
 	if (((buf[1] & ILM_CRC_FLAG) && (buf[1] & CRC_DONE)) ||
+			((buf[1] & DLM_CRC_FLAG) && (buf[1] & CRC_DONE)) ||
+			((buf[1] & CRC_DONE) == 0x00) ||
 			(buf[1] == 0xFE)) {
 		return 1;
 	} else {
@@ -1604,6 +1620,82 @@ static int32_t nvt_ts_point_data_checksum(uint8_t *buf, uint8_t length)
     return 0;
 }
 
+static int nvt_get_touch_points_high_reso(void *chip_data, struct point_info *points, int max_num)
+{
+	struct chip_data_nt36672c *chip_info = (struct chip_data_nt36672c *)chip_data;
+	int obj_attention = 0;
+	int i = 0;
+	int32_t ret = -1;
+	uint32_t position = 0;
+	uint32_t input_x = 0;
+	uint32_t input_y = 0;
+	uint32_t input_w = 0;
+	uint32_t input_p = 0;
+	uint8_t pointid = 0;
+	uint8_t point_data[POINT_DATA_LEN + 2] = {0};
+
+	ret = CTP_SPI_READ(chip_info->s_client, point_data, POINT_DATA_LEN + 1);
+	if (ret < 0) {
+		TPD_INFO("CTP_SPI_READ failed.(%d)\n", ret);
+		return -1;
+	}
+
+	/* some kind of protect mechanism, after WDT firware redownload and try to save tp */
+	ret = nvt_wdt_fw_recovery(chip_info, point_data);
+	if (ret) {
+		TPD_INFO("Recover for fw reset %02X\n", point_data[1]);
+		nvt_reset(chip_info);
+		return -1;
+	}
+
+	if (nvt_fw_recovery(point_data)) {  /* receive 0x77 */
+		nvt_esd_check_enable(chip_info, true);
+		return -1;
+	}
+
+	ret = nvt_ts_point_data_checksum(point_data, POINT_DATA_CHECKSUM_LEN);
+	if (ret) {
+		return -1;
+	}
+
+	for(i = 0; i < max_num; i++) {
+		position = 1 + 6 * i;
+		pointid = (uint8_t)(point_data[position + 0] >> 3) - 1;
+		if (pointid >= max_num) {
+			continue;
+		}
+
+		if (((point_data[position] & 0x07) == 0x01) ||
+			((point_data[position] & 0x07) == 0x02)) {
+			chip_info->irq_timer = jiffies;    /* reset esd check trigger base time */
+
+			input_x = (uint32_t)(point_data[position + 1] << 8) + (uint32_t) (point_data[position + 2]);
+			input_y = (uint32_t)(point_data[position + 3] << 8) + (uint32_t) (point_data[position + 4]);
+
+			input_w = (uint32_t)(point_data[position + 5]);
+			if (input_w == 0) {
+				input_w = 1;
+			}
+
+			input_p = input_w;
+
+			obj_attention = obj_attention | (1 << pointid);
+			points[pointid].x = input_x;
+			points[pointid].y = input_y;
+			points[pointid].z = input_p;
+			points[pointid].width_major = input_w;
+			points[pointid].touch_major = input_w;
+			points[pointid].status = 1;
+		}
+	}
+
+#ifdef CONFIG_OPLUS_TP_APK
+	if (chip_info->debug_mode_sta) {
+		nova_debug_info(chip_info, &point_data[109]);
+	}
+#endif /* end of CONFIG_OPLUS_TP_APK */
+	return obj_attention;
+}
 
 static int nvt_get_touch_points(void *chip_data, struct point_info *points, int max_num)
 {
@@ -1689,6 +1781,42 @@ static int nvt_get_touch_points(void *chip_data, struct point_info *points, int 
     }
 #endif // end of CONFIG_OPLUS_TP_APK
     return obj_attention;
+}
+
+static int8_t nvt_extend_cmd2_store(struct chip_data_nt36672c *chip_info,
+			uint8_t u8Cmd, uint8_t u8SubCmd, uint8_t u8SubCmd1)
+{
+	int i, retry = 5;
+	uint8_t buf[4] = {0};
+	/*---set xdata index to EVENT BUF ADDR---(set page)*/
+	nvt_set_page(chip_info, chip_info->trim_id_table.mmap->EVENT_BUF_ADDR);
+	for (i = 0; i < retry; i++) {
+		/*---set cmd status---*/
+		buf[0] = EVENT_MAP_HOST_CMD;
+		buf[1] = u8Cmd;
+		buf[2] = u8SubCmd;
+		buf[3] = u8SubCmd1;
+		CTP_SPI_WRITE(chip_info->s_client, buf, 4);
+		msleep(20);
+		/*---read cmd status---*/
+		buf[0] = EVENT_MAP_HOST_CMD;
+		buf[1] = 0xFF;
+		CTP_SPI_READ(chip_info->s_client, buf, 2);
+		if (buf[1] == 0x00) {
+			break;
+		} else {
+			TPD_INFO("cmd2 melo read buf1[%d] \n", buf[1]);
+		}
+	}
+	if (unlikely(i == retry)) {
+		TPD_INFO("send Cmd 0x%02X 0x%02X 0x%02X failed, buf[1]=0x%02X\n",
+				u8Cmd, u8SubCmd, u8SubCmd1, buf[1]);
+		return -1;
+	} else {
+		TPD_INFO("send Cmd 0x%02X 0x%02X 0x%02X success, tried %d times\n",
+				u8Cmd, u8SubCmd, u8SubCmd1, i);
+	}
+	return 0;
 }
 
 static int8_t nvt_extend_cmd_store(struct chip_data_nt36672c *chip_info, uint8_t u8Cmd, uint8_t u8SubCmd)
@@ -2290,6 +2418,28 @@ static int nvt_enable_headset_mode(struct chip_data_nt36672c *chip_info, bool en
     }
 
     return ret;
+}
+
+static int nvt_sensitive_lv_set(void *chip_data, int level)
+{
+	int8_t ret = -1;
+	struct chip_data_nt36672c *chip_info = (struct chip_data_nt36672c *)chip_data;
+
+	TPD_INFO("%s: sensitive value = %d, chip_info->is_sleep_writed = %d\n", __func__, level, chip_info->is_sleep_writed);
+
+	ret = nvt_extend_cmd2_store(chip_info, EVENTBUFFER_EXT_CMD, EVENTBUFFER_EXT_JITTER_LEVEL, level);
+	return ret;
+}
+
+static int nvt_smooth_lv_set(void *chip_data, int level)
+{
+	int8_t ret = -1;
+	struct chip_data_nt36672c *chip_info = (struct chip_data_nt36672c *)chip_data;
+
+	TPD_INFO("%s: smooth value = %d, chip_info->is_sleep_writed = %d\n", __func__, level, chip_info->is_sleep_writed);
+
+	ret = nvt_extend_cmd2_store(chip_info, EVENTBUFFER_EXT_CMD, EVENTBUFFER_EXT_SMOOTH_LEVEL, level);
+	return ret;
 }
 
 #ifdef CONFIG_OPLUS_TP_APK
@@ -3231,7 +3381,7 @@ out_fail:
         request_fw_headfile = NULL;
         //fw = NULL;
     }
-    return FW_NO_NEED_UPDATE;
+	return FW_UPDATE_ERROR;
 }
 
 
@@ -4100,6 +4250,8 @@ static struct oplus_touchpanel_operations nvt_ops = {
     .set_touch_direction        = nvt_set_touch_direction,
     .get_touch_direction        = nvt_get_touch_direction,
     .tp_irq_throw_away          = nvt_irq_throw_away,
+    .smooth_lv_set              = nvt_smooth_lv_set,
+    .sensitive_lv_set           = nvt_sensitive_lv_set,
 };
 
 static void nvt_data_read(struct seq_file *s, struct chip_data_nt36672c *chip_info, DEBUG_READ_TYPE read_type)
@@ -5181,13 +5333,13 @@ TEST_END:
     if (!err_cnt) {
         snprintf(all_test_result, 8, "PASS");
         snprintf(data_buf, 128, "/sdcard/TpTestReport/screenOn/OK/tp_testlimit_%s_%02d%02d%02d-%02d%02d%02d-utc.csv",
-                 all_test_result,
+                 (char *)all_test_result,
                  (rtc_now_time.tm_year + 1900) % 100, rtc_now_time.tm_mon + 1, rtc_now_time.tm_mday,
                  rtc_now_time.tm_hour, rtc_now_time.tm_min, rtc_now_time.tm_sec);
     } else {
         snprintf(all_test_result, 8, "FAIL");
         snprintf(data_buf, 128, "/sdcard/TpTestReport/screenOn/NG/tp_testlimit_%s_%02d%02d%02d-%02d%02d%02d-utc.csv",
-                 all_test_result,
+                 (char *)all_test_result,
                  (rtc_now_time.tm_year + 1900) % 100, rtc_now_time.tm_mon + 1, rtc_now_time.tm_mday,
                  rtc_now_time.tm_hour, rtc_now_time.tm_min, rtc_now_time.tm_sec);
     }

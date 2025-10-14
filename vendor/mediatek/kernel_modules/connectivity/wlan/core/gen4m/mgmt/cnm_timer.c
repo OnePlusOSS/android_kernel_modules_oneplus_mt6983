@@ -254,7 +254,7 @@ void cnmTimerInitialize(IN struct ADAPTER *prAdapter)
 
 	KAL_ACQUIRE_SPIN_LOCK(prAdapter, SPIN_LOCK_TIMER);
 
-	log_dbg(CNM, WARN, "reset timer list\n");
+	log_dbg(CNM, INFO, "reset timer list\n");
 
 	/* Remove all pending timers */
 	prTimerList = &(prAdapter->rRootTimer.rLinkHead);

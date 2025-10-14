@@ -1594,18 +1594,39 @@ scnDoZeroMdrdyRecoveryCheck(IN struct ADAPTER *prAdapter,
 	struct WIFI_VAR *prWifiVar = &prAdapter->rWifiVar;
 	uint8_t i;
 	uint8_t fgZeroMdrdy = TRUE, fgZeroBeaconProbeReq = TRUE;
+#if CFG_SCAN_MDRDY_CLEAN_CHECK
+	uint8_t ucCleanChCount = 0;
+	uint8_t fgCleanEnvir = FALSE;
+	uint8_t ucTotalChNum = prScanDone->ucSparseChannelArrayValidNum;
+#endif
+
 
 	prAisBssInfo = aisGetAisBssInfo(prAdapter, ucBssIndex);
 
 	for (i = 0; i < prScanDone->ucSparseChannelArrayValidNum; i++) {
 		if (prScanDone->aucChannelMDRDYCnt[i] > 0)
 			fgZeroMdrdy = FALSE;
+#if CFG_SCAN_MDRDY_CLEAN_CHECK
+		if (prScanDone->aucChannelMDRDYCnt[i] < 10)
+			ucCleanChCount++;
+#endif
 		if (prScanDone->aucChannelBAndPCnt[i] > 0)
 			fgZeroBeaconProbeReq = FALSE;
 	}
 
+#if CFG_SCAN_MDRDY_CLEAN_CHECK
+	/* If over 80 precent channel MDRDY < 10
+	 * DUT should be clean environment
+	 */
+	if (ucTotalChNum && (((ucCleanChCount * 10) / ucTotalChNum) >= 8))
+		fgCleanEnvir = TRUE;
+
+	/* Abnormal: total Mdrdy=0 or beacon+ProbReq=0 in not CleanEnvir */
+	if (fgZeroMdrdy || (fgZeroBeaconProbeReq && !fgCleanEnvir)) {
+#else
 	/* Abnormal: total Mdrdy=0 or beacon+ProbReq=0 case */
 	if (fgZeroMdrdy || fgZeroBeaconProbeReq) {
+#endif
 		prScanInfo->ucScnZeroMdrdyTimes++;
 
 		log_dbg(SCN, WARN, "ScanRecover: Mdrdy(%d),BandP(%d), Count(%d), Conn(%d), SER(%d), Reset(%d)",

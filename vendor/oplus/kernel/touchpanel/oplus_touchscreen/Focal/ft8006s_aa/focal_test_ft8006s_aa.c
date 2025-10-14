@@ -88,15 +88,15 @@
 
 
 #define FTS_TEST_SAVE_INFO(fmt, args...) do { \
-    if (fts_data->s) { \
-        seq_printf(fts_data->s, fmt, ##args); \
+	if (fts8006s_data->s) { \
+        seq_printf(fts8006s_data->s, fmt, ##args); \
     } \
     TPD_INFO(fmt, ##args); \
 } while (0)
 
 #define FTS_TEST_SAVE_ERR(fmt, args...)  do { \
-    if (fts_data->s) { \
-        seq_printf(fts_data->s, fmt, ##args); \
+	if (fts8006s_data->s) { \
+        seq_printf(fts8006s_data->s, fmt, ##args); \
     } \
     TPD_INFO(fmt, ##args); \
 } while (0)
@@ -131,7 +131,7 @@ static void sys_delay(int ms)
     msleep(ms);
 }
 
-int focal_abs(int value)
+int focal8006s_abs(int value)
 {
     if (value < 0)
         value = 0 - value;
@@ -139,7 +139,7 @@ int focal_abs(int value)
     return value;
 }
 
-void print_buffer(int *buffer, int length, int line_num)
+void fts8006s_print_buffer(int *buffer, int length, int line_num)
 {
     int i = 0;
     int j = 0;
@@ -180,7 +180,7 @@ static int fts_test_bus_read(u8 *cmd, int cmdlen, u8 *data, int datalen)
 {
     int ret = 0;
 
-    ret = fts_read(fts_data->spi, cmd, cmdlen, data, datalen);
+	ret = fts_read(fts8006s_data->spi, cmd, cmdlen, data, datalen);
     if (ret < 0)
         return ret;
     else
@@ -191,7 +191,7 @@ static int fts_test_bus_write(u8 *writebuf, int writelen)
 {
     int ret = 0;
 
-    ret = fts_write(fts_data->spi, (char *)writebuf, writelen);
+	ret = fts_write(fts8006s_data->spi, (char *)writebuf, writelen);
     if (ret < 0)
         return ret;
     else
@@ -408,12 +408,8 @@ static int enter_factory_mode(void)
         sys_delay(50);
     }
 
-    if (i >= ENTER_WORK_FACTORY_RETRIES) {
-        FTS_TEST_SAVE_ERR("Enter factory mode fail\n");
-        return -EIO;
-    }
-
-    return 0;
+	FTS_TEST_SAVE_ERR("Enter factory mode fail\n");
+	return -EIO;
 }
 
 static int get_channel_num(struct fts_ts_data *ts_data)
@@ -1632,24 +1628,24 @@ static void fts_print_threshold(struct fts_ts_data *ts_data)
     int node_num = tx_num * rx_num;
 
     TPD_DEBUG("short threshold max/min:\n");
-    print_buffer(ts_data->fts_autotest_offset->fts_short_data_P, node_num, rx_num);
-    print_buffer(ts_data->fts_autotest_offset->fts_short_data_N, node_num, rx_num);
+	fts8006s_print_buffer(ts_data->fts_autotest_offset->fts_short_data_P, node_num, rx_num);
+	fts8006s_print_buffer(ts_data->fts_autotest_offset->fts_short_data_N, node_num, rx_num);
 
     TPD_DEBUG("open threshold max/min:\n");
-    print_buffer(ts_data->fts_autotest_offset->fts_open_data_P, node_num, rx_num);
-    print_buffer(ts_data->fts_autotest_offset->fts_open_data_N, node_num, rx_num);
+	fts8006s_print_buffer(ts_data->fts_autotest_offset->fts_open_data_P, node_num, rx_num);
+	fts8006s_print_buffer(ts_data->fts_autotest_offset->fts_open_data_N, node_num, rx_num);
 
     TPD_DEBUG("cb threshold max/min:\n");
-    print_buffer(ts_data->fts_autotest_offset->fts_cb_data_P, node_num, rx_num);
-    print_buffer(ts_data->fts_autotest_offset->fts_cb_data_N, node_num, rx_num);
+	fts8006s_print_buffer(ts_data->fts_autotest_offset->fts_cb_data_P, node_num, rx_num);
+	fts8006s_print_buffer(ts_data->fts_autotest_offset->fts_cb_data_N, node_num, rx_num);
 
     TPD_DEBUG("rawdata threshold max/min:\n");
-    print_buffer(ts_data->fts_autotest_offset->fts_raw_data_P, node_num, rx_num);
-    print_buffer(ts_data->fts_autotest_offset->fts_raw_data_N, node_num, rx_num);
+	fts8006s_print_buffer(ts_data->fts_autotest_offset->fts_raw_data_P, node_num, rx_num);
+	fts8006s_print_buffer(ts_data->fts_autotest_offset->fts_raw_data_N, node_num, rx_num);
 
     TPD_DEBUG("lcdnoise threshold max/min:\n");
-    print_buffer(ts_data->fts_autotest_offset->fts_lcdnoise_data_P, node_num, rx_num);
-    print_buffer(ts_data->fts_autotest_offset->fts_lcdnoise_data_N, node_num, rx_num);
+	fts8006s_print_buffer(ts_data->fts_autotest_offset->fts_lcdnoise_data_P, node_num, rx_num);
+	fts8006s_print_buffer(ts_data->fts_autotest_offset->fts_lcdnoise_data_N, node_num, rx_num);
 }
 
 static int fts_enter_test_environment(struct touchpanel_data *ts, bool test_state)
@@ -1702,7 +1698,6 @@ static int fts_enter_test_environment(struct touchpanel_data *ts, bool test_stat
     msleep(50);
     fts_test_read_reg(FTS_REG_FACTORY_MODE_DETACH_FLAG, &detach_flag);
     TPD_INFO("regb4:0x%02x\n", detach_flag);
-
     if (fw) {
         release_firmware(fw);
         fw = NULL;
@@ -1710,14 +1705,14 @@ static int fts_enter_test_environment(struct touchpanel_data *ts, bool test_stat
     return ret;
 }
 
-int fts_test_entry(struct fts_ts_data *ts_data, bool black_screen)
+int fts8006s_test_entry(struct fts_ts_data *ts_data, bool black_screen)
 {
     int ret = 0;
     struct touchpanel_data *ts = ts_data->ts;
     const struct firmware *limit_fw = NULL;
 
     TPD_INFO("%s +\n", __func__);
-    FTS_TEST_SAVE_ERR("FW_VER:0x%02x, TX_NUM:%d, RX_NUM:%d\n", ts_data->fwver, 
+	FTS_TEST_SAVE_ERR("FW_VER:0x%02x, TX_NUM:%d, RX_NUM:%d\n", ts_data->fwver,
         ts_data->hw_res->TX_NUM, ts_data->hw_res->RX_NUM);
 
     ts_data->black_screen_test = black_screen;
@@ -1754,8 +1749,8 @@ int fts_test_entry(struct fts_ts_data *ts_data, bool black_screen)
     //seq_printf(s, "%d error(s). %s\n", gts_test->error_count, gts_test->error_count ? "" : "All test passed.");
     //FTS_TEST_SAVE_INFO("\n\n %d Error(s). Factory Test Result \n", ret);
     //FTS_TEST_SAVE_INFO("\n\n%d error(s). %s\n", ret, ret ? "" : "All test passed.\n");
-    if (fts_data->s) {
-        seq_printf(fts_data->s, "%d error(s). %s\n", ret, ret ? "" : "All test passed.");
+	if (fts8006s_data->s) {
+        seq_printf(fts8006s_data->s, "%d error(s). %s\n", ret, ret ? "" : "All test passed.");
     }
 
 test_err:

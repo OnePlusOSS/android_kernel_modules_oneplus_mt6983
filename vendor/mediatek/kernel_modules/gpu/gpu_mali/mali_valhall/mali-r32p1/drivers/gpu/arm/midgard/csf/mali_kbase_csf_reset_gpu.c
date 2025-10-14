@@ -304,7 +304,7 @@ static void kbase_csf_debug_dump_registers(struct kbase_device *kbdev)
 #endif
 }
 
-static void kbase_csf_dump_firmware_trace_buffer(struct kbase_device *kbdev)
+void kbase_csf_dump_firmware_trace_buffer(struct kbase_device *kbdev)
 {
 	u8 *buf, *line_str;
 	unsigned int read_size;
@@ -312,7 +312,7 @@ static void kbase_csf_dump_firmware_trace_buffer(struct kbase_device *kbdev)
 		kbase_csf_firmware_get_trace_buffer(kbdev, FW_TRACE_BUF_NAME);
 
 	if (tb == NULL) {
-		dev_vdbg(kbdev->dev, "Can't get the trace buffer, firmware trace dump skipped");
+		dev_err(kbdev->dev, "Can't get the trace buffer, firmware trace dump skipped");
 		return;
 	}
 
@@ -323,6 +323,7 @@ static void kbase_csf_dump_firmware_trace_buffer(struct kbase_device *kbdev)
 	}
 	line_str = &buf[PAGE_SIZE];
 
+	mutex_lock(&kbdev->csf.firmware_trace_buffers.dump_lock);
 	dev_err(kbdev->dev, "Firmware trace buffer dump:");
 	while ((read_size = kbase_csf_firmware_trace_buffer_read_data(tb, buf,
 								PAGE_SIZE))) {
@@ -351,6 +352,7 @@ static void kbase_csf_dump_firmware_trace_buffer(struct kbase_device *kbdev)
 		}
 	}
 
+	mutex_unlock(&kbdev->csf.firmware_trace_buffers.dump_lock);
 	kfree(buf);
 }
 

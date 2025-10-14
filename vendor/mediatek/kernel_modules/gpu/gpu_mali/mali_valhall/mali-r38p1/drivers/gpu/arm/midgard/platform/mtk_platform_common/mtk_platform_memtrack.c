@@ -80,6 +80,48 @@ static int mali_procinfo_show(struct seq_file *s, void *unused)
 }
 DEFINE_PROC_SHOW_ATTRIBUTE(mali_procinfo);
 
+static int mali_procdetail_max_show(struct seq_file *sfile, void *unused)
+{
+#if IS_ENABLED(CONFIG_DEBUG_FS)
+	unsigned int sz = 0;
+	unsigned int sz_max = 0;
+	struct kbase_context *kctx = NULL;
+	struct kbase_context *kctx_max = NULL;
+	struct kbase_device *kbdev = (struct kbase_device *)mtk_common_get_kbdev();
+
+	if (IS_ERR_OR_NULL(kbdev))
+		return -ENODEV;
+
+	mutex_lock(&memtrack_lock);
+
+	mutex_lock(&kbdev->kctx_list_lock);
+	list_for_each_entry(kctx, &kbdev->kctx_list, kctx_list_link) {
+		sz = atomic_read(&(kctx->used_pages));
+		if(sz > sz_max) {
+			sz_max = sz;
+			kctx_max = kctx;
+		}
+	}
+	if (kctx_max) {
+		atomic_inc(&kctx_max->refcount);
+	}
+	mutex_unlock(&kbdev->kctx_list_lock);
+
+	if (kctx_max) {
+		mutex_lock(&kctx_max->mem_profile_lock);
+		seq_write(sfile, kctx_max->mem_profile_data, kctx_max->mem_profile_size);
+		mutex_unlock(&kctx_max->mem_profile_lock);
+		atomic_dec(&kctx_max->refcount);
+	}
+
+	seq_putc(sfile, '\n');
+	mutex_unlock(&memtrack_lock);
+
+#endif
+	return 0;
+}
+DEFINE_PROC_SHOW_ATTRIBUTE(mali_procdetail_max);
+
 long read_mali_mem_usage(enum mtrack_subtype type)
 {
 	struct kbase_device *kbdev = (struct kbase_device *)mtk_common_get_kbdev();
@@ -96,8 +138,13 @@ long read_mali_mem_usage(enum mtrack_subtype type)
 
 void dump_mali_usage_stat(bool verbose)
 {
+	unsigned int sz = 0;
 	struct kbase_device *kbdev = (struct kbase_device *)mtk_common_get_kbdev();
 	struct kbase_context *kctx;
+#if IS_ENABLED(CONFIG_DEBUG_FS)
+	unsigned int sz_max = 0;
+	struct kbase_context *kctx_max = NULL;
+#endif
 
 	if (IS_ERR_OR_NULL(kbdev))
 		return;
@@ -110,15 +157,66 @@ void dump_mali_usage_stat(bool verbose)
 	list_for_each_entry(kctx, &kbdev->kctx_list, kctx_list_link) {
 		struct task_struct *task;
 		rcu_read_lock();
+		sz = atomic_read(&(kctx->used_pages));
+#if IS_ENABLED(CONFIG_DEBUG_FS)
+		if(sz > sz_max) {
+			sz_max = sz;
+			kctx_max = kctx;
+		}
+#endif
 		task = find_task_by_vpid(kctx->tgid);
 		osvelte_info("%16s %5u %u\n",
 			     task ? task->comm : "[null task]",
 			     kctx->tgid,
-			     K(atomic_read(&(kctx->used_pages))));
+			     K(sz));
 		rcu_read_unlock();
 	}
 	mutex_unlock(&kbdev->kctx_list_lock);
 	mutex_unlock(&memtrack_lock);
+
+#if IS_ENABLED(CONFIG_DEBUG_FS)
+	if(sz_max >= (SZ_1G >> PAGE_SHIFT)) {
+		char *buf = NULL;
+		size_t size = 0;
+		if(kctx_max) {
+			mutex_lock(&kctx_max->mem_profile_lock);
+			if(kctx_max->mem_profile_data && kctx_max->mem_profile_size > 0) {
+				buf = kmalloc(kctx_max->mem_profile_size, GFP_KERNEL);
+				size = kctx_max->mem_profile_size;
+				if(buf) {
+					memcpy(buf, kctx_max->mem_profile_data, size);
+				}
+			} else {
+				pr_err("failed to copy mem_profile");
+			}
+			mutex_unlock(&kctx_max->mem_profile_lock);
+		}
+
+		if(buf) {
+			char result[100] = {0};
+			int lastLine = size - 1;
+			int enterTime = 0;
+			while(lastLine < size) {
+				if(buf[lastLine] == '\n') {
+					enterTime++;
+				}
+				if(enterTime == 2) {
+					int resultPos = 0;
+					while(lastLine < size - 1) {
+						result[resultPos] = buf[lastLine+1];
+						lastLine++;
+						resultPos++;
+					}
+					result[resultPos] = '\0';
+					break;
+				}
+				lastLine--;
+			}
+			pr_err("%s", result);
+			kfree(buf);
+		}
+	}
+#endif
 }
 
 long read_pid_mali_mem_usage(enum mtrack_subtype mtype, pid_t pid)
@@ -162,6 +260,8 @@ int mtk_memtrack_procfs_init(struct kbase_device *kbdev, struct proc_dir_entry *
 	register_mtrack_debugger(MTRACK_GPU, &mali_mtrack_debugger);
 	register_mtrack_procfs(MTRACK_GPU, "procinfo", 0444,
 			       &mali_procinfo_proc_ops, NULL);
+	register_mtrack_procfs(MTRACK_GPU, "procdetail_max", 0444,
+			       &mali_procdetail_max_proc_ops, NULL);
 #endif /* CONFIG_OPLUS_FEATURE_MM_OSVELTE */
 
 	return 0;

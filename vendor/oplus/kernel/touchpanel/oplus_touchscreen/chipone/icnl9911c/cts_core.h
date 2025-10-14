@@ -33,9 +33,9 @@
 #include <linux/spi/spi.h>
 #include <linux/spi/spidev.h>
 
-#include "../touchpanel_common.h"
-#include "../tp_devices.h"
-#include "../util_interface/touch_interfaces.h"
+#include "../../touchpanel_common.h"
+#include "../../tp_devices.h"
+#include "../../util_interface/touch_interfaces.h"
 
 
 #define TPD_DEVICE "chipone,icnl9911c"

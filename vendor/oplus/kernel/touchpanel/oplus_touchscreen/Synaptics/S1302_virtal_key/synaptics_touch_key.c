@@ -496,6 +496,7 @@ static int synaptics_init_panel(struct synaptics_ts_data *ts)
         return -1;
     }
     /*device control: normal operation, configur = 1*/
+    //chenggang.li @BSP change 0x80 to 0x84, bit2:1 nosleep  bit2:0 sleep
     ret = synaptics_rmi4_i2c_write_byte(ts->client, F01_RMI_CTRL00, 0x80);
     if (ret < 0) {
         msleep(150);

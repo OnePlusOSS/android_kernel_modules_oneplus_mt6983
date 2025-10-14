@@ -307,9 +307,9 @@ struct kbase_csf_notification {
  *
  * @kctx:        Pointer to the base context with which this GPU command queue
  *               is associated.
- * @reg:         Pointer to the region allocated from the shared
- *               interface segment for mapping the User mode
- *               input/output pages in MCU firmware address space.
+ * @user_io_gpu_va: The start GPU VA address of this queue's userio pages. Only
+ *                  valid (i.e. not 0) when the queue is enabled and its owner
+ *                  group has a runtime bound csg_reg (group region).
  * @phys:        Pointer to the physical pages allocated for the
  *               pair or User mode input/output page
  * @user_io_addr: Pointer to the permanent kernel mapping of User mode
@@ -380,7 +380,7 @@ struct kbase_csf_notification {
  */
 struct kbase_queue {
 	struct kbase_context *kctx;
-	struct kbase_va_region *reg;
+	u64 user_io_gpu_va;
 	struct tagged_addr phys[2];
 	char *user_io_addr;
 	u64 handle;
@@ -420,25 +420,29 @@ struct kbase_queue {
 /**
  * struct kbase_normal_suspend_buffer - Object representing a normal
  *		suspend buffer for queue group.
- * @reg:	Memory region allocated for the normal-mode suspend buffer.
+ * @gpu_va: The start GPU VA address of the bound suspend buffer.
+ *          Note, this field is only valid when the owner group
+ *          has a region bound at runtime.
  * @phy:	Array of physical memory pages allocated for the normal-
  *		mode suspend buffer.
  */
 struct kbase_normal_suspend_buffer {
-	struct kbase_va_region *reg;
+	u64 gpu_va;
 	struct tagged_addr *phy;
 };
 
 /**
  * struct kbase_protected_suspend_buffer - Object representing a protected
  *		suspend buffer for queue group.
- * @reg:	Memory region allocated for the protected-mode suspend buffer.
+ * @gpu_va: The start GPU VA address of the bound protected mode suspend buffer.
+ *          Note, this field is only valid when the owner group has a region
+ *          bound at runtime.
  * @pma:	Array of pointer to protected mode allocations containing
  *		information about memory pages allocated for protected mode
  *		suspend	buffer.
  */
 struct kbase_protected_suspend_buffer {
-	struct kbase_va_region *reg;
+	u64 gpu_va;
 	struct protected_memory_allocation **pma;
 };
 
@@ -508,6 +512,9 @@ struct kbase_protected_suspend_buffer {
  *                   to be returned to userspace if such an error has occurred.
  * @timer_event_work: Work item to handle the progress timeout fatal event
  *                    for the group.
+ * @csg_reg: An opaque pointer to the runtime bound shared regions. It is
+ *           dynamically managed by the scheduler and can be NULL if the group
+ *           is off-slot.
  */
 struct kbase_queue_group {
 	struct kbase_context *kctx;
@@ -549,6 +556,7 @@ struct kbase_queue_group {
 
 	struct work_struct timer_event_work;
 
+	void *csg_reg;
 };
 
 /**
@@ -887,6 +895,33 @@ struct kbase_csf_sched_heap_reclaim_mgr {
 };
 
 /**
+ * struct kbase_csf_mcu_shared_regions - Control data for managing the MCU shared
+ *                                       interface segment regions for scheduler
+ *                                       operations.
+ *
+ * @array_csg_regs: Base pointer of an internally created GPU VA regions for CSGs.
+ * @unused_csg_regs: List contains unused CSG region items. When an item is bound to
+ *                   a group that is placed on-slot by the scheduler, it is dropped
+ *                   from the list (i.e. busy active). The scheduler will put an active
+ *                   item back when it becomes off-slot (not in use).
+ * @dummy_phys: An array of dummy physical pages for use with normal and pmode suspend
+ *              buffers, as a default replacement of a CSG's pages for the MMU mapping
+ *              when the csg_reg is not bound to a group.
+ * @pma_phys: Pre-allocated array of physical pages to be use as a scratch memory for
+ *            protected suspend buffer MMU map operations.
+ * @userio_mem_rd_flags: Userio input page's read access mapping configuration flags.
+ * @dummy_phys_allocated: Indicating whether @p dummy_phys pages are allocated.
+ */
+struct kbase_csf_mcu_shared_regions {
+	void *array_csg_regs;
+	struct list_head unused_csg_regs;
+	struct tagged_addr *dummy_phys;
+	struct tagged_addr *pma_phys;
+	unsigned long userio_mem_rd_flags;
+	bool dummy_phys_allocated;
+};
+
+/**
  * struct kbase_csf_scheduler - Object representing the scheduler used for
  *                              CSF for an instance of GPU platform device.
  * @lock:                  Lock to serialize the scheduler operations and
@@ -1023,6 +1058,9 @@ struct kbase_csf_sched_heap_reclaim_mgr {
  *                          @interrupt_lock is used to serialize the access.
  * @protm_enter_time:       GPU protected mode enter time.
  * @reclaim_mgr:            CSGs tiler heap manager object.
+ * @mcu_regs_data:          Scheduler MCU shared regions data for managing the
+ *                          shared interface mappings for on-slot queues and
+ *                          CSG suspend buffers.
  */
 struct kbase_csf_scheduler {
 	struct mutex lock;
@@ -1068,6 +1106,7 @@ struct kbase_csf_scheduler {
 	u32 tick_protm_pending_seq;
 	ktime_t protm_enter_time;
 	struct kbase_csf_sched_heap_reclaim_mgr reclaim_mgr;
+	struct kbase_csf_mcu_shared_regions mcu_regs_data;
 };
 
 /*

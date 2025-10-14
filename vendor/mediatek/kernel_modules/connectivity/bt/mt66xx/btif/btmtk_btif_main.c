@@ -1901,6 +1901,7 @@ int32_t btmtk_tx_thread(void * arg)
 				    skb->data[2] == 0xFD && skb->data[3] == 0x00) {
 					kfree_skb(skb);
 					skb_queue_purge(&cif_dev->tx_queue);
+					BTMTK_ERR("Host send 0xFD5B trigger reset");
 					bt_trigger_reset();
 					break;
 				}

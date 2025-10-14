@@ -101,7 +101,7 @@
 #include "../../touchpanel_healthinfo.h"
 #include <soc/oplus/system/oplus_project.h>
 
-#define DRIVER_VERSION                  "3.0.4.0.210906"
+#define DRIVER_VERSION                  "3.0.4.0.221208"
 
 /* Options */
 #define SPI_CLK                         9      /* follow by clk list */
@@ -159,10 +159,10 @@
         pr_err("[TP]ILITEK: [ERR](%s, %d): " fmt, __func__, __LINE__, ##arg);   \
     })                                                                      \
 
-extern bool ili_debug_en;
+extern bool ili7807s_debug_en;
 #define ILI_DBG(fmt, arg...)                                            \
     do {                                                                    \
-        if (LEVEL_DEBUG == tp_debug || ili_debug_en)                                            \
+        if (LEVEL_DEBUG == tp_debug || ili7807s_debug_en)                                            \
             pr_info("[TP]ILITEK: [DEBUG](%s, %d): " fmt, __func__, __LINE__, ##arg);        \
     } while (0)
 
@@ -411,7 +411,7 @@ struct report_info_block {
 #define CORE_VER_1460                           0x01040600
 #define CORE_VER_1470                           0x01040700
 
-#define MAX_HEX_FILE_SIZE                       (160*K)
+#define MAX_HEX_FILE_SIZE                       (256*K)
 #define ILI_FILE_HEADER                         256
 #define DLM_START_ADDRESS                       0x20610
 #define DLM_HEX_ADDRESS                         0x10000
@@ -692,6 +692,7 @@ struct ilitek_ts_data {
     bool pll_clk_wakeup;
 	bool position_high_resolution;
 	bool eng_flow;
+	bool shutdown_support;
 
     atomic_t irq_stat;
     atomic_t tp_reset;
@@ -723,7 +724,7 @@ struct ilitek_ts_data {
 
     struct monitor_data_v2 *monitor_data_v2;
 };
-extern struct ilitek_ts_data *ilits;
+extern struct ilitek_ts_data *ilits7807s;
 
 struct ili_demo_debug_info_id0 {
     u32 id                  : 8;
@@ -835,120 +836,120 @@ struct ilitek_ic_info {
 };
 
 /* Prototypes for tddi firmware/flash functions */
-extern int ili_fw_dump_iram_data(u32 start,
+extern int ili7807s_fw_dump_iram_data(u32 start,
                                  u32 end, bool save, bool mcu);
-extern int ili_fw_upgrade(int op);
+extern int ili7807s_fw_upgrade(int op);
 
 /* Prototypes for tddi mp test */
-extern int ili_mp_test_main(char *apk,
+extern int ili7807s_mp_test_main(char *apk,
                             bool lcm_on, struct seq_file *s, char *message);
 
 /* Prototypes for tddi core functions */
-extern int ili_touch_esd_gesture_iram(void);
-extern void ili_set_gesture_symbol(void);
-extern int ili_move_gesture_code_iram(int mode);
-extern int ili_move_mp_code_iram(void);
-extern void ili_touch_press(u16 x, u16 y,
+extern int ili7807s_touch_esd_gesture_iram(void);
+extern void ili7807s_set_gesture_symbol(void);
+extern int ili7807s_move_gesture_code_iram(int mode);
+extern int ili7807s_move_mp_code_iram(void);
+extern void ili7807s_touch_press(u16 x, u16 y,
                             u16 pressure, u16 id);
-extern void ili_touch_release(u16 x, u16 y,
+extern void ili7807s_touch_release(u16 x, u16 y,
                               u16 id);
-extern void ili_report_ap_mode(u8 *buf, int len);
-extern void ili_report_debug_mode(u8 *buf,
+extern void ili7807s_report_ap_mode(u8 *buf, int len);
+extern void ili7807s_report_debug_mode(u8 *buf,
                                   int rlen);
-extern void ili_report_debug_lite_mode(u8 *buf,
+extern void ili7807s_report_debug_lite_mode(u8 *buf,
                                        int rlen);
-extern void ili_report_gesture_mode(u8 *buf,
+extern void ili7807s_report_gesture_mode(u8 *buf,
                                     int rlen);
-extern void ili_report_i2cuart_mode(u8 *buf,
+extern void ili7807s_report_i2cuart_mode(u8 *buf,
                                     int rlen);
-extern void ili_ic_set_ddi_reg_onepage(u8 page,
+extern void ili7807s_ic_set_ddi_reg_onepage(u8 page,
                                        u8 reg, u8 data, bool mcu);
-extern void ili_ic_get_ddi_reg_onepage(u8 page,
+extern void ili7807s_ic_get_ddi_reg_onepage(u8 page,
                                        u8 reg, u8 *data, bool mcu);
-extern int ili_ic_whole_reset(bool mcu);
-extern int ili_ic_code_reset(bool mcu);
-extern int ili_ic_func_ctrl(const char *name,
+extern int ili7807s_ic_whole_reset(bool mcu);
+extern int ili7807s_ic_code_reset(bool mcu);
+extern int ili7807s_ic_func_ctrl(const char *name,
                             int ctrl);
 
-extern int ili_ic_int_trigger_ctrl(bool pulse);
-extern void ili_ic_get_pc_counter(int stat);
-extern int ili_ic_check_int_level(bool level);
-extern int ili_ic_check_int_pulse(bool pulse);
-extern int ili_ic_check_busy(int count,
+extern int ili7807s_ic_int_trigger_ctrl(bool pulse);
+extern void ili7807s_ic_get_pc_counter(int stat);
+extern int ili7807s_ic_check_int_level(bool level);
+extern int ili7807s_ic_check_int_pulse(bool pulse);
+extern int ili7807s_ic_check_busy(int count,
                              int delay);
-extern int ili_ic_get_panel_info(void);
-extern int ili_ic_get_tp_info(void);
-extern int ili_ic_get_core_ver(void);
-extern int ili_ic_get_protocl_ver(void);
-extern int ili_ic_get_fw_ver(void);
-extern int ili_ic_get_info(void);
-extern int ili_ic_dummy_check(void);
-extern int ili_ice_mode_bit_mask_write(u32 addr,
+extern int ili7807s_ic_get_panel_info(void);
+extern int ili7807s_ic_get_tp_info(void);
+extern int ili7807s_ic_get_core_ver(void);
+extern int ili7807s_ic_get_protocl_ver(void);
+extern int ili7807s_ic_get_fw_ver(void);
+extern int ili7807s_ic_get_info(void);
+extern int ili7807s_ic_dummy_check(void);
+extern int ili7807s_ice_mode_bit_mask_write(u32 addr,
                                        u32 mask, u32 value);
-extern int ili_ice_mode_write(u32 addr, u32 data,
+extern int ili7807s_ice_mode_write(u32 addr, u32 data,
                               int len);
-extern int ili_ice_mode_read(u32 addr, u32 *data,
+extern int ili7807s_ice_mode_read(u32 addr, u32 *data,
                              int len);
-extern int ili_ice_mode_ctrl(bool enable,
+extern int ili7807s_ice_mode_ctrl(bool enable,
                              bool mcu);
-extern void ili_ic_init(void);
-extern void ili_fw_uart_ctrl(u8 ctrl);
+extern void ili7807s_ic_init(void);
+extern void ili7807s_fw_uart_ctrl(u8 ctrl);
 
 /* Prototypes for tddi events */
 #if RESUME_BY_DDI
-extern void ili_resume_by_ddi(void);
+extern void ili7807s_resume_by_ddi(void);
 #endif
-extern int ili_proximity_far(int mode);
-extern int ili_proximity_near(int mode);
-extern int ili_switch_tp_mode(u8 data);
-extern int ili_set_tp_data_len(int format,
+extern int ili7807s_proximity_far(int mode);
+extern int ili7807s_proximity_near(int mode);
+extern int ili7807s_switch_tp_mode(u8 data);
+extern int ili7807s_set_tp_data_len(int format,
                                bool send, u8 *data);
-extern int ili_fw_upgrade_handler(void);
-extern int ili_wq_esd_i2c_check(void);
-extern int ili_gesture_recovery(void);
-extern void ili_spi_recovery(void);
-extern int ili_mp_test_handler(char *apk,
+extern int ili7807s_fw_upgrade_handler(void);
+extern int ili7807s_wq_esd_i2c_check(void);
+extern int ili7807s_gesture_recovery(void);
+extern void ili7807s_spi_recovery(void);
+extern int ili7807s_mp_test_handler(char *apk,
                                bool lcm_on, struct seq_file *s, char *message);
-extern int ili_report_handler(void);
-extern int ili_sleep_handler(int mode);
-extern int ili_reset_ctrl(int mode);
-extern int ili_tddi_init(void);
+extern int ili7807s_report_handler(void);
+extern int ili7807s_sleep_handler(int mode);
+extern int ili7807s_reset_ctrl(int mode);
+extern int ili7807s_tddi_init(void);
 
 /* Prototypes for i2c/spi interface */
-extern int ili_core_spi_setup(int num);
-extern int ili_spi_write_then_read_split(
+extern int ili7807s_core_spi_setup(int num);
+extern int ili7807s_spi_write_then_read_split(
     struct spi_device *spi,
     const void *txbuf, unsigned n_tx,
     void *rxbuf, unsigned n_rx);
-extern int ili_spi_write_then_read_direct(
+extern int ili7807s_spi_write_then_read_direct(
     struct spi_device *spi,
     const void *txbuf, unsigned n_tx,
     void *rxbuf, unsigned n_rx);
 
 /* Prototypes for platform level */
-extern void ili_irq_disable(void);
-extern void ili_irq_enable(void);
-extern void ili_tp_reset(void);
+extern void ili7807s_irq_disable(void);
+extern void ili7807s_irq_enable(void);
+extern void ili7807s_tp_reset(void);
 
 /* Prototypes for miscs */
-extern void ili_node_init(void);
-extern void ili_dump_data(void *data, int type,
+extern void ili7807s_node_init(void);
+extern void ili7807s_dump_data(void *data, int type,
                           int len, int row_len, const char *name);
-extern u8 ili_calc_packet_checksum(u8 *packet,
+extern u8 ili7807s_calc_packet_checksum(u8 *packet,
                                    int len);
-extern void ili_netlink_reply_msg(void *raw,
+extern void ili7807s_netlink_reply_msg(void *raw,
                                   int size);
-extern int ili_katoi(char *str);
-extern int ili_str2hex(char *str);
+extern int ili7807s_katoi(char *str);
+extern int ili7807s_str2hex(char *str);
 
-extern int ili_mp_read_write(u8 *wdata, u32 wlen,
+extern int ili7807s_mp_read_write(u8 *wdata, u32 wlen,
                              u8 *rdata, u32 rlen);
 /* Prototypes for additional functionalities */
-extern void ili_gesture_fail_reason(bool enable);
-extern int ili_get_tp_recore_ctrl(int data);
-extern int ili_get_tp_recore_data(u16 *out_buf,
+extern void ili7807s_gesture_fail_reason(bool enable);
+extern int ili7807s_get_tp_recore_ctrl(int data);
+extern int ili7807s_get_tp_recore_data(u16 *out_buf,
                                   u32 out_len);
-extern void ili_demo_debug_info_mode(u8 *buf,
+extern void ili7807s_demo_debug_info_mode(u8 *buf,
                                      size_t rlen);
 
 static inline void ili_kfree(void **mem)

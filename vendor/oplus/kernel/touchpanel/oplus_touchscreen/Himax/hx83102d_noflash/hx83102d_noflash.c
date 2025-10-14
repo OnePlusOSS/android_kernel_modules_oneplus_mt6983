@@ -1053,7 +1053,10 @@ bool wait_wip(int Timing)
         tmp_data[0] = 0x05;
         himax_flash_write_burst(tmp_addr, tmp_data);
 
-        in_buffer[0] = in_buffer[1] = in_buffer[2] = in_buffer[3] = 0xFF;
+	in_buffer[0] = 0xFF;
+	in_buffer[1] = 0xFF;
+	in_buffer[2] = 0xFF;
+	in_buffer[3] = 0xFF;
         tmp_addr[3] = 0x80;
         tmp_addr[2] = 0x00;
         tmp_addr[1] = 0x00;
@@ -3462,9 +3465,9 @@ int hx_test_data_pop_out(struct chip_data_hx83102d *chip_info, char *g_Test_list
     pos = pos + (int)(strlen(g_Test_list_log));
 
     vfs_write(raw_file, rslt_buf, g_1kind_raw_size * HX_CRITERIA_ITEM * sizeof(char), &pos);
-    if (raw_file != NULL)
-        filp_close(raw_file, NULL);
 
+
+		filp_close(raw_file, NULL);
     set_fs(fs);
 
 SAVE_DATA_ERR:
@@ -3492,10 +3495,10 @@ int hx_test_data_get(struct chip_data_hx83102d *chip_info, uint32_t RAW[], char 
     len += snprintf((testdata + len), SZ_SIZE - len, "%s", start_log);
     for (i = 0; i < chip_info->hw_res->TX_NUM * chip_info->hw_res->RX_NUM; i++) {
         if (i > 1 && ((i + 1) % chip_info->hw_res->RX_NUM) == 0)
-            len += snprintf((testdata + len), SZ_SIZE - len, "%5d,\n", RAW[i]);
+			len += snprintf((testdata + len), SZ_SIZE - len, "%5u,\n", RAW[i]);
         else
             len += snprintf((testdata + len), SZ_SIZE - len,
-                            "%5d,", RAW[i]);
+                            "%5u,", RAW[i]);
     }
     len += snprintf((testdata + len), SZ_SIZE - len, "\n%s", result);
 
@@ -4349,7 +4352,7 @@ int mpTestFunc(struct chip_data_hx83102d *chip_info, uint8_t checktype, uint32_t
             himax_get_noise_base();
             weight = himax_get_noise_weight();
             if(isRead_csv == false) {
-                if (weight > LPWUG_NOISEMAX || weight < LPWUG_NOISE_MIN) {
+                if (weight > LPWUG_NOISEMAX) {
                     TPD_INFO("%s: HIMAX_INSPECTION_LPWUG_NOISE FAIL\n", __func__);
                     ret = THP_AFE_INSPECT_ENOISE;
                 }
@@ -4433,9 +4436,7 @@ RET_OUT:
     if (rslt_log) {
         kfree(rslt_log);
     }
-    if (start_log) {
-        kfree(start_log);
-    }
+
     return RESULT_ERR;
 }
 
@@ -5432,8 +5433,10 @@ void himax_flash_programming(uint8_t *FW_content, int FW_Size)
         buring_data[2] = 0x00;
         buring_data[3] = 0x80;
 
-        for (i = /*0*/page_prog_start, j = 0; i < 16 + page_prog_start/**/; i++, j++) {
+	j = 0;
+	for (i = /*0*/page_prog_start; i < 16 + page_prog_start/**/; i++) {
             buring_data[j + 4] = FW_content[i];
+		j++;
         }
 
 
@@ -5459,8 +5462,10 @@ void himax_flash_programming(uint8_t *FW_content, int FW_Size)
         //=================================
 
         for (j = 0; j < 5; j++) {
-            for (i = (page_prog_start + 16 + (j * 48)), k = 0; i < (page_prog_start + 16 + (j * 48)) + program_length; i++, k++) {
-                buring_data[k + 4] = FW_content[i]; //(byte)i;
+		k = 0;
+		for (i = (page_prog_start + 16 + (j * 48)); i < (page_prog_start + 16 + (j * 48)) + program_length; i++) {
+			buring_data[k + 4] = FW_content[i]; /*(byte)i;*/
+			k++;
             }
 
             if (himax_bus_write(0x00, program_length + 4, buring_data) < 0) {
@@ -5898,7 +5903,8 @@ bool diag_check_sum(struct himax_report_data *hx_touch_data) /*return checksum v
     int i;
 
     //Check 128th byte CRC
-    for (i = 0, check_sum_cal = 0; i < (hx_touch_data->touch_all_size - hx_touch_data->touch_info_size); i = i + 2) {
+	check_sum_cal = 0;
+	for (i = 0; i < (hx_touch_data->touch_all_size - hx_touch_data->touch_info_size); i = i + 2) {
         check_sum_cal += (hx_touch_data->hx_rawdata_buf[i + 1] * 256 + hx_touch_data->hx_rawdata_buf[i]);
     }
     if (check_sum_cal % 0x10000 != 0) {
@@ -6270,7 +6276,7 @@ static size_t hx83102d_proc_FW_debug_read(struct file *file, char *buf,
         if (himax_read_FW_status(chip_info, cmd_set, tmp_data) == NO_ERR) {
             ret += snprintf(temp_buf + ret, len - ret, "0x%02X%02X%02X%02X :\t", cmd_set[5], cmd_set[4], cmd_set[3], cmd_set[2]);
             for (loop_i = 0; loop_i < cmd_set[1]; loop_i++) {
-                ret += snprintf(temp_buf + ret, len - ret, "%5d\t", tmp_data[loop_i]);
+                ret += snprintf(temp_buf + ret, len - ret, "%5u\t", tmp_data[loop_i]);
             }
             ret += snprintf(temp_buf + ret, len - ret, "\n");
         }

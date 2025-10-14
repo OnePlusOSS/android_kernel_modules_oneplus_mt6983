@@ -310,7 +310,7 @@ static const uint16_t g_u2CountryGroup4[] = {
 //#endif /* OPLUS_FEATURE_WIFI_CHANNEL */
 
 static const uint16_t g_u2CountryGroup5[] = {
-	COUNTRY_CODE_AU, COUNTRY_CODE_EC, COUNTRY_CODE_PY,
+	COUNTRY_CODE_AU, COUNTRY_CODE_PY,
 	COUNTRY_CODE_UY
 };
 
@@ -384,7 +384,7 @@ static const uint16_t g_u2CountryGroup17[] = {
 */
 //#else
 static const uint16_t g_u2CountryGroup17[] = {
-	COUNTRY_CODE_US, COUNTRY_CODE_CO, COUNTRY_CODE_PA, COUNTRY_CODE_GT, COUNTRY_CODE_CR, COUNTRY_CODE_BR, COUNTRY_CODE_CL, COUNTRY_CODE_PE
+	COUNTRY_CODE_US, COUNTRY_CODE_CO, COUNTRY_CODE_PA, COUNTRY_CODE_GT, COUNTRY_CODE_CR, COUNTRY_CODE_BR, COUNTRY_CODE_CL, COUNTRY_CODE_PE, COUNTRY_CODE_EC
 };
 //#endif /* OPLUS_FEATURE_WIFI_CHANNEL */
 
@@ -1330,6 +1330,12 @@ struct oplus_country_pwr_limit g_oplusCountryPwrLimit[] = {
     {22277, sizeof(g_rRlmPowerLimitConfiguration_22277)/sizeof(g_rRlmPowerLimitConfiguration_22277[0]), g_rRlmPowerLimitConfiguration_22277},
     {22711, sizeof(g_rRlmPowerLimitConfiguration_22711)/sizeof(g_rRlmPowerLimitConfiguration_22711[0]), g_rRlmPowerLimitConfiguration_22711},
     {22713, sizeof(g_rRlmPowerLimitConfiguration_22711)/sizeof(g_rRlmPowerLimitConfiguration_22711[0]), g_rRlmPowerLimitConfiguration_22711},
+    {23613, sizeof(g_rRlmPowerLimitConfiguration_23687)/sizeof(g_rRlmPowerLimitConfiguration_23687[0]), g_rRlmPowerLimitConfiguration_23687},
+    {23686, sizeof(g_rRlmPowerLimitConfiguration_23687)/sizeof(g_rRlmPowerLimitConfiguration_23687[0]), g_rRlmPowerLimitConfiguration_23687},
+    {23689, sizeof(g_rRlmPowerLimitConfiguration_23689)/sizeof(g_rRlmPowerLimitConfiguration_23689[0]), g_rRlmPowerLimitConfiguration_23689},
+    {23707, sizeof(g_rRlmPowerLimitConfiguration_23687)/sizeof(g_rRlmPowerLimitConfiguration_23687[0]), g_rRlmPowerLimitConfiguration_23687},
+    {23709, sizeof(g_rRlmPowerLimitConfiguration_23687)/sizeof(g_rRlmPowerLimitConfiguration_23687[0]), g_rRlmPowerLimitConfiguration_23687},
+    {23687, sizeof(g_rRlmPowerLimitConfiguration_23687)/sizeof(g_rRlmPowerLimitConfiguration_23687[0]), g_rRlmPowerLimitConfiguration_23687},
     {23676, sizeof(g_rRlmPowerLimitConfiguration_23676)/sizeof(g_rRlmPowerLimitConfiguration_23676[0]), g_rRlmPowerLimitConfiguration_23676},
     {23662, sizeof(g_rRlmPowerLimitConfiguration_23662)/sizeof(g_rRlmPowerLimitConfiguration_23662[0]), g_rRlmPowerLimitConfiguration_23662},
     {23664, sizeof(g_rRlmPowerLimitConfiguration_23664)/sizeof(g_rRlmPowerLimitConfiguration_23664[0]), g_rRlmPowerLimitConfiguration_23664},
@@ -1403,6 +1409,12 @@ struct oplus_country_pwr_limit_he g_oplusCountryPwrLimitHe[] = {
     {22277, sizeof(g_rRlmPowerLimitConfigurationHE_22277)/sizeof(g_rRlmPowerLimitConfigurationHE_22277[0]), g_rRlmPowerLimitConfigurationHE_22277},
     {22711, sizeof(g_rRlmPowerLimitConfigurationHE_22711)/sizeof(g_rRlmPowerLimitConfigurationHE_22711[0]), g_rRlmPowerLimitConfigurationHE_22711},
     {22713, sizeof(g_rRlmPowerLimitConfigurationHE_22711)/sizeof(g_rRlmPowerLimitConfigurationHE_22711[0]), g_rRlmPowerLimitConfigurationHE_22711},
+    {23613, sizeof(g_rRlmPowerLimitConfigurationHE_23687)/sizeof(g_rRlmPowerLimitConfigurationHE_23687[0]), g_rRlmPowerLimitConfigurationHE_23687},
+    {23686, sizeof(g_rRlmPowerLimitConfigurationHE_23687)/sizeof(g_rRlmPowerLimitConfigurationHE_23687[0]), g_rRlmPowerLimitConfigurationHE_23687},
+    {23689, sizeof(g_rRlmPowerLimitConfigurationHE_23689)/sizeof(g_rRlmPowerLimitConfigurationHE_23689[0]), g_rRlmPowerLimitConfigurationHE_23689},
+    {23707, sizeof(g_rRlmPowerLimitConfigurationHE_23687)/sizeof(g_rRlmPowerLimitConfigurationHE_23687[0]), g_rRlmPowerLimitConfigurationHE_23687},
+    {23709, sizeof(g_rRlmPowerLimitConfigurationHE_23687)/sizeof(g_rRlmPowerLimitConfigurationHE_23687[0]), g_rRlmPowerLimitConfigurationHE_23687},
+    {23687, sizeof(g_rRlmPowerLimitConfigurationHE_23687)/sizeof(g_rRlmPowerLimitConfigurationHE_23687[0]), g_rRlmPowerLimitConfigurationHE_23687},
     {23031, sizeof(g_rRlmPowerLimitConfigurationHE_23031)/sizeof(g_rRlmPowerLimitConfigurationHE_23031[0]), g_rRlmPowerLimitConfigurationHE_23031},
     {23231, sizeof(g_rRlmPowerLimitConfigurationHE_23231)/sizeof(g_rRlmPowerLimitConfigurationHE_23231[0]), g_rRlmPowerLimitConfigurationHE_23231},
     {23051, sizeof(g_rRlmPowerLimitConfigurationHE_23051)/sizeof(g_rRlmPowerLimitConfigurationHE_23051[0]), g_rRlmPowerLimitConfigurationHE_23051},

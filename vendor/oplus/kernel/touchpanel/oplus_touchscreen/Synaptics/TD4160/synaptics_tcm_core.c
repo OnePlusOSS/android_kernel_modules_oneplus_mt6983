@@ -4471,61 +4471,6 @@ void syna_freq_hop_trigger(void *chip_data)
 
 }
 
-static int syna_tcm_smooth_lv_set(void *chip_data, int level)
-{
-	struct syna_tcm_hcd *tcm_info = (struct syna_tcm_hcd *)chip_data;
-	unsigned short regval = 0;
-	int retval = 0;
-
-	retval = syna_tcm_get_dynamic_config(tcm_info, DC_GAME_MODE_ENABLED, &regval);
-	if (retval < 0) {
-		TPD_INFO("Failed to get smooth config\n");
-		tcm_info->error_state_count++;
-		return 0;
-	}
-	TPD_INFO("syna_tcm_smooth_lv_set 111 regval = %d\n", regval);
-	tcm_info->error_state_count = 0;
-
-	retval = syna_tcm_set_dynamic_config(tcm_info, DC_GAME_MODE_ENABLED, (level << 4) | (regval & 0x01));
-	if (retval < 0) {
-		TPD_INFO("Failed to set smooth config\n");
-		return 0;
-	}
-	TPD_INFO("syna_tcm_smooth_lv_set 222 regval = %d\n", regval);
-
-	retval = syna_tcm_get_dynamic_config(tcm_info, DC_GAME_MODE_ENABLED, &regval);
-	if (retval < 0) {
-		TPD_INFO("Failed to get smooth config\n");
-		return 0;
-	}
-	TPD_INFO("OK synaptics smooth lv to %d, now reg_val:0x%x", level, regval);
-	return 0;
-}
-
-static int syna_tcm_sensitive_lv_set(void *chip_data, int level)
-{
-	struct syna_tcm_hcd *tcm_info = (struct syna_tcm_hcd *)chip_data;
-	unsigned short regval = 0;
-	int retval = 0;
-
-	retval = syna_tcm_set_dynamic_config(tcm_info, DC_GAME_MODE_ENABLED, level);
-	if (retval < 0) {
-		TPD_INFO("Failed to set sensitive config\n");
-		tcm_info->error_state_count++;
-		return 0;
-	}
-	tcm_info->error_state_count = 0;
-
-	retval = syna_tcm_get_dynamic_config(tcm_info, DC_GAME_MODE_ENABLED, &regval);
-	if (retval < 0) {
-		TPD_INFO("Failed to get sensitive config\n");
-		return 0;
-	}
-	TPD_INFO("OK synaptics sensitive lv to %d, now reg_val:%d", level, regval);
-
-	return 0;
-}
-
 static struct debug_info_proc_operations syna_debug_proc_ops = {
 	.delta_read    = syna_delta_read,
 	.baseline_read = syna_baseline_read,
@@ -4656,8 +4601,6 @@ static struct oplus_touchpanel_operations syna_tcm_ops = {
 	.set_touch_direction    = synaptics_set_touch_direction,
 	.get_touch_direction    = synaptics_get_touch_direction,
 	.freq_hop_trigger = syna_freq_hop_trigger,
-	.smooth_lv_set    = syna_tcm_smooth_lv_set,
-	.sensitive_lv_set = syna_tcm_sensitive_lv_set,
 };
 
 /*

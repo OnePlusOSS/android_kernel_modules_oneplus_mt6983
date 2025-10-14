@@ -28,7 +28,7 @@
 
 #include "ft8006s_aa_core.h"
 
-struct fts_ts_data *fts_data = NULL;
+struct fts_ts_data *fts8006s_data = NULL;
 extern int tp_register_times;
 
 /*******Part0:LOG TAG Declear********************/
@@ -1137,7 +1137,7 @@ static int fts_fw_download(struct fts_ts_data *ts_data, u8 *buf, u32 len, bool n
 
 
 
-void fts_auto_test(struct seq_file *s, void *chip_data, struct focal_testdata *focal_testdata)
+void fts8006s_auto_test(struct seq_file *s, void *chip_data, struct focal_testdata *focal_testdata)
 {
     struct fts_ts_data *ts_data = (struct fts_ts_data *)chip_data;
 
@@ -1145,7 +1145,7 @@ void fts_auto_test(struct seq_file *s, void *chip_data, struct focal_testdata *f
     ts_data->csv_fd = focal_testdata->fd;
 
     focal_esd_check_enable(ts_data, false);
-    fts_test_entry(ts_data, 0);
+	fts8006s_test_entry(ts_data, 0);
     focal_esd_check_enable(ts_data, true);
 }
 
@@ -2233,13 +2233,13 @@ void fts_black_screen_test(void *chip_data, char *msg)
 
     ts_data->s = NULL;
     ts_data->csv_fd = -1;
-    
+
     focal_esd_check_enable(ts_data, false);
     if (ts->int_mode == BANNABLE) {
         disable_irq_nosync(ts->irq);
     }
-    
-    ret = fts_test_entry(ts_data, 1);
+
+	ret = fts8006s_test_entry(ts_data, 1);
     snprintf(msg, 256, "%d error(s). %s\n", ret, ret ? "" : "All test passed.");
 
     ts->ts_ops->reset(ts->chip_data);
@@ -2274,7 +2274,7 @@ static struct oplus_touchpanel_operations fts_ops = {
 };
 
 static struct fts_proc_operations fts_proc_ops = {
-    .auto_test              = fts_auto_test,
+	.auto_test              = fts8006s_auto_test,
 };
 
 static struct debug_info_proc_operations fts_debug_info_proc_ops = {
@@ -2285,7 +2285,7 @@ static struct debug_info_proc_operations fts_debug_info_proc_ops = {
     .main_register_read = fts_main_register_read,
 };
 
-struct focal_debug_func focal_debug_ops =
+struct focal_debug_func focal8006s_debug_ops =
 {
     .esd_check_enable       = focal_esd_check_enable,
     .get_esd_check_flag     = focal_get_esd_check_flag,
@@ -2326,7 +2326,7 @@ static int fts_tp_probe(struct spi_device *spi)
                 return ret;
         }
         memset(ts_data, 0, sizeof(*ts_data));
-        fts_data = ts_data;
+        fts8006s_data = ts_data;
 
         /*step2:Alloc common ts*/
         ts = common_touch_data_alloc();
@@ -2341,7 +2341,7 @@ static int fts_tp_probe(struct spi_device *spi)
         ts->s_client = spi;
         ts->irq = spi->irq;
         ts->chip_data = ts_data;
-        
+
         ts_data->dev = ts->dev;
         ts_data->spi = spi;
         ts_data->hw_res = &ts->hw_res;
@@ -2373,12 +2373,12 @@ static int fts_tp_probe(struct spi_device *spi)
 			 TPD_INFO("spi setup fail");
 			 return ret;
 		}
-		
+
 #endif // end of CONFIG_TOUCHPANEL_MTK_PLATFORM
 
         /*step4:file_operations callback binding*/
         ts->ts_ops = &fts_ops;
-        ts->private_data = &focal_debug_ops;
+        ts->private_data = &focal8006s_debug_ops;
 
         /* Init communication interface */
         ret = fts_bus_init();

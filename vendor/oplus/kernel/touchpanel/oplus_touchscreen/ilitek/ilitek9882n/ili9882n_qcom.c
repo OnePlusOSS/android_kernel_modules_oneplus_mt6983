@@ -23,10 +23,10 @@
 #include "ili9882n.h"
 
 /* Debug level */
-bool ili_debug_en = DEBUG_OUTPUT;
-EXPORT_SYMBOL(ili_debug_en);
+bool ili9882n_debug_en = DEBUG_OUTPUT;
+EXPORT_SYMBOL(ili9882n_debug_en);
 
-struct ilitek_ts_data *ilits;
+struct ilitek_ts_data *ilits9882n;
 extern int tp_register_times;
 extern void lcd_queue_load_tp_fw(void);
 extern void __attribute__((weak)) switch_spi7cs_state(bool normal) {return;}
@@ -35,7 +35,7 @@ extern void __attribute__((weak)) switch_spi7cs_state(bool normal) {return;}
 #define DMA_TRANSFER_MAX_CHUNK      4   // number of chunks to be transferred.
 #define DMA_TRANSFER_MAX_LEN        4096 // length of a chunk.
 
-int ili_spi_write_then_read_split(struct spi_device *spi,
+int ili9882n_spi_write_then_read_split(struct spi_device *spi,
                                   const void *txbuf, unsigned n_tx,
                                   void *rxbuf, unsigned n_rx)
 {
@@ -54,8 +54,8 @@ int ili_spi_write_then_read_split(struct spi_device *spi,
 
     spi_message_init(&message);
     memset(xfer, 0, sizeof(xfer));
-    memset(ilits->spi_tx, 0x0, SPI_TX_BUF_SIZE);
-    memset(ilits->spi_rx, 0x0, SPI_RX_BUF_SIZE);
+    memset(ilits9882n->spi_tx, 0x0, SPI_TX_BUF_SIZE);
+    memset(ilits9882n->spi_rx, 0x0, SPI_RX_BUF_SIZE);
 
     if ((n_tx > 0) && (n_rx > 0)) {
         cmd = SPI_READ;
@@ -78,7 +78,7 @@ int ili_spi_write_then_read_split(struct spi_device *spi,
             }
 
             xferlen = n_tx;
-            memcpy(ilits->spi_tx, (u8 *)txbuf, xferlen);
+            memcpy(ilits9882n->spi_tx, (u8 *)txbuf, xferlen);
 
             for (xfercnt = 0; xfercnt < xferloop; xfercnt++) {
                 if (xferlen > DMA_TRANSFER_MAX_LEN) {
@@ -86,7 +86,7 @@ int ili_spi_write_then_read_split(struct spi_device *spi,
                 }
 
                 xfer[xfercnt].len = xferlen;
-                xfer[xfercnt].tx_buf = ilits->spi_tx + xfercnt * DMA_TRANSFER_MAX_LEN;
+                xfer[xfercnt].tx_buf = ilits9882n->spi_tx + xfercnt * DMA_TRANSFER_MAX_LEN;
                 spi_message_add_tail(&xfer[xfercnt], &message);
                 xferlen = n_tx - (xfercnt + 1) * DMA_TRANSFER_MAX_LEN;
             }
@@ -101,11 +101,11 @@ int ili_spi_write_then_read_split(struct spi_device *spi,
                 break;
             }
 
-            if (!atomic_read(&ilits->ice_stat)) {
+            if (!atomic_read(&ilits9882n->ice_stat)) {
                 offset = 2;
             }
 
-            memcpy(ilits->spi_tx, txbuf, n_tx);
+            memcpy(ilits9882n->spi_tx, txbuf, n_tx);
             duplex_len = n_tx + n_rx + offset;
 
             if (duplex_len % DMA_TRANSFER_MAX_LEN) {
@@ -128,8 +128,8 @@ int ili_spi_write_then_read_split(struct spi_device *spi,
                 }
 
                 xfer[xfercnt].len = xferlen;
-                xfer[xfercnt].tx_buf = ilits->spi_tx;
-                xfer[xfercnt].rx_buf = ilits->spi_rx + xfercnt * DMA_TRANSFER_MAX_LEN;
+                xfer[xfercnt].tx_buf = ilits9882n->spi_tx;
+                xfer[xfercnt].rx_buf = ilits9882n->spi_rx + xfercnt * DMA_TRANSFER_MAX_LEN;
                 spi_message_add_tail(&xfer[xfercnt], &message);
                 xferlen = duplex_len - (xfercnt + 1) * DMA_TRANSFER_MAX_LEN;
             }
@@ -137,16 +137,16 @@ int ili_spi_write_then_read_split(struct spi_device *spi,
             status = spi_sync(spi, &message);
 
             if (status == 0) {
-                ILI_DBG("ilits->spi_rx[1] 0x%X\n", ilits->spi_rx[1]);
+                ILI_DBG("ilits9882n->spi_rx[1] 0x%X\n", ilits9882n->spi_rx[1]);
 
-                if (ilits->spi_rx[1] != SPI_ACK && !atomic_read(&ilits->ice_stat)) {
+                if (ilits9882n->spi_rx[1] != SPI_ACK && !atomic_read(&ilits9882n->ice_stat)) {
                     status = DO_SPI_RECOVER;
-                    ILI_ERR("Do spi recovery: rxbuf[1] = 0x%x, ice = %d\n", ilits->spi_rx[1],
-                            atomic_read(&ilits->ice_stat));
+                    ILI_ERR("Do spi recovery: rxbuf[1] = 0x%x, ice = %d\n", ilits9882n->spi_rx[1],
+                            atomic_read(&ilits9882n->ice_stat));
                     break;
                 }
 
-                memcpy((u8 *)rxbuf, ilits->spi_rx + offset + 1, n_rx);
+                memcpy((u8 *)rxbuf, ilits9882n->spi_rx + offset + 1, n_rx);
             } else {
                 ILI_ERR("spi read fail, status = %d\n", status);
                 //status = DO_SPI_RECOVER;
@@ -160,7 +160,7 @@ out:
     return status;
 }
 #else
-int ili_spi_write_then_read_direct(struct spi_device *spi,
+int ili9882n_spi_write_then_read_direct(struct spi_device *spi,
                                    const void *txbuf, unsigned n_tx,
                                    void *rxbuf, unsigned n_rx)
 {
@@ -194,7 +194,7 @@ int ili_spi_write_then_read_direct(struct spi_device *spi,
             break;
 
         case SPI_READ:
-            if (!atomic_read(&ilits->ice_stat)) {
+            if (!atomic_read(&ilits9882n->ice_stat)) {
                 offset = 2;
             }
 
@@ -207,24 +207,24 @@ int ili_spi_write_then_read_direct(struct spi_device *spi,
                 break;
             }
 
-            memset(ilits->spi_tx, 0x0, SPI_TX_BUF_SIZE);
-            memset(ilits->spi_rx, 0x0, SPI_RX_BUF_SIZE);
+            memset(ilits9882n->spi_tx, 0x0, SPI_TX_BUF_SIZE);
+            memset(ilits9882n->spi_rx, 0x0, SPI_RX_BUF_SIZE);
             xfer.len = duplex_len;
-            memcpy(ilits->spi_tx, txbuf, n_tx);
-            xfer.tx_buf = ilits->spi_tx;
-            xfer.rx_buf = ilits->spi_rx;
+            memcpy(ilits9882n->spi_tx, txbuf, n_tx);
+            xfer.tx_buf = ilits9882n->spi_tx;
+            xfer.rx_buf = ilits9882n->spi_rx;
             spi_message_add_tail(&xfer, &message);
             status = spi_sync(spi, &message);
 
             if (status == 0) {
-                if (ilits->spi_rx[1] != SPI_ACK && !atomic_read(&ilits->ice_stat)) {
+                if (ilits9882n->spi_rx[1] != SPI_ACK && !atomic_read(&ilits9882n->ice_stat)) {
                     status = DO_SPI_RECOVER;
-                    ILI_ERR("Do spi recovery: rxbuf[1] = 0x%x, ice = %d\n", ilits->spi_rx[1],
-                            atomic_read(&ilits->ice_stat));
+                    ILI_ERR("Do spi recovery: rxbuf[1] = 0x%x, ice = %d\n", ilits9882n->spi_rx[1],
+                            atomic_read(&ilits9882n->ice_stat));
                     break;
                 }
 
-                memcpy((u8 *)rxbuf, ilits->spi_rx + offset + 1, n_rx);
+                memcpy((u8 *)rxbuf, ilits9882n->spi_rx + offset + 1, n_rx);
             } else {
                 ILI_ERR("spi read fail, status = %d\n", status);
                 //status = DO_SPI_RECOVER;
@@ -246,8 +246,8 @@ static int ili_spi_mp_pre_cmd(u8 cdc)
 {
     u8 pre[5] = {0};
 
-    if (!atomic_read(&ilits->mp_stat) || cdc != P5_X_SET_CDC_INIT ||
-        ilits->chip->core_ver >= CORE_VER_1430) {
+    if (!atomic_read(&ilits9882n->mp_stat) || cdc != P5_X_SET_CDC_INIT ||
+        ilits9882n->chip->core_ver >= CORE_VER_1430) {
         return 0;
     }
 
@@ -258,7 +258,7 @@ static int ili_spi_mp_pre_cmd(u8 cdc)
     pre[3] = P5_X_READ_DATA_CTRL;
     pre[4] = P5_X_GET_CDC_DATA;
 
-    if (ilits->spi_write_then_read(ilits->spi, pre, 5, NULL, 0) < 0) {
+    if (ilits9882n->spi_write_then_read(ilits9882n->spi, pre, 5, NULL, 0) < 0) {
         ILI_ERR("Failed to write pre commands\n");
         return -1;
     }
@@ -268,7 +268,7 @@ static int ili_spi_mp_pre_cmd(u8 cdc)
     pre[2] = 0x1;// write len byte
     pre[3] = P5_X_GET_CDC_DATA;
 
-    if (ilits->spi_write_then_read(ilits->spi, pre, 4, NULL, 0) < 0) {
+    if (ilits9882n->spi_write_then_read(ilits9882n->spi, pre, 4, NULL, 0) < 0) {
         ILI_ERR("Failed to write pre commands\n");
         return -1;
     }
@@ -290,7 +290,7 @@ static int ili_spi_pll_clk_wakeup(void)
     ILI_INFO("Write dummy to wake up spi pll clk\n");
     wlen += index;
 
-    if (ilits->spi_write_then_read(ilits->spi, wdata, wlen, NULL, 0) < 0) {
+    if (ilits9882n->spi_write_then_read(ilits9882n->spi, wdata, wlen, NULL, 0) < 0) {
         ILI_INFO("spi slave write error\n");
         return -1;
     }
@@ -304,7 +304,7 @@ static int ili_spi_wrapper(u8 *txbuf, u32 wlen, u8 *rxbuf, u32 rlen, bool spi_ir
     int mode = 0, index = 0;
     u8 wdata[128] = {0};
     u8 checksum = 0;
-    bool ice = atomic_read(&ilits->ice_stat);
+    bool ice = atomic_read(&ilits9882n->ice_stat);
 
     if (wlen > 0) {
         if (!txbuf) {
@@ -333,22 +333,22 @@ static int ili_spi_wrapper(u8 *txbuf, u32 wlen, u8 *rxbuf, u32 rlen, bool spi_ir
         mode = SPI_WRITE;
     }
 
-    if (ilits->int_pulse) {
-        ilits->detect_int_stat = ili_ic_check_int_pulse;
+    if (ilits9882n->int_pulse) {
+        ilits9882n->detect_int_stat = ili9882n_ic_check_int_pulse;
     } else {
-        ilits->detect_int_stat = ili_ic_check_int_level;
+        ilits9882n->detect_int_stat = ili9882n_ic_check_int_level;
     }
 
     if (spi_irq) {
-        atomic_set(&ilits->cmd_int_check, ENABLE);
+        atomic_set(&ilits9882n->cmd_int_check, ENABLE);
     }
 
     switch (mode) {
         case SPI_WRITE:
 #if ( PLL_CLK_WAKEUP_TP_RESUME == ENABLE )
-            if (ilits->pll_clk_wakeup == true)
+            if (ilits9882n->pll_clk_wakeup == true)
 #else
-            if ((ilits->pll_clk_wakeup == true) && (ilits->actual_tp_mode == P5_X_FW_GESTURE_MODE))
+            if ((ilits9882n->pll_clk_wakeup == true) && (ilits9882n->actual_tp_mode == P5_X_FW_GESTURE_MODE))
 #endif
             {
                 ret = ili_spi_pll_clk_wakeup();
@@ -375,16 +375,16 @@ static int ili_spi_wrapper(u8 *txbuf, u32 wlen, u8 *rxbuf, u32 rlen, bool spi_ir
             * NOTE: If TP driver is doing MP test and commanding 0xF1 to FW, we add a checksum
             * to the last index and plus 1 with size.
             */
-            if (atomic_read(&ilits->mp_stat) && wdata[index] == P5_X_SET_CDC_INIT) {
-                checksum = ili_calc_packet_checksum(&wdata[index], wlen - index);
+            if (atomic_read(&ilits9882n->mp_stat) && wdata[index] == P5_X_SET_CDC_INIT) {
+                checksum = ili9882n_calc_packet_checksum(&wdata[index], wlen - index);
                 wdata[wlen] = checksum;
                 wlen++;
                 wdata[1] = (wlen - index) >> 8;
                 wdata[2] = (wlen - index) & 0xff;
-                ili_dump_data(wdata, 8, wlen, 0, "mp cdc cmd with checksum");
+                ili9882n_dump_data(wdata, 8, wlen, 0, "mp cdc cmd with checksum");
             }
 
-            ret = ilits->spi_write_then_read(ilits->spi, wdata, wlen, txbuf, 0);
+            ret = ilits9882n->spi_write_then_read(ilits9882n->spi, wdata, wlen, txbuf, 0);
 
             if (ret < 0) {
                 ILI_INFO("spi-wrapper write error\n");
@@ -399,10 +399,10 @@ static int ili_spi_wrapper(u8 *txbuf, u32 wlen, u8 *rxbuf, u32 rlen, bool spi_ir
         case SPI_READ:
             if (!ice && spi_irq) {
                 /* Check INT triggered by FW when sending cmds. */
-                if (ilits->detect_int_stat(false) < 0) {
+                if (ilits9882n->detect_int_stat(false) < 0) {
                     ILI_ERR("ERROR! Check INT timeout\n");
                     ret = -ETIME;
-                    if (ilits->actual_tp_mode == P5_X_FW_TEST_MODE) {
+                    if (ilits9882n->actual_tp_mode == P5_X_FW_TEST_MODE) {
                         break;
                     }
                 }
@@ -415,7 +415,7 @@ static int ili_spi_wrapper(u8 *txbuf, u32 wlen, u8 *rxbuf, u32 rlen, bool spi_ir
             }
 
             wdata[0] = SPI_READ;
-            ret = ilits->spi_write_then_read(ilits->spi, wdata, 1, rxbuf, rlen);
+            ret = ilits9882n->spi_write_then_read(ilits9882n->spi, wdata, 1, rxbuf, rlen);
 
             if (ret < 0) {
                 ILI_ERR("spi-wrapper read error\n");
@@ -429,20 +429,20 @@ static int ili_spi_wrapper(u8 *txbuf, u32 wlen, u8 *rxbuf, u32 rlen, bool spi_ir
     }
 
     if (spi_irq) {
-        atomic_set(&ilits->cmd_int_check, DISABLE);
+        atomic_set(&ilits9882n->cmd_int_check, DISABLE);
     }
 
     return ret;
 }
 
-void ili_dump_data(void *data, int type, int len, int row_len, const char *name)
+void ili9882n_dump_data(void *data, int type, int len, int row_len, const char *name)
 {
     int i, row = 31;
     u8 *p8 = NULL;
     s32 *p32 = NULL;
     s16 *p16 = NULL;
 
-    if (!ili_debug_en) {
+    if (!ili9882n_debug_en) {
         return;
     }
 
@@ -491,16 +491,16 @@ void ili_dump_data(void *data, int type, int len, int row_len, const char *name)
     pr_cont("\n\n");
 }
 
-int ili_move_mp_code_iram(void)
+int ili9882n_move_mp_code_iram(void)
 {
     ILI_INFO("Download MP code to iram\n");
-    return ili_fw_upgrade_handler();
+    return ili9882n_fw_upgrade_handler();
 }
 
-int ili_proximity_near(int mode)
+int ili9882n_proximity_near(int mode)
 {
     int ret = 0;
-    ilits->prox_near = true;
+    ilits9882n->prox_near = true;
 
     switch (mode) {
         case DDI_POWER_ON:
@@ -508,7 +508,7 @@ int ili_proximity_near(int mode)
              * If the power of VSP and VSN keeps alive when proximity near event
              * occures, TP can just go to sleep in.
              */
-            ret = ili_ic_func_ctrl("sleep", SLEEP_IN);
+            ret = ili9882n_ic_func_ctrl("sleep", SLEEP_IN);
 
             if (ret < 0) {
                 ILI_ERR("Write sleep in cmd failed\n");
@@ -529,12 +529,12 @@ int ili_proximity_near(int mode)
     return ret;
 }
 
-int ili_proximity_far(int mode)
+int ili9882n_proximity_far(int mode)
 {
     int ret = 0;
     u8 cmd[2] = {0};
 
-    if (!ilits->prox_near) {
+    if (!ilits9882n->prox_near) {
         ILI_INFO("No proximity near event, break\n");
         return 0;
     }
@@ -545,7 +545,7 @@ int ili_proximity_far(int mode)
              * If the power of VSP and VSN has been shut down previsouly,
              * TP should go through gesture recovery to get back.
              */
-            ili_gesture_recovery();
+            ili9882n_gesture_recovery();
             break;
 
         case WAKE_UP_SWITCH_GESTURE_MODE:
@@ -556,14 +556,14 @@ int ili_proximity_far(int mode)
             cmd[0] = 0xF6;
             cmd[1] = 0x0A;
             ILI_INFO("write prepare gesture command 0xF6 0x0A\n");
-            ret = ilits->wrapper(cmd, 2, NULL, 0, ON, OFF);
+            ret = ilits9882n->wrapper(cmd, 2, NULL, 0, ON, OFF);
 
             if (ret < 0) {
                 ILI_INFO("write prepare gesture command error\n");
                 break;
             }
 
-            ret = ili_switch_tp_mode(P5_X_FW_GESTURE_MODE);
+            ret = ili9882n_switch_tp_mode(P5_X_FW_GESTURE_MODE);
 
             if (ret < 0) {
                 ILI_ERR("Switch to gesture mode failed during proximity far\n");
@@ -577,14 +577,14 @@ int ili_proximity_far(int mode)
             break;
     }
 
-    ilits->prox_near = false;
+    ilits9882n->prox_near = false;
     return ret;
 }
 
-void ili_set_gesture_symbol(void)
+void ili9882n_set_gesture_symbol(void)
 {
     u8 cmd[7] = {0};
-    struct gesture_symbol *ptr_sym = &ilits->ges_sym;
+    struct gesture_symbol *ptr_sym = &ilits9882n->ges_sym;
     u8 *ptr;
     ptr = (u8 *) ptr_sym;
     cmd[0] = P5_X_READ_DATA_CTRL;
@@ -594,39 +594,39 @@ void ili_set_gesture_symbol(void)
     cmd[4] = ptr[0];
     cmd[5] = ptr[1];
     cmd[6] = ptr[2];
-    ili_dump_data(cmd, 8, sizeof(cmd), 0, "Gesture symbol");
+    ili9882n_dump_data(cmd, 8, sizeof(cmd), 0, "Gesture symbol");
 
-    if (ilits->wrapper(cmd, 2, NULL, 0, ON, OFF) < 0) {
+    if (ilits9882n->wrapper(cmd, 2, NULL, 0, ON, OFF) < 0) {
         ILI_ERR("Write pre cmd failed\n");
         return;
     }
 
-    if (ilits->wrapper(&cmd[1], (sizeof(cmd) - 1), NULL, 0, ON, OFF)) {
+    if (ilits9882n->wrapper(&cmd[1], (sizeof(cmd) - 1), NULL, 0, ON, OFF)) {
         ILI_ERR("Write gesture symbol fail\n");
         return;
     }
 
-    ILI_DBG(" double_tap = %d\n", ilits->ges_sym.double_tap);
-    ILI_DBG(" alphabet_line_2_top = %d\n", ilits->ges_sym.alphabet_line_2_top);
-    ILI_DBG(" alphabet_line_2_bottom = %d\n", ilits->ges_sym.alphabet_line_2_bottom);
-    ILI_DBG(" alphabet_line_2_left = %d\n", ilits->ges_sym.alphabet_line_2_left);
-    ILI_DBG(" alphabet_line_2_right = %d\n", ilits->ges_sym.alphabet_line_2_right);
-    ILI_DBG(" alphabet_w = %d\n", ilits->ges_sym.alphabet_w);
-    ILI_DBG(" alphabet_c = %d\n", ilits->ges_sym.alphabet_c);
-    ILI_DBG(" alphabet_E = %d\n", ilits->ges_sym.alphabet_E);
-    ILI_DBG(" alphabet_V = %d\n", ilits->ges_sym.alphabet_V);
-    ILI_DBG(" alphabet_O = %d\n", ilits->ges_sym.alphabet_O);
-    ILI_DBG(" alphabet_S = %d\n", ilits->ges_sym.alphabet_S);
-    ILI_DBG(" alphabet_Z = %d\n", ilits->ges_sym.alphabet_Z);
-    ILI_DBG(" alphabet_V_down = %d\n", ilits->ges_sym.alphabet_V_down);
-    ILI_DBG(" alphabet_V_left = %d\n", ilits->ges_sym.alphabet_V_left);
-    ILI_DBG(" alphabet_V_right = %d\n", ilits->ges_sym.alphabet_V_right);
-    ILI_DBG(" alphabet_two_line_2_bottom= %d\n", ilits->ges_sym.alphabet_two_line_2_bottom);
-    ILI_DBG(" alphabet_F= %d\n", ilits->ges_sym.alphabet_F);
-    ILI_DBG(" alphabet_AT= %d\n", ilits->ges_sym.alphabet_AT);
+    ILI_DBG(" double_tap = %d\n", ilits9882n->ges_sym.double_tap);
+    ILI_DBG(" alphabet_line_2_top = %d\n", ilits9882n->ges_sym.alphabet_line_2_top);
+    ILI_DBG(" alphabet_line_2_bottom = %d\n", ilits9882n->ges_sym.alphabet_line_2_bottom);
+    ILI_DBG(" alphabet_line_2_left = %d\n", ilits9882n->ges_sym.alphabet_line_2_left);
+    ILI_DBG(" alphabet_line_2_right = %d\n", ilits9882n->ges_sym.alphabet_line_2_right);
+    ILI_DBG(" alphabet_w = %d\n", ilits9882n->ges_sym.alphabet_w);
+    ILI_DBG(" alphabet_c = %d\n", ilits9882n->ges_sym.alphabet_c);
+    ILI_DBG(" alphabet_E = %d\n", ilits9882n->ges_sym.alphabet_E);
+    ILI_DBG(" alphabet_V = %d\n", ilits9882n->ges_sym.alphabet_V);
+    ILI_DBG(" alphabet_O = %d\n", ilits9882n->ges_sym.alphabet_O);
+    ILI_DBG(" alphabet_S = %d\n", ilits9882n->ges_sym.alphabet_S);
+    ILI_DBG(" alphabet_Z = %d\n", ilits9882n->ges_sym.alphabet_Z);
+    ILI_DBG(" alphabet_V_down = %d\n", ilits9882n->ges_sym.alphabet_V_down);
+    ILI_DBG(" alphabet_V_left = %d\n", ilits9882n->ges_sym.alphabet_V_left);
+    ILI_DBG(" alphabet_V_right = %d\n", ilits9882n->ges_sym.alphabet_V_right);
+    ILI_DBG(" alphabet_two_line_2_bottom= %d\n", ilits9882n->ges_sym.alphabet_two_line_2_bottom);
+    ILI_DBG(" alphabet_F= %d\n", ilits9882n->ges_sym.alphabet_F);
+    ILI_DBG(" alphabet_AT= %d\n", ilits9882n->ges_sym.alphabet_AT);
 }
 
-int ili_move_gesture_code_iram(int mode)
+int ili9882n_move_gesture_code_iram(int mode)
 {
     int i, ret = 0, timeout = 10;
     u8 cmd[2] = {0};
@@ -635,31 +635,31 @@ int ili_move_gesture_code_iram(int mode)
      * NOTE: If functions need to be added during suspend,
      * they must be called before gesture cmd reaches to FW.
      */
-    ILI_INFO("Gesture code loaded by %s\n", ilits->gesture_load_code ? "driver" : "firmware");
+    ILI_INFO("Gesture code loaded by %s\n", ilits9882n->gesture_load_code ? "driver" : "firmware");
 
-    if (!ilits->gesture_load_code) {
-        ret = ili_set_tp_data_len(mode, true, NULL);
+    if (!ilits9882n->gesture_load_code) {
+        ret = ili9882n_set_tp_data_len(mode, true, NULL);
         goto out;
     }
 
-    /*pre-command for ili_ic_func_ctrl("lpwg", 0x3)*/
+    /*pre-command for ili9882n_ic_func_ctrl("lpwg", 0x3)*/
     cmd[0] = P5_X_READ_DATA_CTRL;
     cmd[1] = 0x1;
-    ret = ilits->wrapper(cmd, sizeof(cmd), NULL, 0, OFF, OFF);
+    ret = ilits9882n->wrapper(cmd, sizeof(cmd), NULL, 0, OFF, OFF);
 
     if (ret < 0) {
         ILI_ERR("Write 0xF6,0x1 failed\n");
         goto out;
     }
 
-    ret = ili_ic_func_ctrl("lpwg", 0x3);
+    ret = ili9882n_ic_func_ctrl("lpwg", 0x3);
 
     if (ret < 0) {
         ILI_ERR("write gesture flag failed\n");
         goto out;
     }
 
-    ret = ili_set_tp_data_len(mode, true, NULL);
+    ret = ili9882n_set_tp_data_len(mode, true, NULL);
 
     if (ret < 0) {
         ILI_ERR("Failed to set tp data length\n");
@@ -669,18 +669,18 @@ int ili_move_gesture_code_iram(int mode)
     /* Prepare Check Ready */
     cmd[0] = P5_X_READ_DATA_CTRL;
     cmd[1] = 0xA;
-    ret = ilits->wrapper(cmd, sizeof(cmd), NULL, 0, OFF, OFF);
+    ret = ilits9882n->wrapper(cmd, sizeof(cmd), NULL, 0, OFF, OFF);
 
     if (ret < 0) {
         ILI_ERR("Write 0xF6,0xA failed\n");
         goto out;
     }
 
-    ili_irq_enable();
+    ili9882n_irq_enable();
 
     for (i = 0; i < timeout; i++) {
         /* Check ready for load code */
-        ret = ilits->wrapper(cmd_write, sizeof(cmd_write), cmd, sizeof(u8), ON, OFF);
+        ret = ilits9882n->wrapper(cmd_write, sizeof(cmd_write), cmd, sizeof(u8), ON, OFF);
         ILI_DBG("gesture ready byte = 0x%x\n", cmd[0]);
 
         if (cmd[0] == 0x91) {
@@ -689,14 +689,14 @@ int ili_move_gesture_code_iram(int mode)
         }
     }
 
-    ili_irq_disable();
+    ili9882n_irq_disable();
 
     if (i >= timeout) {
         ILI_ERR("Gesture is not ready (0x%x), try to run its recovery\n", cmd[0]);
-        return ili_gesture_recovery();
+        return ili9882n_gesture_recovery();
     }
 
-    ret = ili_fw_upgrade_handler();
+    ret = ili9882n_fw_upgrade_handler();
 
     if (ret < 0) {
         ILI_ERR("FW upgrade failed during moving code\n");
@@ -704,7 +704,7 @@ int ili_move_gesture_code_iram(int mode)
     }
 
     /* Resume gesture loader */
-    ret = ili_ic_func_ctrl("lpwg", 0x6);
+    ret = ili9882n_ic_func_ctrl("lpwg", 0x6);
 
     if (ret < 0) {
         ILI_ERR("write resume loader error");
@@ -715,7 +715,7 @@ out:
     return ret;
 }
 
-u8 ili_calc_packet_checksum(u8 *packet, int len)
+u8 ili9882n_calc_packet_checksum(u8 *packet, int len)
 {
     int i;
     s32 sum = 0;
@@ -727,7 +727,7 @@ u8 ili_calc_packet_checksum(u8 *packet, int len)
     return (u8)((-sum) & 0xFF);
 }
 
-int ili_touch_esd_gesture_iram(void)
+int ili9882n_touch_esd_gesture_iram(void)
 {
     int ret = 0, retry = 100;
     u32 answer = 0;
@@ -735,15 +735,15 @@ int ili_touch_esd_gesture_iram(void)
     int ges_pwd = ESD_GESTURE_CORE146_PWD;
     int ges_run = SPI_ESD_GESTURE_CORE146_RUN;
     int pwd_len = 2;
-    ret = ili_ice_mode_ctrl(ENABLE, OFF);
+    ret = ili9882n_ice_mode_ctrl(ENABLE, OFF);
 
     if (ret < 0) {
         ILI_ERR("Enable ice mode failed during gesture recovery\n");
         return ret;
     }
 
-    if (ilits->chip->core_ver < CORE_VER_1460) {
-        if (ilits->chip->core_ver >= CORE_VER_1420) {
+    if (ilits9882n->chip->core_ver < CORE_VER_1460) {
+        if (ilits9882n->chip->core_ver >= CORE_VER_1420) {
             ges_pwd_addr = I2C_ESD_GESTURE_PWD_ADDR;
         } else {
             ges_pwd_addr = SPI_ESD_GESTURE_PWD_ADDR;
@@ -755,9 +755,9 @@ int ili_touch_esd_gesture_iram(void)
     }
 
     ILI_INFO("ESD Gesture PWD Addr = 0x%X, PWD = 0x%X, GES_RUN = 0%X, core_ver = 0x%X\n",
-             ges_pwd_addr, ges_pwd, ges_run, ilits->chip->core_ver);
+             ges_pwd_addr, ges_pwd, ges_run, ilits9882n->chip->core_ver);
     /* write a special password to inform FW go back into gesture mode */
-    ret = ili_ice_mode_write(ges_pwd_addr, ges_pwd, pwd_len);
+    ret = ili9882n_ice_mode_write(ges_pwd_addr, ges_pwd, pwd_len);
 
     if (ret < 0) {
         ILI_ERR("write password failed\n");
@@ -765,8 +765,8 @@ int ili_touch_esd_gesture_iram(void)
     }
 
     /* Host download gives effect to FW receives password successed */
-    ilits->actual_tp_mode = P5_X_FW_AP_MODE;
-    ret = ili_fw_upgrade_handler();
+    ilits9882n->actual_tp_mode = P5_X_FW_AP_MODE;
+    ret = ili9882n_fw_upgrade_handler();
 
     if (ret < 0) {
         ILI_ERR("FW upgrade failed during gesture recovery\n");
@@ -774,11 +774,11 @@ int ili_touch_esd_gesture_iram(void)
     }
 
     /* Wait for fw running code finished. */
-    if (ilits->info_from_hex || (ilits->chip->core_ver >= CORE_VER_1410)) {
+    if (ilits9882n->info_from_hex || (ilits9882n->chip->core_ver >= CORE_VER_1410)) {
         msleep(50);
     }
 
-    ret = ili_ice_mode_ctrl(ENABLE, ON);
+    ret = ili9882n_ice_mode_ctrl(ENABLE, ON);
 
     if (ret < 0) {
         ILI_ERR("Enable ice mode failed during gesture recovery\n");
@@ -787,7 +787,7 @@ int ili_touch_esd_gesture_iram(void)
 
     /* polling another specific register to see if gesutre is enabled properly */
     do {
-        ret = ili_ice_mode_read(ges_pwd_addr, &answer, pwd_len);
+        ret = ili9882n_ice_mode_read(ges_pwd_addr, &answer, pwd_len);
 
         if (ret < 0) {
             ILI_ERR("Read gesture answer error\n");
@@ -808,25 +808,25 @@ int ili_touch_esd_gesture_iram(void)
     }
 
     ILI_INFO("Enter gesture successfully\n");
-    ret = ili_ice_mode_ctrl(DISABLE, ON);
+    ret = ili9882n_ice_mode_ctrl(DISABLE, ON);
 
     if (ret < 0) {
         ILI_ERR("Disable ice mode failed during gesture recovery\n");
         goto fail;
     }
 
-    ILI_INFO("Gesture code loaded by %s\n", ilits->gesture_load_code ? "driver" : "firmware");
+    ILI_INFO("Gesture code loaded by %s\n", ilits9882n->gesture_load_code ? "driver" : "firmware");
 
-    if (!ilits->gesture_load_code) {
-        ilits->actual_tp_mode = P5_X_FW_GESTURE_MODE;
-        ili_set_tp_data_len(ilits->gesture_mode, false, NULL);
+    if (!ilits9882n->gesture_load_code) {
+        ilits9882n->actual_tp_mode = P5_X_FW_GESTURE_MODE;
+        ili9882n_set_tp_data_len(ilits9882n->gesture_mode, false, NULL);
         goto out;
     }
 
     /* Load gesture code */
-    ilits->actual_tp_mode = P5_X_FW_GESTURE_MODE;
-    ili_set_tp_data_len(ilits->gesture_mode, false, NULL);
-    ret = ili_fw_upgrade_handler();
+    ilits9882n->actual_tp_mode = P5_X_FW_GESTURE_MODE;
+    ili9882n_set_tp_data_len(ilits9882n->gesture_mode, false, NULL);
+    ret = ili9882n_fw_upgrade_handler();
 
     if (ret < 0) {
         ILI_ERR("Failed to load code during gesture recovery\n");
@@ -834,7 +834,7 @@ int ili_touch_esd_gesture_iram(void)
     }
 
     /* Resume gesture loader */
-    ret = ili_ic_func_ctrl("lpwg", 0x6);
+    ret = ili9882n_ic_func_ctrl("lpwg", 0x6);
 
     if (ret < 0) {
         ILI_ERR("write resume loader error");
@@ -844,16 +844,16 @@ int ili_touch_esd_gesture_iram(void)
 out:
     return ret;
 fail:
-    ili_ice_mode_ctrl(DISABLE, ON);
+    ili9882n_ice_mode_ctrl(DISABLE, ON);
     return ret;
 }
 
 #ifdef CONFIG_OPLUS_TP_APK
 static void ili_write_log_buf(u8 main_id, u8 sec_id)
 {
-    log_buf_write(ilits->ts, main_id);
+    log_buf_write(ilits9882n->ts, main_id);
     sec_id = sec_id | 0x80;
-    log_buf_write(ilits->ts, sec_id);
+    log_buf_write(ilits9882n->ts, sec_id);
 }
 
 
@@ -867,7 +867,7 @@ static void ili_demo_debug_info_id0(u8 *buf, int len)
     if (id_last.sys_powr_state_e != id0.sys_powr_state_e) {
         ili_write_log_buf(1, id0.sys_powr_state_e);
 
-        if (tp_debug > 0 || ili_debug_en) {
+        if (tp_debug > 0 || ili9882n_debug_en) {
             ILI_INFO("app_sys_powr_state_e = %d\n", id0.sys_powr_state_e);
         }
     }
@@ -875,7 +875,7 @@ static void ili_demo_debug_info_id0(u8 *buf, int len)
     if (id_last.sys_state_e != id0.sys_state_e) {
         ili_write_log_buf(2, id0.sys_state_e);
 
-        if (tp_debug > 0 || ili_debug_en) {
+        if (tp_debug > 0 || ili9882n_debug_en) {
             ILI_INFO("app_sys_state_e = %d\n", id0.sys_state_e);
         }
     }
@@ -883,7 +883,7 @@ static void ili_demo_debug_info_id0(u8 *buf, int len)
     if (id_last.tp_state_e != id0.tp_state_e) {
         ili_write_log_buf(3, id0.tp_state_e);
 
-        if (tp_debug > 0 || ili_debug_en) {
+        if (tp_debug > 0 || ili9882n_debug_en) {
             ILI_INFO("tp_state_e = %d\n", id0.tp_state_e);
         }
     }
@@ -891,7 +891,7 @@ static void ili_demo_debug_info_id0(u8 *buf, int len)
     if (id_last.touch_palm_state != id0.touch_palm_state) {
         ili_write_log_buf(4, id0.touch_palm_state);
 
-        if (tp_debug > 0 || ili_debug_en) {
+        if (tp_debug > 0 || ili9882n_debug_en) {
             ILI_INFO("touch_palm_state_e = %d\n", id0.touch_palm_state);
         }
     }
@@ -899,7 +899,7 @@ static void ili_demo_debug_info_id0(u8 *buf, int len)
     if (id_last.app_an_statu_e != id0.app_an_statu_e) {
         ili_write_log_buf(5, id0.app_an_statu_e);
 
-        if (tp_debug > 0 || ili_debug_en) {
+        if (tp_debug > 0 || ili9882n_debug_en) {
             ILI_INFO("app_an_statu_e = %d\n", id0.app_an_statu_e);
         }
     }
@@ -907,7 +907,7 @@ static void ili_demo_debug_info_id0(u8 *buf, int len)
     if (id_last.app_sys_bg_err != id0.app_sys_bg_err) {
         ili_write_log_buf(6, id0.app_sys_bg_err);
 
-        if (tp_debug > 0 || ili_debug_en) {
+        if (tp_debug > 0 || ili9882n_debug_en) {
             ILI_INFO("app_sys_check_bg_abnormal = %d\n", id0.app_sys_bg_err);
         }
     }
@@ -915,7 +915,7 @@ static void ili_demo_debug_info_id0(u8 *buf, int len)
     if (id_last.g_b_wrong_bg != id0.g_b_wrong_bg) {
         ili_write_log_buf(7, id0.g_b_wrong_bg);
 
-        if (tp_debug > 0 || ili_debug_en) {
+        if (tp_debug > 0 || ili9882n_debug_en) {
             ILI_INFO("g_b_wrong_bg = %d\n", id0.g_b_wrong_bg);
         }
     }
@@ -923,83 +923,83 @@ static void ili_demo_debug_info_id0(u8 *buf, int len)
     if (id_last.reserved0 != id0.reserved0) {
         ili_write_log_buf(8, id0.reserved0);
 
-        if (tp_debug > 0 || ili_debug_en) {
+        if (tp_debug > 0 || ili9882n_debug_en) {
             ILI_INFO("reserved0 = %d\n", id0.reserved0);
         }
     }
 
     if (id_last.normal_mode != id0.normal_mode) {
         if (id0.normal_mode) {
-            log_buf_write(ilits->ts, 9);
+            log_buf_write(ilits9882n->ts, 9);
         } else {
-            log_buf_write(ilits->ts, 10);
+            log_buf_write(ilits9882n->ts, 10);
         }
     }
 
     if (id_last.charger_mode != id0.charger_mode) {
         if (id0.charger_mode) {
-            log_buf_write(ilits->ts, 11);
+            log_buf_write(ilits9882n->ts, 11);
         } else {
-            log_buf_write(ilits->ts, 12);
+            log_buf_write(ilits9882n->ts, 12);
         }
     }
 
     if (id_last.glove_mode != id0.glove_mode) {
         if (id0.glove_mode) {
-            log_buf_write(ilits->ts, 13);
+            log_buf_write(ilits9882n->ts, 13);
         } else {
-            log_buf_write(ilits->ts, 14);
+            log_buf_write(ilits9882n->ts, 14);
         }
     }
 
     if (id_last.stylus_mode != id0.stylus_mode) {
         if (id0.stylus_mode) {
-            log_buf_write(ilits->ts, 15);
+            log_buf_write(ilits9882n->ts, 15);
         } else {
-            log_buf_write(ilits->ts, 16);
+            log_buf_write(ilits9882n->ts, 16);
         }
     }
 
     if (id_last.multi_mode != id0.multi_mode) {
         if (id0.multi_mode) {
-            log_buf_write(ilits->ts, 17);
+            log_buf_write(ilits9882n->ts, 17);
         } else {
-            log_buf_write(ilits->ts, 18);
+            log_buf_write(ilits9882n->ts, 18);
         }
     }
 
     if (id_last.noise_mode != id0.noise_mode) {
         if (id0.noise_mode) {
-            log_buf_write(ilits->ts, 19);
+            log_buf_write(ilits9882n->ts, 19);
         } else {
-            log_buf_write(ilits->ts, 20);
+            log_buf_write(ilits9882n->ts, 20);
         }
     }
 
     if (id_last.palm_plus_mode != id0.palm_plus_mode) {
         if (id0.palm_plus_mode) {
-            log_buf_write(ilits->ts, 21);
+            log_buf_write(ilits9882n->ts, 21);
         } else {
-            log_buf_write(ilits->ts, 22);
+            log_buf_write(ilits9882n->ts, 22);
         }
     }
 
     if (id_last.floating_mode != id0.floating_mode) {
         if (id0.floating_mode) {
-            log_buf_write(ilits->ts, 23);
+            log_buf_write(ilits9882n->ts, 23);
         } else {
-            log_buf_write(ilits->ts, 24);
+            log_buf_write(ilits9882n->ts, 24);
         }
     }
 
-    if (tp_debug > 0 || ili_debug_en) {
+    if (tp_debug > 0 || ili9882n_debug_en) {
         ILI_INFO("debug state is 0x%02X.\n", buf[3]);
     }
 
     if (id_last.algo_pt_status0 != id0.algo_pt_status0) {
         ili_write_log_buf(25, id0.algo_pt_status0);
 
-        if (tp_debug > 0 || ili_debug_en) {
+        if (tp_debug > 0 || ili9882n_debug_en) {
             ILI_INFO("algo_pt_status0 = %d\n", id0.algo_pt_status0);
         }
     }
@@ -1007,7 +1007,7 @@ static void ili_demo_debug_info_id0(u8 *buf, int len)
     if (id_last.algo_pt_status1 != id0.algo_pt_status1) {
         ili_write_log_buf(26, id0.algo_pt_status1);
 
-        if (tp_debug > 0 || ili_debug_en) {
+        if (tp_debug > 0 || ili9882n_debug_en) {
             ILI_INFO("algo_pt_status1 = %d\n", id0.algo_pt_status1);
         }
     }
@@ -1015,7 +1015,7 @@ static void ili_demo_debug_info_id0(u8 *buf, int len)
     if (id_last.algo_pt_status2 != id0.algo_pt_status2) {
         ili_write_log_buf(27, id0.algo_pt_status2);
 
-        if (tp_debug > 0 || ili_debug_en) {
+        if (tp_debug > 0 || ili9882n_debug_en) {
             ILI_INFO("algo_pt_status2 = %d\n", id0.algo_pt_status2);
         }
     }
@@ -1023,7 +1023,7 @@ static void ili_demo_debug_info_id0(u8 *buf, int len)
     if (id_last.algo_pt_status3 != id0.algo_pt_status3) {
         ili_write_log_buf(28, id0.algo_pt_status3);
 
-        if (tp_debug > 0 || ili_debug_en) {
+        if (tp_debug > 0 || ili9882n_debug_en) {
             ILI_INFO("algo_pt_status3 = %d\n", id0.algo_pt_status3);
         }
     }
@@ -1031,7 +1031,7 @@ static void ili_demo_debug_info_id0(u8 *buf, int len)
     if (id_last.algo_pt_status4 != id0.algo_pt_status4) {
         ili_write_log_buf(29, id0.algo_pt_status4);
 
-        if (tp_debug > 0 || ili_debug_en) {
+        if (tp_debug > 0 || ili9882n_debug_en) {
             ILI_INFO("algo_pt_status4 = %d\n", id0.algo_pt_status4);
         }
     }
@@ -1039,7 +1039,7 @@ static void ili_demo_debug_info_id0(u8 *buf, int len)
     if (id_last.algo_pt_status5 != id0.algo_pt_status5) {
         ili_write_log_buf(30, id0.algo_pt_status5);
 
-        if (tp_debug > 0 || ili_debug_en) {
+        if (tp_debug > 0 || ili9882n_debug_en) {
             ILI_INFO("algo_pt_status5 = %d\n", id0.algo_pt_status5);
         }
     }
@@ -1047,7 +1047,7 @@ static void ili_demo_debug_info_id0(u8 *buf, int len)
     if (id_last.algo_pt_status6 != id0.algo_pt_status6) {
         ili_write_log_buf(31, id0.algo_pt_status6);
 
-        if (tp_debug > 0 || ili_debug_en) {
+        if (tp_debug > 0 || ili9882n_debug_en) {
             ILI_INFO("algo_pt_status6 = %d\n", id0.algo_pt_status6);
         }
     }
@@ -1055,7 +1055,7 @@ static void ili_demo_debug_info_id0(u8 *buf, int len)
     if (id_last.algo_pt_status7 != id0.algo_pt_status7) {
         ili_write_log_buf(32, id0.algo_pt_status7);
 
-        if (tp_debug > 0 || ili_debug_en) {
+        if (tp_debug > 0 || ili9882n_debug_en) {
             ILI_INFO("algo_pt_status7 = %d\n", id0.algo_pt_status7);
         }
     }
@@ -1063,7 +1063,7 @@ static void ili_demo_debug_info_id0(u8 *buf, int len)
     if (id_last.algo_pt_status8 != id0.algo_pt_status8) {
         ili_write_log_buf(33, id0.algo_pt_status8);
 
-        if (tp_debug > 0 || ili_debug_en) {
+        if (tp_debug > 0 || ili9882n_debug_en) {
             ILI_INFO("algo_pt_status8 = %d\n", id0.algo_pt_status8);
         }
     }
@@ -1071,7 +1071,7 @@ static void ili_demo_debug_info_id0(u8 *buf, int len)
     if (id_last.algo_pt_status9 != id0.algo_pt_status9) {
         ili_write_log_buf(34, id0.algo_pt_status9);
 
-        if (tp_debug > 0 || ili_debug_en) {
+        if (tp_debug > 0 || ili9882n_debug_en) {
             ILI_INFO("algo_pt_status9 = %d\n", id0.algo_pt_status9);
         }
     }
@@ -1079,7 +1079,7 @@ static void ili_demo_debug_info_id0(u8 *buf, int len)
     if (id_last.reserved2 != id0.reserved2) {
         ili_write_log_buf(35, id0.reserved2);
 
-        if (tp_debug > 0 || ili_debug_en) {
+        if (tp_debug > 0 || ili9882n_debug_en) {
             ILI_INFO("algo_pt_status9 = %d\n", id0.reserved2);
         }
     }
@@ -1088,7 +1088,7 @@ static void ili_demo_debug_info_id0(u8 *buf, int len)
         if (id_last.hopping_index != id0.hopping_index) {
             ili_write_log_buf(36, id0.hopping_index);
 
-            if (tp_debug > 0 || ili_debug_en) {
+            if (tp_debug > 0 || ili9882n_debug_en) {
                 ILI_INFO("hopping_index = %d\n", id0.hopping_index);
                 ILI_INFO("hopping_flg = %d\n", id0.hopping_flg);
                 ILI_INFO("freq = %dK\n",
@@ -1100,7 +1100,7 @@ static void ili_demo_debug_info_id0(u8 *buf, int len)
     if (id_last.reserved3 != id0.reserved3) {
         ili_write_log_buf(37, id0.reserved3);
 
-        if (tp_debug > 0 || ili_debug_en) {
+        if (tp_debug > 0 || ili9882n_debug_en) {
             ILI_INFO("reserved3 = %d\n", id0.reserved3);
         }
     }
@@ -1108,7 +1108,7 @@ static void ili_demo_debug_info_id0(u8 *buf, int len)
     if (id_last.reserved4 != id0.reserved4) {
         ili_write_log_buf(38, id0.reserved4);
 
-        if (tp_debug > 0 || ili_debug_en) {
+        if (tp_debug > 0 || ili9882n_debug_en) {
             ILI_INFO("reserved4 = %d\n", id0.reserved4);
         }
     }
@@ -1118,21 +1118,21 @@ static void ili_demo_debug_info_id0(u8 *buf, int len)
 
 #endif /*CONFIG_OPLUS_TP_APK*/
 
-void ili_demo_debug_info_mode(u8 *buf, size_t len)
+void ili9882n_demo_debug_info_mode(u8 *buf, size_t len)
 {
     u8 *info_ptr;
     u8 info_id, info_len;
-    ili_report_ap_mode(buf, P5_X_DEMO_MODE_PACKET_LEN);
+    ili9882n_report_ap_mode(buf, P5_X_DEMO_MODE_PACKET_LEN);
     info_ptr = buf + P5_X_DEMO_MODE_PACKET_LEN;
     info_len = info_ptr[0];
     info_id = info_ptr[1];
     ILI_INFO("info len = %d ,id = %d\n", info_len, info_id);
 
-    //ilits->demo_debug_info[info_id](&info_ptr[1] , info_len);
+    //ilits9882n->demo_debug_info[info_id](&info_ptr[1] , info_len);
 
     if (info_id == 0) {
 #ifdef CONFIG_OPLUS_TP_APK
-        ilits->demo_debug_info[info_id](&info_ptr[1], info_len);
+        ilits9882n->demo_debug_info[info_id](&info_ptr[1], info_len);
 #endif /*CONFIG_OPLUS_TP_APK*/
     } else {
         ILI_INFO("not support this id %d\n", info_id);
@@ -1142,48 +1142,48 @@ void ili_demo_debug_info_mode(u8 *buf, size_t len)
 static void ilitek_tddi_touch_send_debug_data(u8 *buf, int len)
 {
     int index;
-    mutex_lock(&ilits->debug_mutex);
+    mutex_lock(&ilits9882n->debug_mutex);
 
-    if (!ilits->netlink && !ilits->dnp) {
+    if (!ilits9882n->netlink && !ilits9882n->dnp) {
         goto out;
     }
 
     /* Send data to netlink */
-    if (ilits->netlink) {
-        ili_netlink_reply_msg(buf, len);
+    if (ilits9882n->netlink) {
+        ili9882n_netlink_reply_msg(buf, len);
         goto out;
     }
 
     /* Sending data to apk via the node of debug_message node */
-    if (ilits->dnp) {
-        index = ilits->dbf;
+    if (ilits9882n->dnp) {
+        index = ilits9882n->dbf;
 
-        if (!ilits->dbl[ilits->dbf].mark) {
-            ilits->dbf = ((ilits->dbf + 1) % TR_BUF_LIST_SIZE);
+        if (!ilits9882n->dbl[ilits9882n->dbf].mark) {
+            ilits9882n->dbf = ((ilits9882n->dbf + 1) % TR_BUF_LIST_SIZE);
         } else {
-            if (ilits->dbf == 0) {
+            if (ilits9882n->dbf == 0) {
                 index = TR_BUF_LIST_SIZE - 1;
             } else {
-                index = ilits->dbf - 1;
+                index = ilits9882n->dbf - 1;
             }
         }
 
-        if (ilits->dbl[index].data == NULL) {
+        if (ilits9882n->dbl[index].data == NULL) {
             ILI_ERR("BUFFER %d error\n", index);
             goto out;
         }
 
-        ipio_memcpy(ilits->dbl[index].data, buf, len, 2048);
-        ilits->dbl[index].mark = true;
-        wake_up_interruptible(&(ilits->inq));
+        ipio_memcpy(ilits9882n->dbl[index].data, buf, len, 2048);
+        ilits9882n->dbl[index].mark = true;
+        wake_up_interruptible(&(ilits9882n->inq));
         goto out;
     }
 
 out:
-    mutex_unlock(&ilits->debug_mutex);
+    mutex_unlock(&ilits9882n->debug_mutex);
 }
 
-void ili_report_ap_mode(u8 *buf, int len)
+void ili9882n_report_ap_mode(u8 *buf, int len)
 {
     int i = 0;
     u32 xop = 0, yop = 0;
@@ -1197,26 +1197,26 @@ void ili_report_ap_mode(u8 *buf, int len)
         xop = (((buf[(4 * i) + 1] & 0xF0) << 4) | (buf[(4 * i) + 2]));
         yop = (((buf[(4 * i) + 1] & 0x0F) << 8) | (buf[(4 * i) + 3]));
 
-        if (ilits->trans_xy) {
-            ilits->points[i].x = xop;
-            ilits->points[i].y = yop;
+        if (ilits9882n->trans_xy) {
+            ilits9882n->points[i].x = xop;
+            ilits9882n->points[i].y = yop;
         } else {
-            ilits->points[i].x = xop * ilits->panel_wid / TPD_WIDTH;
-            ilits->points[i].y = yop * ilits->panel_hei / TPD_HEIGHT;
+            ilits9882n->points[i].x = xop * ilits9882n->panel_wid / TPD_WIDTH;
+            ilits9882n->points[i].y = yop * ilits9882n->panel_hei / TPD_HEIGHT;
         }
 
-        ilits->pointid_info = ilits->pointid_info | (1 << i);
-        ilits->points[i].z = buf[(4 * i) + 4];
-        ilits->points[i].width_major = buf[(4 * i) + 4];
-        ilits->points[i].touch_major = buf[(4 * i) + 4];
-        ilits->points[i].status = 1;
+        ilits9882n->pointid_info = ilits9882n->pointid_info | (1 << i);
+        ilits9882n->points[i].z = buf[(4 * i) + 4];
+        ilits9882n->points[i].width_major = buf[(4 * i) + 4];
+        ilits9882n->points[i].touch_major = buf[(4 * i) + 4];
+        ilits9882n->points[i].status = 1;
         ILI_DBG("original x = %d, y = %d p = %d\n", xop, yop, buf[(4 * i) + 4]);
     }
 
     ilitek_tddi_touch_send_debug_data(buf, len);
 }
 
-void ili_debug_mode_report_point(u8 *buf, int len)
+void ili9882n_debug_mode_report_point(u8 *buf, int len)
 {
     int i = 0;
     u32 xop = 0, yop = 0;
@@ -1231,17 +1231,17 @@ void ili_debug_mode_report_point(u8 *buf, int len)
         xop = (((buf[(3 * i)] & 0xF0) << 4) | (buf[(3 * i) + 1]));
         yop = (((buf[(3 * i)] & 0x0F) << 8) | (buf[(3 * i) + 2]));
 
-        if (ilits->trans_xy) {
-            ilits->points[i].x = xop;
-            ilits->points[i].y = yop;
+        if (ilits9882n->trans_xy) {
+            ilits9882n->points[i].x = xop;
+            ilits9882n->points[i].y = yop;
         } else {
-            ilits->points[i].x = xop * ilits->panel_wid / TPD_WIDTH;
-            ilits->points[i].y = yop * ilits->panel_hei / TPD_HEIGHT;
+            ilits9882n->points[i].x = xop * ilits9882n->panel_wid / TPD_WIDTH;
+            ilits9882n->points[i].y = yop * ilits9882n->panel_hei / TPD_HEIGHT;
         }
 
-        ilits->pointid_info = ilits->pointid_info | (1 << i);
-        ilits->points[i].z = buf[(4 * i) + 4];
-        ilits->points[i].status = 1;
+        ilits9882n->pointid_info = ilits9882n->pointid_info | (1 << i);
+        ilits9882n->points[i].z = buf[(4 * i) + 4];
+        ilits9882n->points[i].status = 1;
 
         /*
         * Since there's no pressure data in debug mode, we make fake values
@@ -1253,46 +1253,46 @@ void ili_debug_mode_report_point(u8 *buf, int len)
             p[i] = 1;
         }
 
-        ilits->points[i].width_major = p[i];
-        ilits->points[i].touch_major = p[i];
-        ilits->points[i].z = p[i];
+        ilits9882n->points[i].width_major = p[i];
+        ilits9882n->points[i].touch_major = p[i];
+        ilits9882n->points[i].z = p[i];
         ILI_DBG("original x = %d, y = %d p = %d\n", xop, yop, p[i]);
     }
 }
 
-void ili_report_debug_mode(u8 *buf, int len)
+void ili9882n_report_debug_mode(u8 *buf, int len)
 {
-    ili_debug_mode_report_point(buf + 5, len);
+    ili9882n_debug_mode_report_point(buf + 5, len);
     ilitek_tddi_touch_send_debug_data(buf, len);
 }
 
-void ili_report_debug_lite_mode(u8 *buf, int len)
+void ili9882n_report_debug_lite_mode(u8 *buf, int len)
 {
-    ili_debug_mode_report_point(buf + 4, len);
+    ili9882n_debug_mode_report_point(buf + 4, len);
     ilitek_tddi_touch_send_debug_data(buf, len);
 }
 
-void ili_report_gesture_mode(u8 *buf, int len)
+void ili9882n_report_gesture_mode(u8 *buf, int len)
 {
     int lu_x = 0, lu_y = 0, rd_x = 0, rd_y = 0, score = 0;
     u8 ges[P5_X_GESTURE_INFO_LENGTH] = {0};
-    struct gesture_coordinate *gc = ilits->gcoord;
-    bool transfer = ilits->trans_xy;
+    struct gesture_coordinate *gc = ilits9882n->gcoord;
+    bool transfer = ilits9882n->trans_xy;
 
     ipio_memcpy(ges, buf, len, P5_X_GESTURE_INFO_LENGTH);
 
     memset(gc, 0x0, sizeof(struct gesture_coordinate));
 #ifdef CONFIG_OPLUS_TP_APK
 
-    if (ilits->debug_gesture_sta) {
-        if (ilits->ts->gesture_buf) {
+    if (ilits9882n->debug_gesture_sta) {
+        if (ilits9882n->ts->gesture_buf) {
             int tmp_len = len ;
 
             if (tmp_len > P5_X_GESTURE_INFO_LENGTH) {
                 tmp_len = P5_X_GESTURE_INFO_LENGTH;
             }
 
-            memcpy(ilits->ts->gesture_buf, buf, tmp_len);
+            memcpy(ilits9882n->ts->gesture_buf, buf, tmp_len);
         }
     }
 
@@ -1430,18 +1430,18 @@ void ili_report_gesture_mode(u8 *buf, int len)
     }
 
     if (!transfer) {
-        gc->pos_start.x = gc->pos_start.x * ilits->panel_wid / TPD_WIDTH;
-        gc->pos_start.y = gc->pos_start.y * ilits->panel_hei / TPD_HEIGHT;
-        gc->pos_end.x   = gc->pos_end.x * ilits->panel_wid / TPD_WIDTH;
-        gc->pos_end.y   = gc->pos_end.y * ilits->panel_hei / TPD_HEIGHT;
-        gc->pos_1st.x   = gc->pos_1st.x * ilits->panel_wid / TPD_WIDTH;
-        gc->pos_1st.y   = gc->pos_1st.y * ilits->panel_hei / TPD_HEIGHT;
-        gc->pos_2nd.x   = gc->pos_2nd.x * ilits->panel_wid / TPD_WIDTH;
-        gc->pos_2nd.y   = gc->pos_2nd.y * ilits->panel_hei / TPD_HEIGHT;
-        gc->pos_3rd.x   = gc->pos_3rd.x * ilits->panel_wid / TPD_WIDTH;
-        gc->pos_3rd.y   = gc->pos_3rd.y * ilits->panel_hei / TPD_HEIGHT;
-        gc->pos_4th.x   = gc->pos_4th.x * ilits->panel_wid / TPD_WIDTH;
-        gc->pos_4th.y   = gc->pos_4th.y * ilits->panel_hei / TPD_HEIGHT;
+        gc->pos_start.x = gc->pos_start.x * ilits9882n->panel_wid / TPD_WIDTH;
+        gc->pos_start.y = gc->pos_start.y * ilits9882n->panel_hei / TPD_HEIGHT;
+        gc->pos_end.x   = gc->pos_end.x * ilits9882n->panel_wid / TPD_WIDTH;
+        gc->pos_end.y   = gc->pos_end.y * ilits9882n->panel_hei / TPD_HEIGHT;
+        gc->pos_1st.x   = gc->pos_1st.x * ilits9882n->panel_wid / TPD_WIDTH;
+        gc->pos_1st.y   = gc->pos_1st.y * ilits9882n->panel_hei / TPD_HEIGHT;
+        gc->pos_2nd.x   = gc->pos_2nd.x * ilits9882n->panel_wid / TPD_WIDTH;
+        gc->pos_2nd.y   = gc->pos_2nd.y * ilits9882n->panel_hei / TPD_HEIGHT;
+        gc->pos_3rd.x   = gc->pos_3rd.x * ilits9882n->panel_wid / TPD_WIDTH;
+        gc->pos_3rd.y   = gc->pos_3rd.y * ilits9882n->panel_hei / TPD_HEIGHT;
+        gc->pos_4th.x   = gc->pos_4th.x * ilits9882n->panel_wid / TPD_WIDTH;
+        gc->pos_4th.y   = gc->pos_4th.y * ilits9882n->panel_hei / TPD_HEIGHT;
     }
 
     ILI_INFO("Transfer = %d, Type = %d, clockwise = %d\n", transfer, gc->type, gc->clockwise);
@@ -1456,7 +1456,7 @@ send_debug_data:
     ilitek_tddi_touch_send_debug_data(buf, len);
 }
 
-void ili_report_i2cuart_mode(u8 *buf, int len)
+void ili9882n_report_i2cuart_mode(u8 *buf, int len)
 {
     int type = buf[3] & 0x0F;
     int need_read_len = 0, one_data_bytes = 0;
@@ -1492,7 +1492,7 @@ void ili_report_i2cuart_mode(u8 *buf, int len)
         goto out;
     }
 
-    if (ilits->wrapper(NULL, 0, uart_buf, uart_len, OFF, OFF) < 0) {
+    if (ilits9882n->wrapper(NULL, 0, uart_buf, uart_len, OFF, OFF) < 0) {
         ILI_ERR("i2cuart read data failed\n");
         goto out;
     }
@@ -1513,20 +1513,20 @@ out:
     return;
 }
 
-int ili_mp_test_handler(char *apk, bool lcm_on, struct seq_file *s, char *message)
+int ili9882n_mp_test_handler(char *apk, bool lcm_on, struct seq_file *s, char *message)
 {
     int ret = 0;
     //u32 reg_data = 0;
 
-    if (atomic_read(&ilits->fw_stat)) {
+    if (atomic_read(&ilits9882n->fw_stat)) {
         ILI_ERR("fw upgrade processing, ignore\n");
         return -EMP_FW_PROC;
     }
 
-    atomic_set(&ilits->mp_stat, ENABLE);
+    atomic_set(&ilits9882n->mp_stat, ENABLE);
 
-    if (ilits->actual_tp_mode != P5_X_FW_TEST_MODE) {
-        ret = ili_switch_tp_mode(P5_X_FW_TEST_MODE);
+    if (ilits9882n->actual_tp_mode != P5_X_FW_TEST_MODE) {
+        ret = ili9882n_switch_tp_mode(P5_X_FW_TEST_MODE);
 
         if (ret < 0) {
             ILI_ERR("Switch MP mode failed\n");
@@ -1546,22 +1546,22 @@ int ili_mp_test_handler(char *apk, bool lcm_on, struct seq_file *s, char *messag
     }
 
 #if 0
-   ret = ili_ice_mode_ctrl(ENABLE, ON);
+   ret = ili9882n_ice_mode_ctrl(ENABLE, ON);
    if (ret < 0)
       ILI_ERR("Enable ice mode failed while reading pc counter\n");
    ILI_INFO("0x51024 Write 0xB521\n");
-   if (ili_ice_mode_write(0x51024, 0xB521, 2) < 0)
+   if (ili9882n_ice_mode_write(0x51024, 0xB521, 2) < 0)
        ILI_ERR("0x51024 Write 0xB521 failed\n");
-   if (ili_ice_mode_read(0x51024, &reg_data, sizeof(u32)) < 0)
+   if (ili9882n_ice_mode_read(0x51024, &reg_data, sizeof(u32)) < 0)
       ILI_ERR("Read 0x51024 error\n");
    ILI_INFO("0x51024 read 0x%X\n", reg_data);
-   if (ili_ice_mode_ctrl(DISABLE, ON) < 0)
+   if (ili9882n_ice_mode_ctrl(DISABLE, ON) < 0)
       ILI_ERR("Disable ice mode failed\n");
 #endif
 
-    ret = ili_mp_test_main(apk, lcm_on, s, message);
+    ret = ili9882n_mp_test_main(apk, lcm_on, s, message);
 out:
-    ilits->actual_tp_mode = P5_X_FW_AP_MODE;
+    ilits9882n->actual_tp_mode = P5_X_FW_AP_MODE;
 
     /*
      * If there's running mp test with lcm off, we suspose that
@@ -1569,48 +1569,48 @@ out:
      * from MP to AP mode until resume finished.
      */
     if (!lcm_on) {
-        atomic_set(&ilits->mp_stat, DISABLE);
+        atomic_set(&ilits9882n->mp_stat, DISABLE);
         return ret;
     }
 
-    if (ilits->fw_upgrade_mode == UPGRADE_IRAM) {
-        if (ili_fw_upgrade_handler() < 0) {
+    if (ilits9882n->fw_upgrade_mode == UPGRADE_IRAM) {
+        if (ili9882n_fw_upgrade_handler() < 0) {
             ILI_ERR("FW upgrade failed during mp test\n");
         }
     } else {
-        if (ili_reset_ctrl(ilits->reset) < 0) {
+        if (ili9982n_reset_ctrl(ilits9882n->reset) < 0) {
             ILI_ERR("TP Reset failed during mp test\n");
         }
     }
 
-    atomic_set(&ilits->mp_stat, DISABLE);
+    atomic_set(&ilits9882n->mp_stat, DISABLE);
     return ret;
 }
 
-int ili_switch_tp_mode(u8 mode)
+int ili9882n_switch_tp_mode(u8 mode)
 {
     int ret = 0;
     bool ges_dbg = false;
-    atomic_set(&ilits->tp_sw_mode, START);
-    ilits->actual_tp_mode = mode;
+    atomic_set(&ilits9882n->tp_sw_mode, START);
+    ilits9882n->actual_tp_mode = mode;
 
     /* able to see cdc data in gesture mode */
-    if (ilits->tp_data_format == DATA_FORMAT_DEBUG &&
-        ilits->actual_tp_mode == P5_X_FW_GESTURE_MODE) {
+    if (ilits9882n->tp_data_format == DATA_FORMAT_DEBUG &&
+        ilits9882n->actual_tp_mode == P5_X_FW_GESTURE_MODE) {
         ges_dbg = true;
     }
 
-    switch (ilits->actual_tp_mode) {
+    switch (ilits9882n->actual_tp_mode) {
         case P5_X_FW_AP_MODE:
             ILI_INFO("Switch to AP mode\n");
-            ilits->wait_int_timeout = AP_INT_TIMEOUT;
+            ilits9882n->wait_int_timeout = AP_INT_TIMEOUT;
 
-            if (ilits->fw_upgrade_mode == UPGRADE_IRAM) {
-                if (ili_fw_upgrade_handler() < 0) {
+            if (ilits9882n->fw_upgrade_mode == UPGRADE_IRAM) {
+                if (ili9882n_fw_upgrade_handler() < 0) {
                     ILI_ERR("FW upgrade failed\n");
                 }
             } else {
-                ret = ili_reset_ctrl(ilits->reset);
+                ret = ili9982n_reset_ctrl(ilits9882n->reset);
             }
 
             if (ret < 0) {
@@ -1621,8 +1621,8 @@ int ili_switch_tp_mode(u8 mode)
 
         case P5_X_FW_GESTURE_MODE:
             ILI_INFO("Switch to Gesture mode\n");
-            ilits->wait_int_timeout = AP_INT_TIMEOUT;
-            ret = ili_move_gesture_code_iram(ilits->gesture_mode);
+            ilits9882n->wait_int_timeout = AP_INT_TIMEOUT;
+            ret = ili9882n_move_gesture_code_iram(ilits9882n->gesture_mode);
 
             if (ret < 0) {
                 ILI_ERR("Move gesture code failed\n");
@@ -1630,15 +1630,15 @@ int ili_switch_tp_mode(u8 mode)
 
             if (ges_dbg) {
                 ILI_INFO("Enable gesture debug func\n");
-                ili_set_tp_data_len(DATA_FORMAT_GESTURE_DEBUG, false, NULL);
+                ili9882n_set_tp_data_len(DATA_FORMAT_GESTURE_DEBUG, false, NULL);
             }
 
             break;
 
         case P5_X_FW_TEST_MODE:
             ILI_INFO("Switch to Test mode\n");
-            ilits->wait_int_timeout = MP_INT_TIMEOUT;
-            ret = ili_move_mp_code_iram();
+            ilits9882n->wait_int_timeout = MP_INT_TIMEOUT;
+            ret = ili9882n_move_mp_code_iram();
             break;
 
         default:
@@ -1651,39 +1651,39 @@ int ili_switch_tp_mode(u8 mode)
         ILI_ERR("Switch TP mode (%d) failed \n", mode);
     }
 
-    ILI_DBG("Actual TP mode = %d\n", ilits->actual_tp_mode);
-    atomic_set(&ilits->tp_sw_mode, END);
+    ILI_DBG("Actual TP mode = %d\n", ilits9882n->actual_tp_mode);
+    atomic_set(&ilits9882n->tp_sw_mode, END);
     return ret;
 }
 
-int ili_gesture_recovery(void)
+int ili9882n_gesture_recovery(void)
 {
     int ret = 0;
-    //atomic_set(&ilits->esd_stat, START);
+    //atomic_set(&ilits9882n->esd_stat, START);
     ILI_INFO("Doing gesture recovery\n");
-    ret = ili_touch_esd_gesture_iram();
-    //atomic_set(&ilits->esd_stat, END);
+    ret = ili9882n_touch_esd_gesture_iram();
+    //atomic_set(&ilits9882n->esd_stat, END);
     return ret;
 }
 
-void ili_spi_recovery(void)
+void ili9882n_spi_recovery(void)
 {
-    atomic_set(&ilits->esd_stat, START);
+    atomic_set(&ilits9882n->esd_stat, START);
     tp_touch_btnkey_release();
     ILI_INFO("Doing spi recovery\n");
 
-    if (ili_fw_upgrade_handler() < 0) {
+    if (ili9882n_fw_upgrade_handler() < 0) {
         ILI_ERR("FW upgrade failed\n");
     }
 
-    atomic_set(&ilits->esd_stat, END);
+    atomic_set(&ilits9882n->esd_stat, END);
 }
 
 static int ili_esd_spi_check(void)
 {
     int ret = 0;
     u8 tx = SPI_WRITE, rx = 0;
-    ret = ilits->spi_write_then_read(ilits->spi, &tx, 1, &rx, 1);
+    ret = ilits9882n->spi_write_then_read(ilits9882n->spi, &tx, 1, &rx, 1);
     ILI_DBG("spi esd check ret = %d\n", ret);
 
     if (ret == DO_SPI_RECOVER) {
@@ -1700,31 +1700,31 @@ static int ili_esd_check(struct work_struct *work)
 
     if (ili_esd_spi_check() < 0) {
         ILI_ERR("SPI ACK failed, doing spi recovery\n");
-        ili_spi_recovery();
+        ili9882n_spi_recovery();
         ret = -1;
     }
 
     return ret;
 }
 
-int ili_sleep_handler(int mode)
+int ili9882n_sleep_handler(int mode)
 {
     int ret = 0;
     bool sense_stop = true;
-    atomic_set(&ilits->tp_sleep, START);
+    atomic_set(&ilits9882n->tp_sleep, START);
 
-    if (atomic_read(&ilits->fw_stat) ||
-        atomic_read(&ilits->mp_stat)) {
+    if (atomic_read(&ilits9882n->fw_stat) ||
+        atomic_read(&ilits9882n->mp_stat)) {
         ILI_INFO("fw upgrade or mp still running, ignore sleep requst\n");
-        atomic_set(&ilits->tp_sleep, END);
+        atomic_set(&ilits9882n->tp_sleep, END);
         return 0;
     }
 
     ILI_INFO("Sleep Mode = %d\n", mode);
 
-    if (ilits->ss_ctrl) {
+    if (ilits9882n->ss_ctrl) {
         sense_stop = true;
-    } else if ((ilits->chip->core_ver >= CORE_VER_1430)) {
+    } else if ((ilits9882n->chip->core_ver >= CORE_VER_1430)) {
         sense_stop = false;
     } else {
         sense_stop = true;
@@ -1733,22 +1733,22 @@ int ili_sleep_handler(int mode)
     switch (mode) {
         case TP_SUSPEND:
             ILI_INFO("TP suspend start\n");
-            ilits->tp_suspend = true;
+            ilits9882n->tp_suspend = true;
 
             if (sense_stop) {
-                if (ili_ic_func_ctrl("sense", DISABLE) < 0) {
+                if (ili9882n_ic_func_ctrl("sense", DISABLE) < 0) {
                     ILI_ERR("Write sense stop cmd failed\n");
                 }
 
-                if (ili_ic_check_busy(10, 20) < 0) {
+                if (ili9882n_ic_check_busy(10, 20) < 0) {
                     ILI_ERR("Check busy timeout during suspend\n");
                 }
             }
 
-            if (ilits->gesture) {
-                ili_switch_tp_mode(P5_X_FW_GESTURE_MODE);
+            if (ilits9882n->gesture) {
+                ili9882n_switch_tp_mode(P5_X_FW_GESTURE_MODE);
             } else {
-                if (ili_ic_func_ctrl("sleep", SLEEP_IN) < 0) {
+                if (ili9882n_ic_func_ctrl("sleep", SLEEP_IN) < 0) {
                     ILI_ERR("Write sleep in cmd failed\n");
                 }
             }
@@ -1758,22 +1758,22 @@ int ili_sleep_handler(int mode)
 
         case TP_DEEP_SLEEP:
             ILI_INFO("TP deep suspend start\n");
-            ilits->tp_suspend = true;
+            ilits9882n->tp_suspend = true;
 
             if (sense_stop) {
-                if (ili_ic_func_ctrl("sense", DISABLE) < 0) {
+                if (ili9882n_ic_func_ctrl("sense", DISABLE) < 0) {
                     ILI_ERR("Write sense stop cmd failed\n");
                 }
 
-                if (ili_ic_check_busy(10, 20) < 0) {
+                if (ili9882n_ic_check_busy(10, 20) < 0) {
                     ILI_ERR("Check busy timeout during deep suspend\n");
                 }
             }
 
-            if (ilits->gesture) {
-                ili_switch_tp_mode(P5_X_FW_GESTURE_MODE);
+            if (ilits9882n->gesture) {
+                ili9882n_switch_tp_mode(P5_X_FW_GESTURE_MODE);
             } else {
-                if (ili_ic_func_ctrl("sleep", DEEP_SLEEP_IN) < 0) {
+                if (ili9882n_ic_func_ctrl("sleep", DEEP_SLEEP_IN) < 0) {
                     ILI_ERR("Write deep sleep in cmd failed\n");
                 }
             }
@@ -1785,19 +1785,19 @@ int ili_sleep_handler(int mode)
 #if !RESUME_BY_DDI
             ILI_INFO("TP resume start\n");
             /* Set tp as demo mode and reload code if it's iram. */
-            ilits->actual_tp_mode = P5_X_FW_AP_MODE;
+            ilits9882n->actual_tp_mode = P5_X_FW_AP_MODE;
 
-            if (ilits->fw_upgrade_mode == UPGRADE_IRAM) {
-                if (ili_fw_upgrade_handler() < 0) {
+            if (ilits9882n->fw_upgrade_mode == UPGRADE_IRAM) {
+                if (ili9882n_fw_upgrade_handler() < 0) {
                     ILI_ERR("FW upgrade failed during resume\n");
                 }
             } else {
-                if (ili_reset_ctrl(ilits->reset) < 0) {
+                if (ili9982n_reset_ctrl(ilits9882n->reset) < 0) {
                     ILI_ERR("TP Reset failed during resume\n");
                 }
             }
 
-            ilits->tp_suspend = false;
+            ilits9882n->tp_suspend = false;
             ILI_INFO("TP resume end\n");
 #endif
             break;
@@ -1808,34 +1808,34 @@ int ili_sleep_handler(int mode)
             break;
     }
 
-    atomic_set(&ilits->tp_sleep, END);
+    atomic_set(&ilits9882n->tp_sleep, END);
     return ret;
 }
 
-int ili_fw_upgrade_handler(void)
+int ili9882n_fw_upgrade_handler(void)
 {
     int ret = 0;
-    atomic_set(&ilits->fw_stat, START);
-    ilits->fw_update_stat = FW_STAT_INIT;
-    ret = ili_fw_upgrade(ilits->fw_open);
+    atomic_set(&ilits9882n->fw_stat, START);
+    ilits9882n->fw_update_stat = FW_STAT_INIT;
+    ret = ili9882n_fw_upgrade(ilits9882n->fw_open);
 
     if (ret != 0) {
         ILI_INFO("FW upgrade fail\n");
-        ilits->fw_update_stat = FW_UPDATE_FAIL;
+        ilits9882n->fw_update_stat = FW_UPDATE_FAIL;
     } else {
         ILI_INFO("FW upgrade pass\n");
-        ilits->fw_update_stat = FW_UPDATE_PASS;
+        ilits9882n->fw_update_stat = FW_UPDATE_PASS;
     }
 
-    atomic_set(&ilits->fw_stat, END);
+    atomic_set(&ilits9882n->fw_stat, END);
     return ret;
 }
 
-int ili_set_tp_data_len(int format, bool send, u8 *data)
+int ili9882n_set_tp_data_len(int format, bool send, u8 *data)
 {
     u8 cmd[10] = {0}, ctrl = 0, debug_ctrl = 0;
     u16 self_key = 2;
-    int ret = 0, tp_mode = ilits->actual_tp_mode, len = 0;
+    int ret = 0, tp_mode = ilits9882n->actual_tp_mode, len = 0;
 
     switch (format) {
         case DATA_FORMAT_DEMO:
@@ -1846,7 +1846,7 @@ int ili_set_tp_data_len(int format, bool send, u8 *data)
 
         case DATA_FORMAT_DEBUG:
         case DATA_FORMAT_GESTURE_DEBUG:
-            len = (2 * ilits->xch_num * ilits->ych_num) + (ilits->stx * 2) + (ilits->srx * 2);
+            len = (2 * ilits9882n->xch_num * ilits9882n->ych_num) + (ilits9882n->stx * 2) + (ilits9882n->srx * 2);
             len += 2 * self_key + (8 * 2) + 1 + 35;
             ctrl = DATA_FORMAT_DEBUG_CMD;
             break;
@@ -1869,24 +1869,24 @@ int ili_set_tp_data_len(int format, bool send, u8 *data)
             break;
 
         case DATA_FORMAT_GESTURE_SPECIAL_DEMO:
-            if (ilits->gesture_demo_ctrl == ENABLE) {
-                if (ilits->gesture_mode == DATA_FORMAT_GESTURE_INFO) {
+            if (ilits9882n->gesture_demo_ctrl == ENABLE) {
+                if (ilits9882n->gesture_mode == DATA_FORMAT_GESTURE_INFO) {
                     len = P5_X_GESTURE_INFO_LENGTH + P5_X_INFO_HEADER_LENGTH + P5_X_INFO_CHECKSUM_LENGTH;
                 } else {
                     len = P5_X_DEMO_MODE_PACKET_LEN + P5_X_INFO_HEADER_LENGTH + P5_X_INFO_CHECKSUM_LENGTH;
                 }
             } else {
-                if (ilits->gesture_mode == DATA_FORMAT_GESTURE_INFO) {
+                if (ilits9882n->gesture_mode == DATA_FORMAT_GESTURE_INFO) {
                     len = P5_X_GESTURE_INFO_LENGTH;
                 } else {
                     len = P5_X_GESTURE_NORMAL_LENGTH;
                 }
             }
 
-            ILI_INFO("Gesture demo mode control = %d\n",  ilits->gesture_demo_ctrl);
-            ili_ic_func_ctrl("gesture_demo_en", ilits->gesture_demo_ctrl);
+            ILI_INFO("Gesture demo mode control = %d\n",  ilits9882n->gesture_demo_ctrl);
+            ili9882n_ic_func_ctrl("gesture_demo_en", ilits9882n->gesture_demo_ctrl);
             ILI_INFO("knock_en setting\n");
-            ili_ic_func_ctrl("knock_en", 0x8);
+            ili9882n_ic_func_ctrl("knock_en", 0x8);
             break;
 
         case DATA_FORMAT_DEBUG_LITE_ROI:
@@ -1922,11 +1922,11 @@ int ili_set_tp_data_len(int format, bool send, u8 *data)
         cmd[0] = P5_X_MODE_CONTROL;
         cmd[1] = ctrl;
         cmd[2] = debug_ctrl;
-        ret = ilits->wrapper(cmd, 10, NULL, 0, ON, OFF);
+        ret = ilits9882n->wrapper(cmd, 10, NULL, 0, ON, OFF);
 
         if (ret < 0) {
             ILI_ERR("switch to format %d failed\n", format);
-            ili_switch_tp_mode(P5_X_FW_AP_MODE);
+            ili9882n_switch_tp_mode(P5_X_FW_AP_MODE);
         }
     } else if (tp_mode == P5_X_FW_AP_MODE ||
                format == DATA_FORMAT_GESTURE_DEMO ||
@@ -1934,18 +1934,18 @@ int ili_set_tp_data_len(int format, bool send, u8 *data)
                format == DATA_FORMAT_DEMO) {
         cmd[0] = P5_X_MODE_CONTROL;
         cmd[1] = ctrl;
-        ret = ilits->wrapper(cmd, 2, NULL, 0, ON, OFF);
+        ret = ilits9882n->wrapper(cmd, 2, NULL, 0, ON, OFF);
 
         if (ret < 0) {
             ILI_ERR("switch to format %d failed\n", format);
-            ili_switch_tp_mode(P5_X_FW_AP_MODE);
+            ili9882n_switch_tp_mode(P5_X_FW_AP_MODE);
         }
     } else if (tp_mode == P5_X_FW_GESTURE_MODE) {
         /*set gesture symbol*/
-        ili_set_gesture_symbol();
+        ili9882n_set_gesture_symbol();
 
         if (send) {
-            ret = ili_ic_func_ctrl("lpwg", ctrl);
+            ret = ili9882n_ic_func_ctrl("lpwg", ctrl);
 
             if (ret < 0) {
                 ILI_ERR("write gesture mode failed\n");
@@ -1953,34 +1953,34 @@ int ili_set_tp_data_len(int format, bool send, u8 *data)
         }
     }
 
-    ilits->tp_data_format = format;
-    ilits->tp_data_len = len;
+    ilits9882n->tp_data_format = format;
+    ilits9882n->tp_data_len = len;
     ILI_INFO("TP mode = %d, format = %d, len = %d\n",
-             tp_mode, ilits->tp_data_format, ilits->tp_data_len);
+             tp_mode, ilits9882n->tp_data_format, ilits9882n->tp_data_len);
     return ret;
 }
 
-int ili_report_handler(void)
+int ili9882n_report_handler(void)
 {
     int ret = 0, pid = 0;
     u8  checksum = 0, pack_checksum = 0;
     u8 *trdata = NULL;
     int rlen = 0;
-    int tmp = ili_debug_en;
+    int tmp = ili9882n_debug_en;
 
     /* Just in case these stats couldn't be blocked in top half context */
-    if (!ilits->report || atomic_read(&ilits->tp_reset) ||
-        atomic_read(&ilits->fw_stat) || atomic_read(&ilits->tp_sw_mode) ||
-        atomic_read(&ilits->mp_stat) || atomic_read(&ilits->tp_sleep)) {
+    if (!ilits9882n->report || atomic_read(&ilits9882n->tp_reset) ||
+        atomic_read(&ilits9882n->fw_stat) || atomic_read(&ilits9882n->tp_sw_mode) ||
+        atomic_read(&ilits9882n->mp_stat) || atomic_read(&ilits9882n->tp_sleep)) {
         ILI_INFO("ignore report request\n");
         return -1;
     }
 
-    if (ilits->actual_tp_mode == P5_X_FW_GESTURE_MODE) {
-        __pm_stay_awake(ilits->ws);
+    if (ilits9882n->actual_tp_mode == P5_X_FW_GESTURE_MODE) {
+        __pm_stay_awake(ilits9882n->ws);
     }
 
-    rlen = ilits->tp_data_len;
+    rlen = ilits9882n->tp_data_len;
     ILI_DBG("Packget length = %d\n", rlen);
 
     if (!rlen || rlen > TR_BUF_SIZE) {
@@ -1989,76 +1989,76 @@ int ili_report_handler(void)
         goto out;
     }
 
-    memset(ilits->tr_buf, 0x0, TR_BUF_SIZE);
-    ret = ilits->wrapper(NULL, 0, ilits->tr_buf, rlen, OFF, OFF);
+    memset(ilits9882n->tr_buf, 0x0, TR_BUF_SIZE);
+    ret = ilits9882n->wrapper(NULL, 0, ilits9882n->tr_buf, rlen, OFF, OFF);
 
     if (ret < 0) {
         ILI_ERR("Read report packet failed, ret = %d\n", ret);
 
         if (ret == DO_SPI_RECOVER) {
-            ili_ic_get_pc_counter(DO_SPI_RECOVER);
+            ili9882n_ic_get_pc_counter(DO_SPI_RECOVER);
 
-            if (ilits->actual_tp_mode == P5_X_FW_GESTURE_MODE && ilits->gesture && !ilits->prox_near) {
+            if (ilits9882n->actual_tp_mode == P5_X_FW_GESTURE_MODE && ilits9882n->gesture && !ilits9882n->prox_near) {
                 ILI_ERR("Gesture failed, doing gesture recovery\n");
 
-                if (ili_gesture_recovery() < 0) {
+                if (ili9882n_gesture_recovery() < 0) {
                     ILI_ERR("Failed to recover gesture\n");
                 }
             } else {
                 ILI_ERR("SPI ACK failed, doing spi recovery\n");
-                ili_spi_recovery();
+                ili9882n_spi_recovery();
             }
         }
 
         goto out;
     }
 
-    ili_dump_data(ilits->tr_buf, 8, rlen, 0, "finger report");
-    checksum = ili_calc_packet_checksum(ilits->tr_buf, rlen - 1);
-    pack_checksum = ilits->tr_buf[rlen - 1];
-    trdata = ilits->tr_buf;
+    ili9882n_dump_data(ilits9882n->tr_buf, 8, rlen, 0, "finger report");
+    checksum = ili9882n_calc_packet_checksum(ilits9882n->tr_buf, rlen - 1);
+    pack_checksum = ilits9882n->tr_buf[rlen - 1];
+    trdata = ilits9882n->tr_buf;
     pid = trdata[0];
     ILI_DBG("Packet ID = %x\n", pid);
 
     if (checksum != pack_checksum && pid != P5_X_I2CUART_PACKET_ID) {
         ILI_ERR("Checksum Error (0x%X)! Pack = 0x%X, len = %d\n", checksum, pack_checksum, rlen);
-        ili_debug_en = DEBUG_ALL;
-        ili_dump_data(trdata, 8, rlen, 0, "finger report with wrong");
-        ili_debug_en = tmp;
+        ili9882n_debug_en = DEBUG_ALL;
+        ili9882n_dump_data(trdata, 8, rlen, 0, "finger report with wrong");
+        ili9882n_debug_en = tmp;
         ret = -1;
         goto out;
     }
 
     if (pid == P5_X_INFO_HEADER_PACKET_ID) {
-        trdata = ilits->tr_buf + P5_X_INFO_HEADER_LENGTH;
+        trdata = ilits9882n->tr_buf + P5_X_INFO_HEADER_LENGTH;
         pid = trdata[0];
     }
 
     switch (pid) {
         case P5_X_DEMO_PACKET_ID:
-            ili_report_ap_mode(trdata, rlen);
+            ili9882n_report_ap_mode(trdata, rlen);
             break;
 
         case P5_X_DEBUG_PACKET_ID:
-            ili_report_debug_mode(trdata, rlen);
+            ili9882n_report_debug_mode(trdata, rlen);
             break;
 
         case P5_X_DEBUG_LITE_PACKET_ID:
-            ili_report_debug_lite_mode(trdata, rlen);
+            ili9882n_report_debug_lite_mode(trdata, rlen);
             break;
 
         case P5_X_I2CUART_PACKET_ID:
             ret = -1;
-            ili_report_i2cuart_mode(trdata, rlen);
+            ili9882n_report_i2cuart_mode(trdata, rlen);
             break;
 
         case P5_X_GESTURE_PACKET_ID:
         case P5_X_GESTURE_FAIL_ID:
-            ili_report_gesture_mode(trdata, rlen);
+            ili9882n_report_gesture_mode(trdata, rlen);
             break;
 
         case P5_X_DEMO_DEBUG_INFO_PACKET_ID:
-            ili_demo_debug_info_mode(trdata, rlen);
+            ili9882n_demo_debug_info_mode(trdata, rlen);
             break;
 
         default:
@@ -2069,22 +2069,22 @@ int ili_report_handler(void)
 
 out:
 
-    if (ilits->actual_tp_mode == P5_X_FW_GESTURE_MODE) {
-        __pm_relax(ilits->ws);
+    if (ilits9882n->actual_tp_mode == P5_X_FW_GESTURE_MODE) {
+        __pm_relax(ilits9882n->ws);
     }
 
     return ret;
 }
 
-int ili_reset_ctrl(int mode)
+int ili9982n_reset_ctrl(int mode)
 {
     int ret = 0;
-    atomic_set(&ilits->tp_reset, START);
+    atomic_set(&ilits9882n->tp_reset, START);
 
     switch (mode) {
         case TP_IC_CODE_RST:
             ILI_INFO("TP IC Code RST \n");
-            ret = ili_ic_code_reset(OFF);
+            ret = ili9882n_ic_code_reset(OFF);
 
             if (ret < 0) {
                 ILI_ERR("IC Code reset failed\n");
@@ -2094,7 +2094,7 @@ int ili_reset_ctrl(int mode)
 
         case TP_IC_WHOLE_RST:
             ILI_INFO("TP IC whole RST\n");
-            ret = ili_ic_whole_reset(OFF);
+            ret = ili9882n_ic_whole_reset(OFF);
 
             if (ret < 0) {
                 ILI_ERR("IC whole reset failed\n");
@@ -2104,7 +2104,7 @@ int ili_reset_ctrl(int mode)
 
         case TP_HW_RST_ONLY:
             ILI_INFO("TP HW RST\n");
-            ili_tp_reset();
+            ili9882n_tp_reset();
             break;
 
         default:
@@ -2118,63 +2118,63 @@ int ili_reset_ctrl(int mode)
      * the stat of ice mode should be set as 0.
      */
     if (mode != TP_IC_CODE_RST) {
-        atomic_set(&ilits->ice_stat, DISABLE);
+        atomic_set(&ilits9882n->ice_stat, DISABLE);
     }
 
-    ilits->tp_data_format = DATA_FORMAT_DEMO;
-    ilits->tp_data_len = P5_X_DEMO_MODE_PACKET_LEN;
-    ilits->pll_clk_wakeup = true;
-    atomic_set(&ilits->tp_reset, END);
+    ilits9882n->tp_data_format = DATA_FORMAT_DEMO;
+    ilits9882n->tp_data_len = P5_X_DEMO_MODE_PACKET_LEN;
+    ilits9882n->pll_clk_wakeup = true;
+    atomic_set(&ilits9882n->tp_reset, END);
     return ret;
 }
 
-int ili_tddi_init(void)
+int ili9882n_tddi_init(void)
 {
     ILI_INFO("driver version = %s\n", DRIVER_VERSION);
     /* Must do hw reset once in first time for work normally if tp reset is avaliable */
 #if !TDDI_RST_BIND
 
-    if (ili_reset_ctrl(ilits->reset) < 0) {
+    if (ili9982n_reset_ctrl(ilits9882n->reset) < 0) {
         ILI_ERR("TP Reset failed during init\n");
     }
 
 #endif
-    ilits->tp_data_format = DATA_FORMAT_DEMO;
+    ilits9882n->tp_data_format = DATA_FORMAT_DEMO;
 
     /*
      * This status of ice enable will be reset until process of fw upgrade runs.
      * it might cause unknown problems if we disable ice mode without any
      * codes inside touch ic.
      */
-    if (ili_ice_mode_ctrl(ENABLE, OFF) < 0) {
-        ILI_ERR("Failed to enable ice mode during ili_tddi_init\n");
+    if (ili9882n_ice_mode_ctrl(ENABLE, OFF) < 0) {
+        ILI_ERR("Failed to enable ice mode during ili9882n_tddi_init\n");
     }
 
-    if (ili_ic_dummy_check() < 0) {
+    if (ili9882n_ic_dummy_check() < 0) {
         ILI_ERR("Not found ilitek chip\n");
         //return -ENODEV;
     }
 
-    if (ili_ic_get_info() < 0) {
+    if (ili9882n_ic_get_info() < 0) {
         ILI_ERR("Chip info is incorrect\n");
     }
 
-    ili_node_init();
+    ili9882n_node_init();
     // update fw in probe
 #ifdef CONFIG_TOUCHPANEL_MTK_PLATFORM
 
-    if (ilits->ts->boot_mode == RECOVERY_BOOT
-        || is_oem_unlocked() || ilits->ts->fw_update_in_probe_with_headfile) {
-        if (ili_fw_upgrade_handler() < 0) {
+    if (ilits9882n->ts->boot_mode == RECOVERY_BOOT
+        || is_oem_unlocked() || ilits9882n->ts->fw_update_in_probe_with_headfile) {
+        if (ili9882n_fw_upgrade_handler() < 0) {
             ILI_ERR("FW upgrade failed\n");
         }
     }
 
 #else
 
-    if (ilits->ts->boot_mode == MSM_BOOT_MODE__RECOVERY
-        || is_oem_unlocked() || ilits->ts->fw_update_in_probe_with_headfile) {
-        if (ili_fw_upgrade_handler() < 0) {
+    if (ilits9882n->ts->boot_mode == MSM_BOOT_MODE__RECOVERY
+        || is_oem_unlocked() || ilits9882n->ts->fw_update_in_probe_with_headfile) {
+        if (ili9882n_fw_upgrade_handler() < 0) {
             ILI_ERR("FW upgrade failed\n");
         }
     }
@@ -2182,19 +2182,19 @@ int ili_tddi_init(void)
 #endif
 
 #if 0 //LINUX_VERSION_CODE < KERNEL_VERSION(5, 4, 0)
-	ilits->ws = wakeup_source_register("ili_wakelock");
+	ilits9882n->ws = wakeup_source_register("ili_wakelock");
 #else
-	ilits->ws = wakeup_source_register(ilits->dev, "ili_wakelock");
+	ilits9882n->ws = wakeup_source_register(ilits9882n->dev, "ili_wakelock");
 #endif
 
-    if (!ilits->ws) {
+    if (!ilits9882n->ws) {
         ILI_ERR("wakeup source request failed\n");
     }
 
     return 0;
 }
 
-int ili_core_spi_setup(int num)
+int ili9882n_core_spi_setup(int num)
 {
     u32 freq[] = {
         TP_SPI_CLK_1M,
@@ -2221,77 +2221,77 @@ int ili_core_spi_setup(int num)
     }
 
     ILI_INFO("spi clock = %d\n", freq[num]);
-    ilits->spi->chip_select = 0; //modify reg=0 for more tp vendor share same spi interface
-    ilits->spi->mode = SPI_MODE_0;
-    ilits->spi->bits_per_word = 8;
-    ilits->spi->max_speed_hz = freq[num];
+    ilits9882n->spi->chip_select = 0; //modify reg=0 for more tp vendor share same spi interface
+    ilits9882n->spi->mode = SPI_MODE_0;
+    ilits9882n->spi->bits_per_word = 8;
+    ilits9882n->spi->max_speed_hz = freq[num];
 
-    if (spi_setup(ilits->spi) < 0) {
+    if (spi_setup(ilits9882n->spi) < 0) {
         ILI_ERR("Failed to setup spi device\n");
         return -ENODEV;
     }
 
     ILI_INFO("name = %s, bus_num = %d,cs = %d, mode = %d, speed = %d\n",
-             ilits->spi->modalias,
-             ilits->spi->master->bus_num,
-             ilits->spi->chip_select,
-             ilits->spi->mode,
-             ilits->spi->max_speed_hz);
+             ilits9882n->spi->modalias,
+             ilits9882n->spi->master->bus_num,
+             ilits9882n->spi->chip_select,
+             ilits9882n->spi->mode,
+             ilits9882n->spi->max_speed_hz);
     return 0;
 }
 
-void ili_tp_reset(void)
+void ili9882n_tp_reset(void)
 {
-    ILI_INFO("edge delay = %d\n", ilits->rst_edge_delay);
+    ILI_INFO("edge delay = %d\n", ilits9882n->rst_edge_delay);
     /* Need accurate power sequence, do not change it to msleep */
-    gpio_direction_output(ilits->tp_rst, 1);
+    gpio_direction_output(ilits9882n->tp_rst, 1);
     mdelay(1);
-    gpio_set_value(ilits->tp_rst, 0);
+    gpio_set_value(ilits9882n->tp_rst, 0);
     mdelay(5);
-    gpio_set_value(ilits->tp_rst, 1);
-    mdelay(ilits->rst_edge_delay);
+    gpio_set_value(ilits9882n->tp_rst, 1);
+    mdelay(ilits9882n->rst_edge_delay);
 }
 
-void ili_irq_disable(void)
+void ili9882n_irq_disable(void)
 {
     unsigned long flag;
-    spin_lock_irqsave(&ilits->irq_spin, flag);
+    spin_lock_irqsave(&ilits9882n->irq_spin, flag);
 
-    if (atomic_read(&ilits->irq_stat) == DISABLE) {
+    if (atomic_read(&ilits9882n->irq_stat) == DISABLE) {
         goto out;
     }
 
-    if (!ilits->irq_num) {
-        ILI_ERR("gpio_to_irq (%d) is incorrect\n", ilits->irq_num);
+    if (!ilits9882n->irq_num) {
+        ILI_ERR("gpio_to_irq (%d) is incorrect\n", ilits9882n->irq_num);
         goto out;
     }
 
-    disable_irq_nosync(ilits->irq_num);
-    atomic_set(&ilits->irq_stat, DISABLE);
+    disable_irq_nosync(ilits9882n->irq_num);
+    atomic_set(&ilits9882n->irq_stat, DISABLE);
     ILI_DBG("Disable irq success\n");
 out:
-    spin_unlock_irqrestore(&ilits->irq_spin, flag);
+    spin_unlock_irqrestore(&ilits9882n->irq_spin, flag);
 }
 
-void ili_irq_enable(void)
+void ili9882n_irq_enable(void)
 {
     unsigned long flag;
-    spin_lock_irqsave(&ilits->irq_spin, flag);
+    spin_lock_irqsave(&ilits9882n->irq_spin, flag);
 
-    if (atomic_read(&ilits->irq_stat) == ENABLE) {
+    if (atomic_read(&ilits9882n->irq_stat) == ENABLE) {
         goto out;
     }
 
-    if (!ilits->irq_num) {
-        ILI_ERR("gpio_to_irq (%d) is incorrect\n", ilits->irq_num);
+    if (!ilits9882n->irq_num) {
+        ILI_ERR("gpio_to_irq (%d) is incorrect\n", ilits9882n->irq_num);
         goto out;
     }
 
-    enable_irq(ilits->irq_num);
-    atomic_set(&ilits->irq_stat, ENABLE);
+    enable_irq(ilits9882n->irq_num);
+    atomic_set(&ilits9882n->irq_stat, ENABLE);
     ILI_DBG("Enable irq success\n");
 out:
-    spin_unlock_irqrestore(&ilits->irq_spin, flag);
+    spin_unlock_irqrestore(&ilits9882n->irq_spin, flag);
 }
 
 /*******Part4:Call Back Function implement*******/
@@ -2307,16 +2307,16 @@ static int ilitek_ftm_process(void *chip_data)
     chip_info->actual_tp_mode = P5_X_FW_AP_MODE;
 
     if (!TDDI_RST_BIND) {
-        ili_reset_ctrl(chip_info->reset);
+        ili9982n_reset_ctrl(chip_info->reset);
     }
 
-    ili_ice_mode_ctrl(ENABLE, OFF);
+    ili9882n_ice_mode_ctrl(ENABLE, OFF);
 
-    if (ili_ic_get_info() < 0) {
+    if (ili9882n_ic_get_info() < 0) {
         ILI_ERR("Not found ilitek chips\n");
     }
 
-    ret = ili_fw_upgrade_handler();
+    ret = ili9882n_fw_upgrade_handler();
 
     if (ret < 0) {
         ILI_INFO("Failed to upgrade firmware, ret = %d\n", ret);
@@ -2324,7 +2324,7 @@ static int ilitek_ftm_process(void *chip_data)
 
     ILI_INFO("FTM tp enter sleep\n");
     /*ftm sleep in */
-    ili_ic_func_ctrl("sleep", SLEEP_IN_FTM_BEGIN);
+    ili9882n_ic_func_ctrl("sleep", SLEEP_IN_FTM_BEGIN);
     mutex_unlock(&chip_info->touch_mutex);
     return ret;
 }
@@ -2333,32 +2333,32 @@ static void ilitek_ftm_process_extra(void)
 {
     int ret = 0;
 
-    if (ilits != NULL && ilits->ts != NULL) {
-        ILI_INFO("ilits->ts->boot_mode = %d\n", ilits->ts->boot_mode);
+    if (ilits9882n != NULL && ilits9882n->ts != NULL) {
+        ILI_INFO("ilits9882n->ts->boot_mode = %d\n", ilits9882n->ts->boot_mode);
 #ifdef CONFIG_TOUCHPANEL_MTK_PLATFORM
 
-        if ((ilits->ts->boot_mode == META_BOOT || ilits->ts->boot_mode == FACTORY_BOOT))
+        if ((ilits9882n->ts->boot_mode == META_BOOT || ilits9882n->ts->boot_mode == FACTORY_BOOT))
 #else
-        if ((ilits->ts->boot_mode == MSM_BOOT_MODE__FACTORY ||
-             ilits->ts->boot_mode == MSM_BOOT_MODE__RF ||
-             ilits->ts->boot_mode == MSM_BOOT_MODE__WLAN))
+        if ((ilits9882n->ts->boot_mode == MSM_BOOT_MODE__FACTORY ||
+             ilits9882n->ts->boot_mode == MSM_BOOT_MODE__RF ||
+             ilits9882n->ts->boot_mode == MSM_BOOT_MODE__WLAN))
 #endif
         {
-            mutex_lock(&ilits->touch_mutex);
-            ilits->actual_tp_mode = P5_X_FW_AP_MODE;
-            ret = ili_fw_upgrade_handler();
-            mutex_unlock(&ilits->touch_mutex);
+            mutex_lock(&ilits9882n->touch_mutex);
+            ilits9882n->actual_tp_mode = P5_X_FW_AP_MODE;
+            ret = ili9882n_fw_upgrade_handler();
+            mutex_unlock(&ilits9882n->touch_mutex);
 
             if (ret < 0) {
                 ILI_INFO("Failed to upgrade firmware, ret = %d\n", ret);
             }
 
-            mutex_lock(&ilits->touch_mutex);
-            ili_ic_func_ctrl("sense", DISABLE);
-            //ili_ic_check_busy(5, 35);
+            mutex_lock(&ilits9882n->touch_mutex);
+            ili9882n_ic_func_ctrl("sense", DISABLE);
+            //ili9882n_ic_check_busy(5, 35);
             msleep(10);
-            ili_ic_func_ctrl("sleep", DEEP_SLEEP_IN);
-            mutex_unlock(&ilits->touch_mutex);
+            ili9882n_ic_func_ctrl("sleep", DEEP_SLEEP_IN);
+            mutex_unlock(&ilits9882n->touch_mutex);
             msleep(60);
             ILI_INFO("mdelay 60 ms test for ftm wait sleep\n");
         }
@@ -2368,14 +2368,14 @@ static void ilitek_ftm_process_extra(void)
 static void ilitek_reset_queue_work_prepare(void)
 {
     ILI_INFO("\n");
-    mutex_lock(&ilits->touch_mutex);
-    atomic_set(&ilits->fw_stat, ENABLE);
-    ili_reset_ctrl(ilits->reset);
-    ilits->ignore_first_irq = true;
-    ili_ice_mode_ctrl(ENABLE, OFF);
-    ilits->ddi_rest_done = true;
+    mutex_lock(&ilits9882n->touch_mutex);
+    atomic_set(&ilits9882n->fw_stat, ENABLE);
+    ili9982n_reset_ctrl(ilits9882n->reset);
+    ilits9882n->ignore_first_irq = true;
+    ili9882n_ice_mode_ctrl(ENABLE, OFF);
+    ilits9882n->ddi_rest_done = true;
     //mdelay(5);
-    mutex_unlock(&ilits->touch_mutex);
+    mutex_unlock(&ilits9882n->touch_mutex);
 }
 
 static int ilitek_reset(void *chip_data)
@@ -2386,9 +2386,9 @@ static int ilitek_reset(void *chip_data)
 	ILI_INFO("%s.\n", __func__);
 
     mutex_lock(&chip_info->touch_mutex);
-    ilits->tp_suspend = false;
+    ilits9882n->tp_suspend = false;
     chip_info->actual_tp_mode = P5_X_FW_AP_MODE;
-    ret = ili_fw_upgrade_handler();
+    ret = ili9882n_fw_upgrade_handler();
 
     if (ret < 0) {
         ILI_ERR("Failed to upgrade firmware, ret = %d\n", ret);
@@ -2425,33 +2425,33 @@ static u8 ilitek_trigger_reason(void *chip_data, int gesture_enable, int is_susp
     memset(chip_info->points, 0, sizeof(struct point_info) * 10);
     memset(chip_info->gcoord, 0x0, sizeof(struct gesture_coordinate));
 
-    if (atomic_read(&ilits->cmd_int_check) == ENABLE) {
-        atomic_set(&ilits->cmd_int_check, DISABLE);
+    if (atomic_read(&ilits9882n->cmd_int_check) == ENABLE) {
+        atomic_set(&ilits9882n->cmd_int_check, DISABLE);
         ILI_INFO("CMD INT detected, ignore\n");
-        wake_up_interruptible(&(ilits->inq));
+        wake_up_interruptible(&(ilits9882n->inq));
         return IRQ_IGNORE;
     }
 
     /*ignore first irq after hw rst pin reset*/
-    if (ilits->ignore_first_irq) {
+    if (ilits9882n->ignore_first_irq) {
         ILI_INFO("ignore_first_irq\n");
-        ilits->ignore_first_irq = false;
+        ilits9882n->ignore_first_irq = false;
         return IRQ_IGNORE;
     }
 
-    if (!chip_info->fw_update_stat || !ilits->report || atomic_read(&ilits->tp_reset) ||
-        atomic_read(&ilits->fw_stat) || atomic_read(&ilits->tp_sw_mode) ||
-        atomic_read(&ilits->mp_stat) || atomic_read(&ilits->tp_sleep) ||
-        atomic_read(&ilits->esd_stat)) {
+    if (!chip_info->fw_update_stat || !ilits9882n->report || atomic_read(&ilits9882n->tp_reset) ||
+        atomic_read(&ilits9882n->fw_stat) || atomic_read(&ilits9882n->tp_sw_mode) ||
+        atomic_read(&ilits9882n->mp_stat) || atomic_read(&ilits9882n->tp_sleep) ||
+        atomic_read(&ilits9882n->esd_stat)) {
         ILI_INFO("ignore interrupt !\n");
         return IRQ_IGNORE;
     }
 
     if ((gesture_enable == 1) && is_suspended) {
         //mdelay(40);
-        mutex_lock(&ilits->touch_mutex);
-        ret = ili_report_handler();
-        mutex_unlock(&ilits->touch_mutex);
+        mutex_lock(&ilits9882n->touch_mutex);
+        ret = ili9882n_report_handler();
+        mutex_unlock(&ilits9882n->touch_mutex);
 
         if (ret < 0 || (chip_info->gcoord->code == 0)) {
             return IRQ_IGNORE;
@@ -2462,16 +2462,16 @@ static u8 ilitek_trigger_reason(void *chip_data, int gesture_enable, int is_susp
         return IRQ_IGNORE;
     }
 
-    mutex_lock(&ilits->touch_mutex);
-    ret = ili_report_handler();
-    mutex_unlock(&ilits->touch_mutex);
+    mutex_lock(&ilits9882n->touch_mutex);
+    ret = ili9882n_report_handler();
+    mutex_unlock(&ilits9882n->touch_mutex);
 
     if (ret < 0) {
         ILI_ERR("get point info error ignore\n");
 
         if (ret == DO_SPI_RECOVER) {
             ILI_ERR("restore status for esd recovery\n");
-            operate_mode_switch(ilits->ts);
+            operate_mode_switch(ilits9882n->ts);
         }
 
         return IRQ_IGNORE;
@@ -2490,20 +2490,20 @@ static int ilitek_get_touch_points(void *chip_data, struct point_info *points,
 
 static int ilitek_get_gesture_info(void *chip_data, struct gesture_info *gesture)
 {
-    gesture->clockwise = ilits->gcoord->clockwise;
-    gesture->gesture_type = ilits->gcoord->type;
-    gesture->Point_start.x = ilits->gcoord->pos_start.x;
-    gesture->Point_start.y = ilits->gcoord->pos_start.y;
-    gesture->Point_end.x = ilits->gcoord->pos_end.x;
-    gesture->Point_end.y = ilits->gcoord->pos_end.y;
-    gesture->Point_1st.x = ilits->gcoord->pos_1st.x;
-    gesture->Point_1st.y = ilits->gcoord->pos_1st.y;
-    gesture->Point_2nd.x = ilits->gcoord->pos_2nd.x;
-    gesture->Point_2nd.y = ilits->gcoord->pos_2nd.y;
-    gesture->Point_3rd.x = ilits->gcoord->pos_3rd.x;
-    gesture->Point_3rd.y = ilits->gcoord->pos_3rd.y;
-    gesture->Point_4th.x = ilits->gcoord->pos_4th.x;
-    gesture->Point_4th.y = ilits->gcoord->pos_4th.y;
+    gesture->clockwise = ilits9882n->gcoord->clockwise;
+    gesture->gesture_type = ilits9882n->gcoord->type;
+    gesture->Point_start.x = ilits9882n->gcoord->pos_start.x;
+    gesture->Point_start.y = ilits9882n->gcoord->pos_start.y;
+    gesture->Point_end.x = ilits9882n->gcoord->pos_end.x;
+    gesture->Point_end.y = ilits9882n->gcoord->pos_end.y;
+    gesture->Point_1st.x = ilits9882n->gcoord->pos_1st.x;
+    gesture->Point_1st.y = ilits9882n->gcoord->pos_1st.y;
+    gesture->Point_2nd.x = ilits9882n->gcoord->pos_2nd.x;
+    gesture->Point_2nd.y = ilits9882n->gcoord->pos_2nd.y;
+    gesture->Point_3rd.x = ilits9882n->gcoord->pos_3rd.x;
+    gesture->Point_3rd.y = ilits9882n->gcoord->pos_3rd.y;
+    gesture->Point_4th.x = ilits9882n->gcoord->pos_4th.x;
+    gesture->Point_4th.y = ilits9882n->gcoord->pos_4th.y;
     return 0;
 }
 
@@ -2535,9 +2535,9 @@ static int ilitek_mode_switch(void *chip_data, work_mode mode, bool flag)
             ILI_INFO("MODE_SLEEP flag = %d\n", flag);
 
             if (chip_info->actual_tp_mode != P5_X_FW_GESTURE_MODE) {
-                ili_sleep_handler(TP_DEEP_SLEEP);
+                ili9882n_sleep_handler(TP_DEEP_SLEEP);
             } else {
-                ili_proximity_near(DDI_POWER_ON);
+                ili9882n_proximity_near(DDI_POWER_ON);
             }
 
             break;
@@ -2554,15 +2554,15 @@ static int ilitek_mode_switch(void *chip_data, work_mode mode, bool flag)
 
             if (flag) {
                 if (chip_info->actual_tp_mode != P5_X_FW_GESTURE_MODE) {
-                    ili_sleep_handler(TP_SUSPEND);
+                    ili9882n_sleep_handler(TP_SUSPEND);
                 } else {
-                    ili_proximity_far(WAKE_UP_SWITCH_GESTURE_MODE);
+                    ili9882n_proximity_far(WAKE_UP_SWITCH_GESTURE_MODE);
                 }
 
 #ifdef CONFIG_OPLUS_TP_APK
 
                 if (chip_info->debug_gesture_sta) {
-                    ili_gesture_fail_reason(ENABLE);
+                    ili9882n_gesture_fail_reason(ENABLE);
                 }
 
 #endif /*CONFIG_OPLUS_TP_APK*/
@@ -2582,7 +2582,7 @@ static int ilitek_mode_switch(void *chip_data, work_mode mode, bool flag)
                 temp[0] = 0x02;
             }
 
-            if (ili_ic_func_ctrl("edge_palm", temp[0]) < 0) {
+            if (ili9882n_ic_func_ctrl("edge_palm", temp[0]) < 0) {
                 ILI_ERR("write edge_palm flag failed\n");
             }
 
@@ -2591,7 +2591,7 @@ static int ilitek_mode_switch(void *chip_data, work_mode mode, bool flag)
         case MODE_HEADSET:
             ILI_INFO("MODE_HEADSET flag = %d\n", flag);
 
-            if (ili_ic_func_ctrl("ear_phone", flag) < 0) {
+            if (ili9882n_ic_func_ctrl("ear_phone", flag) < 0) {
                 ILI_ERR("write ear_phone flag failed\n");
             }
 
@@ -2600,7 +2600,7 @@ static int ilitek_mode_switch(void *chip_data, work_mode mode, bool flag)
         case MODE_CHARGE:
             ILI_INFO("MODE_CHARGE flag = %d\n", flag);
 
-            if (ili_ic_func_ctrl("plug", !flag) < 0) {
+            if (ili9882n_ic_func_ctrl("plug", !flag) < 0) {
                 ILI_ERR("write plug flag failed\n");
             }
 
@@ -2609,7 +2609,7 @@ static int ilitek_mode_switch(void *chip_data, work_mode mode, bool flag)
         case MODE_GAME:
             ILI_INFO("MODE_GAME flag = %d\n", flag);
 
-            if (ili_ic_func_ctrl("lock_point", !flag) < 0) {
+            if (ili9882n_ic_func_ctrl("lock_point", !flag) < 0) {
                 ILI_ERR("write lock_point flag failed\n");
             }
 
@@ -2631,7 +2631,7 @@ static fw_check_state ilitek_fw_check(void *chip_data,
     struct ilitek_ts_data *chip_info = (struct ilitek_ts_data *)chip_data;
     ILI_INFO("%s: call\n", __func__);
     mutex_lock(&chip_info->touch_mutex);
-    ret = ili_ic_get_fw_ver();
+    ret = ili9882n_ic_get_fw_ver();
     mutex_unlock(&chip_info->touch_mutex);
 
     if (ret < 0) {
@@ -2693,12 +2693,12 @@ static fw_update_state ilitek_fw_update(void *chip_data,
     if (get_ic_info_flag) {
         /* Must do hw reset once in first time for work normally if tp reset is avaliable */
         if (!TDDI_RST_BIND) {
-            ili_reset_ctrl(chip_info->reset);
+            ili9982n_reset_ctrl(chip_info->reset);
         }
 
-        ili_ice_mode_ctrl(ENABLE, OFF);
+        ili9882n_ice_mode_ctrl(ENABLE, OFF);
 
-        if (ili_ic_get_info() < 0) {
+        if (ili9882n_ic_get_info() < 0) {
             ILI_ERR("Not found ilitek chips\n");
         }
 
@@ -2706,9 +2706,9 @@ static fw_update_state ilitek_fw_update(void *chip_data,
     }
 
     chip_info->actual_tp_mode = P5_X_FW_AP_MODE;
-    ilits->oplus_fw_update = true;
-    ret = ili_fw_upgrade_handler();
-    ilits->oplus_fw_update = false;
+    ilits9882n->oplus_fw_update = true;
+    ret = ili9882n_fw_upgrade_handler();
+    ilits9882n->oplus_fw_update = false;
     mutex_unlock(&chip_info->touch_mutex);
 
     if (ret < 0) {
@@ -2750,7 +2750,7 @@ static void ilitek_black_screen_test(void *chip_data, char *message)
     struct ilitek_ts_data *chip_info = (struct ilitek_ts_data *)chip_data;
     ILI_INFO("enter %s\n", __func__);
     mutex_lock(&chip_info->touch_mutex);
-    ili_mp_test_handler(NULL, OFF, NULL, message);
+    ili9882n_mp_test_handler(NULL, OFF, NULL, message);
     mutex_unlock(&chip_info->touch_mutex);
 }
 
@@ -2792,7 +2792,7 @@ static bool ilitek_irq_throw_away(void *chip_data)
     struct ilitek_ts_data *chip_info = (struct ilitek_ts_data *)chip_data;
     ILI_DBG("\n");
 
-    if ((ilits->actual_tp_mode == P5_X_FW_TEST_MODE)
+    if ((ilits9882n->actual_tp_mode == P5_X_FW_TEST_MODE)
         || atomic_read(&chip_info->cmd_int_check) == ENABLE) {
         atomic_set(&chip_info->cmd_int_check, DISABLE);
         wake_up_interruptible(&(chip_info->inq));
@@ -2844,22 +2844,22 @@ static int ilitek_read_debug_data(struct seq_file *s,
     u8 test_cmd[4] = { 0 };
     int i = 0;
     int j = 0;
-    int xch = ilits->xch_num;
-    int ych = ilits->ych_num;
-    u8 *buf = ilits->tr_buf;
+    int xch = ilits9882n->xch_num;
+    int ych = ilits9882n->ych_num;
+    u8 *buf = ilits9882n->tr_buf;
 
     if (ERR_ALLOC_MEM(buf)) {
         ILI_ERR("Failed to allocate packet memory, %ld\n", PTR_ERR(buf));
         return -1;
     }
 
-    mutex_lock(&ilits->touch_mutex);
-    ret = ili_set_tp_data_len(DATA_FORMAT_DEBUG, false, NULL);
+    mutex_lock(&ilits9882n->touch_mutex);
+    ret = ili9882n_set_tp_data_len(DATA_FORMAT_DEBUG, false, NULL);
 
     if (ret < 0) {
         ILI_ERR("Failed to switch debug mode\n");
         seq_printf(s, "get data failed\n");
-        mutex_unlock(&ilits->touch_mutex);
+        mutex_unlock(&ilits9882n->touch_mutex);
         ili_kfree((void **)&buf);
         return -1;
     }
@@ -2867,16 +2867,16 @@ static int ilitek_read_debug_data(struct seq_file *s,
     test_cmd[0] = 0xFA;
     test_cmd[1] = read_type;
     ILI_INFO("debug cmd 0x%X, 0x%X", test_cmd[0], test_cmd[1]);
-    ret = ilits->wrapper(test_cmd, 2, NULL, 0, ON, OFF);
-    atomic_set(&ilits->cmd_int_check, ENABLE);
-    enable_irq(ilits->irq_num);//because oplus disable
+    ret = ilits9882n->wrapper(test_cmd, 2, NULL, 0, ON, OFF);
+    atomic_set(&ilits9882n->cmd_int_check, ENABLE);
+    enable_irq(ilits9882n->irq_num);//because oplus disable
 
     for (i = 0; i < 10; i++) {
         int rlen = 0;
-        ret = ilits->detect_int_stat(false);
-        rlen = ilits->tp_data_len;
+        ret = ilits9882n->detect_int_stat(false);
+        rlen = ilits9882n->tp_data_len;
         ILI_INFO("Packget length = %d\n", rlen);
-        ret = ilits->wrapper(NULL, 0, buf, rlen, OFF, OFF);
+        ret = ilits9882n->wrapper(NULL, 0, buf, rlen, OFF, OFF);
 
         if (ret < 0 || rlen < 0 || rlen >= TR_BUF_SIZE) {
             ILI_ERR("Length of packet is invaild\n");
@@ -2887,10 +2887,10 @@ static int ilitek_read_debug_data(struct seq_file *s,
             break;
         }
 
-        atomic_set(&ilits->cmd_int_check, DISABLE);
+        atomic_set(&ilits9882n->cmd_int_check, DISABLE);
     }
 
-    disable_irq_nosync(ilits->irq_num);
+    disable_irq_nosync(ilits9882n->irq_num);
 
     switch (read_type) {
         case P5_X_FW_RAW_DATA_MODE:
@@ -2935,11 +2935,11 @@ static int ilitek_read_debug_data(struct seq_file *s,
     }
 
     /* change to demo mode */
-    if (ili_set_tp_data_len(DATA_FORMAT_DEMO, false, NULL) < 0) {
+    if (ili9882n_set_tp_data_len(DATA_FORMAT_DEMO, false, NULL) < 0) {
         ILI_ERR("Failed to set tp data length\n");
     }
 
-    mutex_unlock(&ilits->touch_mutex);
+    mutex_unlock(&ilits9882n->touch_mutex);
     return 0;
 }
 
@@ -2950,12 +2950,12 @@ static int ilitek_read_debug_diff(struct seq_file *s,
     int ret;
     int i = 0;
     int j = 0;
-    int xch = ilits->xch_num;
-    int ych = ilits->ych_num;
+    int xch = ilits9882n->xch_num;
+    int ych = ilits9882n->ych_num;
     u16 *debug_buf = NULL;
-    mutex_lock(&ilits->touch_mutex);
+    mutex_lock(&ilits9882n->touch_mutex);
     ILI_INFO("Get data");
-    ret = ili_ic_func_ctrl("tp_recore", 2);
+    ret = ili9882n_ic_func_ctrl("tp_recore", 2);
 
     if (ret < 0) {
         ILI_ERR("cmd fail\n");
@@ -2969,14 +2969,14 @@ static int ilitek_read_debug_diff(struct seq_file *s,
         goto out;
     }
 
-    ret = ili_get_tp_recore_data(debug_buf, xch * ych * 2);
+    ret = ili9882n_get_tp_recore_data(debug_buf, xch * ych * 2);
 
     if (ret < 0) {
         ILI_ERR("get data fail\n");
     }
 
     ILI_INFO("recore reset");
-    ret = ili_ic_func_ctrl("tp_recore", 3);
+    ret = ili9882n_ic_func_ctrl("tp_recore", 3);
 
     if (ret < 0) {
         ILI_ERR("cmd fail\n");
@@ -2997,7 +2997,7 @@ static int ilitek_read_debug_diff(struct seq_file *s,
 
 out:
     ili_kfree((void **)&debug_buf);
-    mutex_unlock(&ilits->touch_mutex);
+    mutex_unlock(&ilits9882n->touch_mutex);
     return 0;
 }
 #endif /*CONFIG_OPLUS_TP_APK*/
@@ -3043,15 +3043,15 @@ static int ilitek_tp_auto_test_read_func(struct seq_file *s, void *v)
     }
 
     ILI_INFO("s->size = %d  s->count = %d\n", (int)s->size, (int)s->count);
-    atomic_set(&ilits->mp_stat, ENABLE);
+    atomic_set(&ilits9882n->mp_stat, ENABLE);
     if (mutex_is_locked(&ts->mutex)) {
         ILI_INFO("ts mutex is locked, delay 2ms\n");
         mdelay(2);
     }
-    mutex_lock(&ilits->touch_mutex);
+    mutex_lock(&ilits9882n->touch_mutex);
     ILI_INFO("enter %s\n", __func__);
-    ili_mp_test_handler(NULL, ON, s, NULL);
-    mutex_unlock(&ilits->touch_mutex);
+    ili9882n_mp_test_handler(NULL, ON, s, NULL);
+    mutex_unlock(&ilits9882n->touch_mutex);
     operate_mode_switch(ts);
     return 0;
 }
@@ -3108,11 +3108,11 @@ static void ili_apk_debug_set(void *chip_data, bool on_off)
     chip_info = (struct ilitek_ts_data *)chip_data;
 
     if (on_off) {
-        ili_set_tp_data_len(DATA_FORMAT_DEMO_DEBUG_INFO, false, NULL);
-        ili_get_tp_recore_ctrl(1);
+        ili9882n_set_tp_data_len(DATA_FORMAT_DEMO_DEBUG_INFO, false, NULL);
+        ili9882n_get_tp_recore_ctrl(1);
     } else {
-        ili_set_tp_data_len(DATA_FORMAT_DEMO, false, NULL);
-        ili_get_tp_recore_ctrl(0);
+        ili9882n_set_tp_data_len(DATA_FORMAT_DEMO, false, NULL);
+        ili9882n_get_tp_recore_ctrl(0);
     }
 
     chip_info->debug_mode_sta = on_off;
@@ -3152,8 +3152,8 @@ static int  ili_apk_gesture_info(void *chip_data, char *buf, int len)
 
     buf[0] = 255;
 
-    if (ilits->ts->gesture_buf[0] == 0xAA) {
-        switch (ilits->ts->gesture_buf[1]) {   //judge gesture type
+    if (ilits9882n->ts->gesture_buf[0] == 0xAA) {
+        switch (ilits9882n->ts->gesture_buf[1]) {   //judge gesture type
             case GESTURE_RIGHT :
                 buf[0]  = Left2RightSwip;
                 break;
@@ -3210,12 +3210,12 @@ static int  ili_apk_gesture_info(void *chip_data, char *buf, int len)
                 buf[0] = UnkownGesture;
                 break;
         }
-    } else if (ilits->ts->gesture_buf[0] == 0xAE) {
-        buf[0] = ilits->ts->gesture_buf[1] + 128;
+    } else if (ilits9882n->ts->gesture_buf[0] == 0xAE) {
+        buf[0] = ilits9882n->ts->gesture_buf[1] + 128;
     }
 
     //buf[0] = gesture_buf[0];
-    num = ilits->ts->gesture_buf[35];
+    num = ilits9882n->ts->gesture_buf[35];
 
     if (num > 40) {
         num = 40;
@@ -3227,14 +3227,14 @@ static int  ili_apk_gesture_info(void *chip_data, char *buf, int len)
     for (i = 0; i < num; i++) {
         int x;
         int y;
-        x = (ilits->ts->gesture_buf[40 + i * 3] & 0xF0) << 4;
-        x = x | (ilits->ts->gesture_buf[40 + i * 3 + 1]);
-        y = (ilits->ts->gesture_buf[40 + i * 3] & 0x0F) << 8;
-        y = y | ilits->ts->gesture_buf[40 + i * 3 + 2];
+        x = (ilits9882n->ts->gesture_buf[40 + i * 3] & 0xF0) << 4;
+        x = x | (ilits9882n->ts->gesture_buf[40 + i * 3 + 1]);
+        y = (ilits9882n->ts->gesture_buf[40 + i * 3] & 0x0F) << 8;
+        y = y | ilits9882n->ts->gesture_buf[40 + i * 3 + 2];
 
-        if (!ilits->trans_xy) {
-            x = x * ilits->panel_wid / TPD_WIDTH;
-            y = y * ilits->panel_hei / TPD_HEIGHT;
+        if (!ilits9882n->trans_xy) {
+            x = x * ilits9882n->panel_wid / TPD_WIDTH;
+            y = y * ilits9882n->panel_hei / TPD_HEIGHT;
         }
 
         if (len < i * 4 + 2) {
@@ -3287,7 +3287,7 @@ static void ili_apk_noise_set(void *chip_data, bool on_off)
     struct ilitek_ts_data *chip_info;
     chip_info = (struct ilitek_ts_data *)chip_data;
     //ilitek_mode_switch(chip_data, MODE_CHARGE, on_off);
-    ili_ic_func_ctrl("freq_scan", on_off);
+    ili9882n_ic_func_ctrl("freq_scan", on_off);
     chip_info->noise_sta = on_off;
 }
 
@@ -3352,116 +3352,116 @@ static void ili_init_oplus_apk_op(struct touchpanel_data *ts)
 
 static void ilitek_flag_data_init(void)
 {
-    ilits->phys = "SPI";
-    ilits->wrapper = ili_spi_wrapper;
-    ilits->detect_int_stat = ili_ic_check_int_pulse;
-    ilits->int_pulse = true;
-    ilits->mp_retry = false;
+    ilits9882n->phys = "SPI";
+    ilits9882n->wrapper = ili_spi_wrapper;
+    ilits9882n->detect_int_stat = ili9882n_ic_check_int_pulse;
+    ilits9882n->int_pulse = true;
+    ilits9882n->mp_retry = false;
 #if SPI_DMA_TRANSFER_SPLIT
-    ilits->spi_write_then_read = ili_spi_write_then_read_split;
+    ilits9882n->spi_write_then_read = ili9882n_spi_write_then_read_split;
 #else
-    ilits->spi_write_then_read = ili_spi_write_then_read_direct;
+    ilits9882n->spi_write_then_read = ili9882n_spi_write_then_read_direct;
 #endif
-    ilits->actual_tp_mode = P5_X_FW_AP_MODE;
-    ilits->tp_data_format = DATA_FORMAT_DEMO;
-    ilits->tp_data_len = P5_X_DEMO_MODE_PACKET_LEN;
-    ilits->tp_data_mode = AP_MODE;
+    ilits9882n->actual_tp_mode = P5_X_FW_AP_MODE;
+    ilits9882n->tp_data_format = DATA_FORMAT_DEMO;
+    ilits9882n->tp_data_len = P5_X_DEMO_MODE_PACKET_LEN;
+    ilits9882n->tp_data_mode = AP_MODE;
 
     if (TDDI_RST_BIND) {
-        ilits->reset = TP_IC_WHOLE_RST;
+        ilits9882n->reset = TP_IC_WHOLE_RST;
     } else {
-        ilits->reset = TP_HW_RST_ONLY;
+        ilits9882n->reset = TP_HW_RST_ONLY;
     }
 
-    ilits->rst_edge_delay = 10;
-    ilits->fw_open = FILP_OPEN;
-    ilits->fw_upgrade_mode = UPGRADE_IRAM;
-    ilits->gesture_mode = DATA_FORMAT_GESTURE_INFO;
-    ilits->gesture_demo_ctrl = DISABLE;
-    ilits->wtd_ctrl = OFF;
-    ilits->report = ENABLE;
-    ilits->netlink = DISABLE;
-    ilits->dnp = DISABLE;
-    ilits->info_from_hex = ENABLE;
-    ilits->wait_int_timeout = AP_INT_TIMEOUT;
-    ilits->gesture = DISABLE;
-    ilits->ges_sym.double_tap = DOUBLE_TAP;
-    ilits->ges_sym.alphabet_line_2_top = ALPHABET_LINE_2_TOP;
-    ilits->ges_sym.alphabet_line_2_bottom = ALPHABET_LINE_2_BOTTOM;
-    ilits->ges_sym.alphabet_line_2_left = ALPHABET_LINE_2_LEFT;
-    ilits->ges_sym.alphabet_line_2_right = ALPHABET_LINE_2_RIGHT;
-    ilits->ges_sym.alphabet_m = ALPHABET_M;
-    ilits->ges_sym.alphabet_w = ALPHABET_W;
-    ilits->ges_sym.alphabet_c = ALPHABET_C;
-    ilits->ges_sym.alphabet_E = ALPHABET_E;
-    ilits->ges_sym.alphabet_V = ALPHABET_V;
-    ilits->ges_sym.alphabet_O = ALPHABET_O;
-    ilits->ges_sym.alphabet_S = ALPHABET_S;
-    ilits->ges_sym.alphabet_Z = ALPHABET_Z;
-    ilits->ges_sym.alphabet_V_down = ALPHABET_V_DOWN;
-    ilits->ges_sym.alphabet_V_left = ALPHABET_V_LEFT;
-    ilits->ges_sym.alphabet_V_right = ALPHABET_V_RIGHT;
-    ilits->ges_sym.alphabet_two_line_2_bottom = ALPHABET_TWO_LINE_2_BOTTOM;
-    ilits->ges_sym.alphabet_F = ALPHABET_F;
-    ilits->ges_sym.alphabet_AT = ALPHABET_AT;
-    mutex_init(&ilits->touch_mutex);
-    mutex_init(&ilits->debug_mutex);
-    mutex_init(&ilits->debug_read_mutex);
-    init_waitqueue_head(&(ilits->inq));
-    spin_lock_init(&ilits->irq_spin);
-    atomic_set(&ilits->irq_stat, ENABLE);
-    atomic_set(&ilits->ice_stat, DISABLE);
-    atomic_set(&ilits->tp_reset, END);
-    atomic_set(&ilits->fw_stat, END);
-    atomic_set(&ilits->mp_stat, DISABLE);
-    atomic_set(&ilits->tp_sleep, END);
-    atomic_set(&ilits->cmd_int_check, DISABLE);
-    atomic_set(&ilits->esd_stat, END);
-    atomic_set(&ilits->tp_sw_mode, END);
+    ilits9882n->rst_edge_delay = 10;
+    ilits9882n->fw_open = FILP_OPEN;
+    ilits9882n->fw_upgrade_mode = UPGRADE_IRAM;
+    ilits9882n->gesture_mode = DATA_FORMAT_GESTURE_INFO;
+    ilits9882n->gesture_demo_ctrl = DISABLE;
+    ilits9882n->wtd_ctrl = OFF;
+    ilits9882n->report = ENABLE;
+    ilits9882n->netlink = DISABLE;
+    ilits9882n->dnp = DISABLE;
+    ilits9882n->info_from_hex = ENABLE;
+    ilits9882n->wait_int_timeout = AP_INT_TIMEOUT;
+    ilits9882n->gesture = DISABLE;
+    ilits9882n->ges_sym.double_tap = DOUBLE_TAP;
+    ilits9882n->ges_sym.alphabet_line_2_top = ALPHABET_LINE_2_TOP;
+    ilits9882n->ges_sym.alphabet_line_2_bottom = ALPHABET_LINE_2_BOTTOM;
+    ilits9882n->ges_sym.alphabet_line_2_left = ALPHABET_LINE_2_LEFT;
+    ilits9882n->ges_sym.alphabet_line_2_right = ALPHABET_LINE_2_RIGHT;
+    ilits9882n->ges_sym.alphabet_m = ALPHABET_M;
+    ilits9882n->ges_sym.alphabet_w = ALPHABET_W;
+    ilits9882n->ges_sym.alphabet_c = ALPHABET_C;
+    ilits9882n->ges_sym.alphabet_E = ALPHABET_E;
+    ilits9882n->ges_sym.alphabet_V = ALPHABET_V;
+    ilits9882n->ges_sym.alphabet_O = ALPHABET_O;
+    ilits9882n->ges_sym.alphabet_S = ALPHABET_S;
+    ilits9882n->ges_sym.alphabet_Z = ALPHABET_Z;
+    ilits9882n->ges_sym.alphabet_V_down = ALPHABET_V_DOWN;
+    ilits9882n->ges_sym.alphabet_V_left = ALPHABET_V_LEFT;
+    ilits9882n->ges_sym.alphabet_V_right = ALPHABET_V_RIGHT;
+    ilits9882n->ges_sym.alphabet_two_line_2_bottom = ALPHABET_TWO_LINE_2_BOTTOM;
+    ilits9882n->ges_sym.alphabet_F = ALPHABET_F;
+    ilits9882n->ges_sym.alphabet_AT = ALPHABET_AT;
+    mutex_init(&ilits9882n->touch_mutex);
+    mutex_init(&ilits9882n->debug_mutex);
+    mutex_init(&ilits9882n->debug_read_mutex);
+    init_waitqueue_head(&(ilits9882n->inq));
+    spin_lock_init(&ilits9882n->irq_spin);
+    atomic_set(&ilits9882n->irq_stat, ENABLE);
+    atomic_set(&ilits9882n->ice_stat, DISABLE);
+    atomic_set(&ilits9882n->tp_reset, END);
+    atomic_set(&ilits9882n->fw_stat, END);
+    atomic_set(&ilits9882n->mp_stat, DISABLE);
+    atomic_set(&ilits9882n->tp_sleep, END);
+    atomic_set(&ilits9882n->cmd_int_check, DISABLE);
+    atomic_set(&ilits9882n->esd_stat, END);
+    atomic_set(&ilits9882n->tp_sw_mode, END);
     return;
 }
 
 static int ilitek_alloc_global_data(struct spi_device *spi)
 {
-    ilits = devm_kzalloc(&spi->dev, sizeof(struct ilitek_ts_data), GFP_KERNEL);
+    ilits9882n = devm_kzalloc(&spi->dev, sizeof(struct ilitek_ts_data), GFP_KERNEL);
 
-    if (ERR_ALLOC_MEM(ilits)) {
-        ILI_ERR("Failed to allocate ts memory, %ld\n", PTR_ERR(ilits));
+    if (ERR_ALLOC_MEM(ilits9882n)) {
+        ILI_ERR("Failed to allocate ts memory, %ld\n", PTR_ERR(ilits9882n));
         return -ENOMEM;
     }
 
-    ilits->update_buf = kzalloc(MAX_HEX_FILE_SIZE, GFP_KERNEL | GFP_DMA);
+    ilits9882n->update_buf = kzalloc(MAX_HEX_FILE_SIZE, GFP_KERNEL | GFP_DMA);
 
-    if (ERR_ALLOC_MEM(ilits->update_buf)) {
+    if (ERR_ALLOC_MEM(ilits9882n->update_buf)) {
         ILI_ERR("fw kzalloc error\n");
         return -ENOMEM;
     }
 
     /* Used for receiving touch data only, do not mix up with others. */
-    ilits->tr_buf = kzalloc(TR_BUF_SIZE, GFP_ATOMIC);
+    ilits9882n->tr_buf = kzalloc(TR_BUF_SIZE, GFP_ATOMIC);
 
-    if (ERR_ALLOC_MEM(ilits->tr_buf)) {
+    if (ERR_ALLOC_MEM(ilits9882n->tr_buf)) {
         ILI_ERR("failed to allocate touch report buffer\n");
         return -ENOMEM;
     }
 
-    ilits->spi_tx = kzalloc(SPI_TX_BUF_SIZE, GFP_KERNEL | GFP_DMA);
+    ilits9882n->spi_tx = kzalloc(SPI_TX_BUF_SIZE, GFP_KERNEL | GFP_DMA);
 
-    if (ERR_ALLOC_MEM(ilits->spi_tx)) {
+    if (ERR_ALLOC_MEM(ilits9882n->spi_tx)) {
         ILI_ERR("Failed to allocate spi tx buffer\n");
         return -ENOMEM;
     }
 
-    ilits->spi_rx = kzalloc(SPI_RX_BUF_SIZE, GFP_KERNEL | GFP_DMA);
+    ilits9882n->spi_rx = kzalloc(SPI_RX_BUF_SIZE, GFP_KERNEL | GFP_DMA);
 
-    if (ERR_ALLOC_MEM(ilits->spi_rx)) {
+    if (ERR_ALLOC_MEM(ilits9882n->spi_rx)) {
         ILI_ERR("Failed to allocate spi rx buffer\n");
         return -ENOMEM;
     }
 
-    ilits->gcoord = kzalloc(sizeof(struct gesture_coordinate), GFP_KERNEL);
+    ilits9882n->gcoord = kzalloc(sizeof(struct gesture_coordinate), GFP_KERNEL);
 
-    if (ERR_ALLOC_MEM(ilits->gcoord)) {
+    if (ERR_ALLOC_MEM(ilits9882n->gcoord)) {
         ILI_ERR("Failed to allocate gresture coordinate buffer\n");
         return -ENOMEM;
     }
@@ -3473,27 +3473,27 @@ static void ilitek_free_global_data(void)
 {
     ILI_INFO("remove ilitek dev\n");
 
-    if (!ilits) {
+    if (!ilits9882n) {
         return;
     }
 
-    ili_irq_disable();
-    devm_free_irq(ilits->dev, ilits->irq_num, NULL);
-    mutex_lock(&ilits->touch_mutex);
-    gpio_free(ilits->tp_int);
-    gpio_free(ilits->tp_rst);
+    ili9882n_irq_disable();
+    devm_free_irq(ilits9882n->dev, ilits9882n->irq_num, NULL);
+    mutex_lock(&ilits9882n->touch_mutex);
+    gpio_free(ilits9882n->tp_int);
+    gpio_free(ilits9882n->tp_rst);
 
-    if (ilits->ws) {
-        wakeup_source_unregister(ilits->ws);
+    if (ilits9882n->ws) {
+        wakeup_source_unregister(ilits9882n->ws);
     }
 
-    ili_kfree((void **)&ilits->tr_buf);
-    ili_kfree((void **)&ilits->gcoord);
-    ili_kfree((void **)&ilits->update_buf);
-    ili_kfree((void **)&ilits->spi_tx);
-    ili_kfree((void **)&ilits->spi_rx);
-    mutex_unlock(&ilits->touch_mutex);
-    ili_kfree((void **)&ilits);
+    ili_kfree((void **)&ilits9882n->tr_buf);
+    ili_kfree((void **)&ilits9882n->gcoord);
+    ili_kfree((void **)&ilits9882n->update_buf);
+    ili_kfree((void **)&ilits9882n->spi_tx);
+    ili_kfree((void **)&ilits9882n->spi_rx);
+    mutex_unlock(&ilits9882n->touch_mutex);
+    ili_kfree((void **)&ilits9882n);
 }
 
 
@@ -3533,14 +3533,14 @@ int __maybe_unused ilitek9882n_spi_probe(struct spi_device *spi)
     }
 
     memset(ts, 0, sizeof(*ts));
-    ilits->ts = ts;
-    ilits->spi = spi;
-    ilits->dev = &spi->dev;
+    ilits9882n->ts = ts;
+    ilits9882n->spi = spi;
+    ilits9882n->dev = &spi->dev;
     ilitek_flag_data_init();
-    ili_ic_init();
+    ili9882n_ic_init();
 
-    if (ili_core_spi_setup(SPI_CLK) < 0) {
-        ILI_ERR("ili_core_spi_setup error\n");
+    if (ili9882n_core_spi_setup(SPI_CLK) < 0) {
+        ILI_ERR("ili9882n_core_spi_setup error\n");
     }
 
     ts->debug_info_ops = &ilitek_debug_info_proc_ops;
@@ -3548,10 +3548,10 @@ int __maybe_unused ilitek9882n_spi_probe(struct spi_device *spi)
     ts->irq = spi->irq;
     spi_set_drvdata(spi, ts);
     ts->dev = &spi->dev;
-    ts->chip_data = ilits;
-    ilits->hw_res = &ts->hw_res;
+    ts->chip_data = ilits9882n;
+    ilits9882n->hw_res = &ts->hw_res;
     /*get ftm firmware ini from touch.h*/
-    ilits->p_firmware_headfile = &ts->panel_data.firmware_headfile;
+    ilits9882n->p_firmware_headfile = &ts->panel_data.firmware_headfile;
     //idev->tp_type = TP_AUO;
     ts->ts_ops = &ilitek_ops;
     /*register common touch device*/
@@ -3567,34 +3567,34 @@ int __maybe_unused ilitek9882n_spi_probe(struct spi_device *spi)
     ts->esd_handle_support = false;
     ts->irq_need_dev_resume_ok = true;
     /*get default info from dts*/
-    ilits->hw_res->reset_gpio = ts->hw_res.reset_gpio;
-    ilits->hw_res->irq_gpio = ts->hw_res.irq_gpio;
-    ilits->tp_int = ts->hw_res.irq_gpio;
-    ilits->tp_rst = ts->hw_res.reset_gpio;
-    ilits->irq_num = ts->irq;
-    ILI_INFO("platform probe tp_int = %d tp_rst = %d irq_num = %d\n", ilits->tp_int, ilits->tp_rst,
-             ilits->irq_num);
-    ilits->fw_name = ts->panel_data.fw_name;
-    ilits->test_limit_name = ts->panel_data.test_limit_name;
-    ILI_INFO("fw_name = %s test_limit_name = %s\n", ilits->fw_name, ilits->test_limit_name);
+    ilits9882n->hw_res->reset_gpio = ts->hw_res.reset_gpio;
+    ilits9882n->hw_res->irq_gpio = ts->hw_res.irq_gpio;
+    ilits9882n->tp_int = ts->hw_res.irq_gpio;
+    ilits9882n->tp_rst = ts->hw_res.reset_gpio;
+    ilits9882n->irq_num = ts->irq;
+    ILI_INFO("platform probe tp_int = %d tp_rst = %d irq_num = %d\n", ilits9882n->tp_int, ilits9882n->tp_rst,
+             ilits9882n->irq_num);
+    ilits9882n->fw_name = ts->panel_data.fw_name;
+    ilits9882n->test_limit_name = ts->panel_data.test_limit_name;
+    ILI_INFO("fw_name = %s test_limit_name = %s\n", ilits9882n->fw_name, ilits9882n->test_limit_name);
     ILI_INFO("ts->resolution_info.max_x = %d ts->resolution_info.max_y = %d\n", \
              ts->resolution_info.max_x, ts->resolution_info.max_y);
 
-    if (!ERR_ALLOC_MEM(ilits->p_firmware_headfile)) {
-        ILI_INFO("ILI firmware_size = 0x%lX\n", ilits->p_firmware_headfile->firmware_size);
+    if (!ERR_ALLOC_MEM(ilits9882n->p_firmware_headfile)) {
+        ILI_INFO("ILI firmware_size = 0x%lX\n", ilits9882n->p_firmware_headfile->firmware_size);
     }
 
-    //ili_irq_disable();
-    if (ili_tddi_init() < 0) {
+    //ili9882n_irq_disable();
+    if (ili9882n_tddi_init() < 0) {
         ILI_ERR("ILITEK Driver probe failed\n");
-        //ili_irq_enable();
+        //ili9882n_irq_enable();
         //goto err_out;
     }
 
-    //ili_irq_enable();
+    //ili9882n_irq_enable();
     ilitek_create_proc_for_oplus(ts);
 #ifdef CONFIG_OPLUS_TP_APK
-    ilits->demo_debug_info[0] = ili_demo_debug_info_id0;
+    ilits9882n->demo_debug_info[0] = ili_demo_debug_info_id0;
     ili_init_oplus_apk_op(ts);
 #endif /*CONFIG_OPLUS_TP_APK*/
 
@@ -3619,11 +3619,11 @@ abnormal_register_driver:
 #endif
     {
 #if 0 //LINUX_VERSION_CODE < KERNEL_VERSION(5, 4, 0)
-        ilits->ws = wakeup_source_register("ili_wakelock");
+        ilits9882n->ws = wakeup_source_register("ili_wakelock");
 #else
-        ilits->ws = wakeup_source_register(ilits->dev, "ili_wakelock");
+        ilits9882n->ws = wakeup_source_register(ilits9882n->dev, "ili_wakelock");
 #endif
-        if (!ilits->ws) {
+        if (!ilits9882n->ws) {
             ILI_ERR("wakeup source request failed\n");
         }
 

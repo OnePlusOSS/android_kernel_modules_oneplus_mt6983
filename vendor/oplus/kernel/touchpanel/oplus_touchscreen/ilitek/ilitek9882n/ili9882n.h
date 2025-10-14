@@ -159,10 +159,10 @@
         pr_err("[TP]ILITEK: [ERR](%s, %d): " fmt, __func__, __LINE__, ##arg);   \
     })                                                                      \
 
-extern bool ili_debug_en;
+extern bool ili9882n_debug_en;
 #define ILI_DBG(fmt, arg...)                                            \
     do {                                                                    \
-        if (LEVEL_DEBUG == tp_debug || ili_debug_en)                                            \
+        if (LEVEL_DEBUG == tp_debug || ili9882n_debug_en)                                            \
             pr_info("[TP]ILITEK: [DEBUG](%s, %d): " fmt, __func__, __LINE__, ##arg);        \
     } while (0)
 
@@ -706,7 +706,7 @@ struct ilitek_ts_data {
     void (*demo_debug_info[5])(u8 *, int);
     int (*detect_int_stat)(bool status);
 };
-extern struct ilitek_ts_data *ilits;
+extern struct ilitek_ts_data *ilits9882n;
 
 struct ili_demo_debug_info_id0 {
     u32 id                  : 8;
@@ -818,120 +818,120 @@ struct ilitek_ic_info {
 };
 
 /* Prototypes for tddi firmware/flash functions */
-extern int ili_fw_dump_iram_data(u32 start,
+extern int ili9882n_fw_dump_iram_data(u32 start,
                                  u32 end, bool save, bool mcu);
-extern int ili_fw_upgrade(int op);
+extern int ili9882n_fw_upgrade(int op);
 
 /* Prototypes for tddi mp test */
-extern int ili_mp_test_main(char *apk,
+extern int ili9882n_mp_test_main(char *apk,
                             bool lcm_on, struct seq_file *s, char *message);
 
 /* Prototypes for tddi core functions */
-extern int ili_touch_esd_gesture_iram(void);
-extern void ili_set_gesture_symbol(void);
-extern int ili_move_gesture_code_iram(int mode);
-extern int ili_move_mp_code_iram(void);
-extern void ili_touch_press(u16 x, u16 y,
+extern int ili9882n_touch_esd_gesture_iram(void);
+extern void ili9882n_set_gesture_symbol(void);
+extern int ili9882n_move_gesture_code_iram(int mode);
+extern int ili9882n_move_mp_code_iram(void);
+extern void ili9882n_touch_press(u16 x, u16 y,
                             u16 pressure, u16 id);
-extern void ili_touch_release(u16 x, u16 y,
+extern void ili9882n_touch_release(u16 x, u16 y,
                               u16 id);
-extern void ili_report_ap_mode(u8 *buf, int len);
-extern void ili_report_debug_mode(u8 *buf,
+extern void ili9882n_report_ap_mode(u8 *buf, int len);
+extern void ili9882n_report_debug_mode(u8 *buf,
                                   int rlen);
-extern void ili_report_debug_lite_mode(u8 *buf,
+extern void ili9882n_report_debug_lite_mode(u8 *buf,
                                        int rlen);
-extern void ili_report_gesture_mode(u8 *buf,
+extern void ili9882n_report_gesture_mode(u8 *buf,
                                     int rlen);
-extern void ili_report_i2cuart_mode(u8 *buf,
+extern void ili9882n_report_i2cuart_mode(u8 *buf,
                                     int rlen);
-extern void ili_ic_set_ddi_reg_onepage(u8 page,
+extern void ili9882n_ic_set_ddi_reg_onepage(u8 page,
                                        u8 reg, u8 data, bool mcu);
-extern void ili_ic_get_ddi_reg_onepage(u8 page,
+extern void ili9882n_ic_get_ddi_reg_onepage(u8 page,
                                        u8 reg, u8 *data, bool mcu);
-extern int ili_ic_whole_reset(bool mcu);
-extern int ili_ic_code_reset(bool mcu);
-extern int ili_ic_func_ctrl(const char *name,
+extern int ili9882n_ic_whole_reset(bool mcu);
+extern int ili9882n_ic_code_reset(bool mcu);
+extern int ili9882n_ic_func_ctrl(const char *name,
                             int ctrl);
 
-extern int ili_ic_int_trigger_ctrl(bool pulse);
-extern void ili_ic_get_pc_counter(int stat);
-extern int ili_ic_check_int_level(bool level);
-extern int ili_ic_check_int_pulse(bool pulse);
-extern int ili_ic_check_busy(int count,
+extern int ili9882n_ic_int_trigger_ctrl(bool pulse);
+extern void ili9882n_ic_get_pc_counter(int stat);
+extern int ili9882n_ic_check_int_level(bool level);
+extern int ili9882n_ic_check_int_pulse(bool pulse);
+extern int ili9882n_ic_check_busy(int count,
                              int delay);
-extern int ili_ic_get_panel_info(void);
-extern int ili_ic_get_tp_info(void);
-extern int ili_ic_get_core_ver(void);
-extern int ili_ic_get_protocl_ver(void);
-extern int ili_ic_get_fw_ver(void);
-extern int ili_ic_get_info(void);
-extern int ili_ic_dummy_check(void);
-extern int ili_ice_mode_bit_mask_write(u32 addr,
+extern int ili9882n_ic_get_panel_info(void);
+extern int ili9882n_ic_get_tp_info(void);
+extern int ili9882n_ic_get_core_ver(void);
+extern int ili9882n_ic_get_protocl_ver(void);
+extern int ili9882n_ic_get_fw_ver(void);
+extern int ili9882n_ic_get_info(void);
+extern int ili9882n_ic_dummy_check(void);
+extern int ili9882n_ice_mode_bit_mask_write(u32 addr,
                                        u32 mask, u32 value);
-extern int ili_ice_mode_write(u32 addr, u32 data,
+extern int ili9882n_ice_mode_write(u32 addr, u32 data,
                               int len);
-extern int ili_ice_mode_read(u32 addr, u32 *data,
+extern int ili9882n_ice_mode_read(u32 addr, u32 *data,
                              int len);
-extern int ili_ice_mode_ctrl(bool enable,
+extern int ili9882n_ice_mode_ctrl(bool enable,
                              bool mcu);
-extern void ili_ic_init(void);
-extern void ili_fw_uart_ctrl(u8 ctrl);
+extern void ili9882n_ic_init(void);
+extern void ili9882n_fw_uart_ctrl(u8 ctrl);
 
 /* Prototypes for tddi events */
 #if RESUME_BY_DDI
-extern void ili_resume_by_ddi(void);
+extern void ili9882n_resume_by_ddi(void);
 #endif
-extern int ili_proximity_far(int mode);
-extern int ili_proximity_near(int mode);
-extern int ili_switch_tp_mode(u8 data);
-extern int ili_set_tp_data_len(int format,
+extern int ili9882n_proximity_far(int mode);
+extern int ili9882n_proximity_near(int mode);
+extern int ili9882n_switch_tp_mode(u8 data);
+extern int ili9882n_set_tp_data_len(int format,
                                bool send, u8 *data);
-extern int ili_fw_upgrade_handler(void);
-extern int ili_wq_esd_i2c_check(void);
-extern int ili_gesture_recovery(void);
-extern void ili_spi_recovery(void);
-extern int ili_mp_test_handler(char *apk,
+extern int ili9882n_fw_upgrade_handler(void);
+extern int ili9882n_wq_esd_i2c_check(void);
+extern int ili9882n_gesture_recovery(void);
+extern void ili9882n_spi_recovery(void);
+extern int ili9882n_mp_test_handler(char *apk,
                                bool lcm_on, struct seq_file *s, char *message);
-extern int ili_report_handler(void);
-extern int ili_sleep_handler(int mode);
-extern int ili_reset_ctrl(int mode);
-extern int ili_tddi_init(void);
+extern int ili9882n_report_handler(void);
+extern int ili9882n_sleep_handler(int mode);
+extern int ili9982n_reset_ctrl(int mode);
+extern int ili9882n_tddi_init(void);
 
 /* Prototypes for i2c/spi interface */
-extern int ili_core_spi_setup(int num);
-extern int ili_spi_write_then_read_split(
+extern int ili9882n_core_spi_setup(int num);
+extern int ili9882n_spi_write_then_read_split(
     struct spi_device *spi,
     const void *txbuf, unsigned n_tx,
     void *rxbuf, unsigned n_rx);
-extern int ili_spi_write_then_read_direct(
+extern int ili9882n_spi_write_then_read_direct(
     struct spi_device *spi,
     const void *txbuf, unsigned n_tx,
     void *rxbuf, unsigned n_rx);
 
 /* Prototypes for platform level */
-extern void ili_irq_disable(void);
-extern void ili_irq_enable(void);
-extern void ili_tp_reset(void);
+extern void ili9882n_irq_disable(void);
+extern void ili9882n_irq_enable(void);
+extern void ili9882n_tp_reset(void);
 
 /* Prototypes for miscs */
-extern void ili_node_init(void);
-extern void ili_dump_data(void *data, int type,
+extern void ili9882n_node_init(void);
+extern void ili9882n_dump_data(void *data, int type,
                           int len, int row_len, const char *name);
-extern u8 ili_calc_packet_checksum(u8 *packet,
+extern u8 ili9882n_calc_packet_checksum(u8 *packet,
                                    int len);
-extern void ili_netlink_reply_msg(void *raw,
+extern void ili9882n_netlink_reply_msg(void *raw,
                                   int size);
-extern int ili_katoi(char *str);
-extern int ili_str2hex(char *str);
+extern int ili9882n_katoi(char *str);
+extern int ili9882n_str2hex(char *str);
 
-extern int ili_mp_read_write(u8 *wdata, u32 wlen,
+extern int ili9882n_mp_read_write(u8 *wdata, u32 wlen,
                              u8 *rdata, u32 rlen);
 /* Prototypes for additional functionalities */
-extern void ili_gesture_fail_reason(bool enable);
-extern int ili_get_tp_recore_ctrl(int data);
-extern int ili_get_tp_recore_data(u16 *out_buf,
+extern void ili9882n_gesture_fail_reason(bool enable);
+extern int ili9882n_get_tp_recore_ctrl(int data);
+extern int ili9882n_get_tp_recore_data(u16 *out_buf,
                                   u32 out_len);
-extern void ili_demo_debug_info_mode(u8 *buf,
+extern void ili9882n_demo_debug_info_mode(u8 *buf,
                                      size_t rlen);
 
 static inline void ili_kfree(void **mem)

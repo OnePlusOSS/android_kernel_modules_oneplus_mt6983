@@ -108,7 +108,7 @@ struct record_state {
 
 static unsigned char g_user_buf[USER_STR_BUFF] = {0};
 
-int ili_str2hex(char *str)
+int ili9882n_str2hex(char *str)
 {
     int strlen, result, intermed, intermedtop;
     char *s = str;
@@ -151,7 +151,7 @@ int ili_str2hex(char *str)
     return result;
 }
 
-int ili_katoi(char *str)
+int ili9882n_katoi(char *str)
 {
     int result = 0;
     unsigned int digit;
@@ -237,28 +237,28 @@ static int file_write(struct file_buffer *file, bool new_open)
 static int ilitek_debug_node_buff_control(bool open)
 {
     int i = 0, ret = 0;
-    ilits->dnp = open;
-    ILI_INFO("Debug buf ctrl = %s\n", ilits->dnp ? "Enabled" : "Disabled");
+    ilits9882n->dnp = open;
+    ILI_INFO("Debug buf ctrl = %s\n", ilits9882n->dnp ? "Enabled" : "Disabled");
 
     if (open) {
-        ilits->dbf = 0;
-        ilits->odi = 0;
-        ili_kfree((void **)&ilits->dbl);
-        ilits->dbl = kzalloc(TR_BUF_LIST_SIZE * sizeof(*ilits->dbl), GFP_KERNEL);
+        ilits9882n->dbf = 0;
+        ilits9882n->odi = 0;
+        ili_kfree((void **)&ilits9882n->dbl);
+        ilits9882n->dbl = kzalloc(TR_BUF_LIST_SIZE * sizeof(*ilits9882n->dbl), GFP_KERNEL);
 
-        if (ERR_ALLOC_MEM(ilits->dbl)) {
-            ILI_ERR("Failed to allocate ilits->dbl mem, %ld\n", PTR_ERR(ilits->dbl));
+        if (ERR_ALLOC_MEM(ilits9882n->dbl)) {
+            ILI_ERR("Failed to allocate ilits9882n->dbl mem, %ld\n", PTR_ERR(ilits9882n->dbl));
             ret = -ENOMEM;
             goto out;
         }
 
         for (i = 0; i < TR_BUF_LIST_SIZE; i++) {
-            ilits->dbl[i].mark = false;
-            ili_kfree((void **)&ilits->dbl[i].data);
-            ilits->dbl[i].data = kzalloc(TR_BUF_SIZE * sizeof(unsigned char), GFP_KERNEL);
+            ilits9882n->dbl[i].mark = false;
+            ili_kfree((void **)&ilits9882n->dbl[i].data);
+            ilits9882n->dbl[i].data = kzalloc(TR_BUF_SIZE * sizeof(unsigned char), GFP_KERNEL);
 
-            if (ERR_ALLOC_MEM(ilits->dbl[i].data)) {
-                ILI_ERR("Failed to allocate dbl[%d] mem, %ld\n", i, PTR_ERR(ilits->dbl[i].data));
+            if (ERR_ALLOC_MEM(ilits9882n->dbl[i].data)) {
+                ILI_ERR("Failed to allocate dbl[%d] mem, %ld\n", i, PTR_ERR(ilits9882n->dbl[i].data));
                 ret = -ENOMEM;
                 goto out;
             }
@@ -269,13 +269,13 @@ static int ilitek_debug_node_buff_control(bool open)
 
 out:
 
-    if (!ERR_ALLOC_MEM(ilits->dbl)) {
+    if (!ERR_ALLOC_MEM(ilits9882n->dbl)) {
         for (i = 0; i < TR_BUF_LIST_SIZE; i++) {
-            ilits->dbl[i].mark = false;
-            ili_kfree((void **)&ilits->dbl[i].data);
+            ilits9882n->dbl[i].mark = false;
+            ili_kfree((void **)&ilits9882n->dbl[i].data);
         }
 
-        ili_kfree((void **)&ilits->dbl);
+        ili_kfree((void **)&ilits9882n->dbl);
     }
 
     return ret;
@@ -290,13 +290,13 @@ static int debug_mode_get_data(struct file_buffer *file, u8 type, u32 frame_coun
     int j;
     u16 write_index = 0;
     ilitek_debug_node_buff_control(DISABLE);
-    ilits->dbf = 0;
-    row = ilits->ych_num;
-    col = ilits->xch_num;
-    mutex_lock(&ilits->touch_mutex);
+    ilits9882n->dbf = 0;
+    row = ilits9882n->ych_num;
+    col = ilits9882n->xch_num;
+    mutex_lock(&ilits9882n->touch_mutex);
     cmd[0] = 0xFA;
     cmd[1] = type;
-    ret = ilits->wrapper(cmd, 2, NULL, 0, ON, OFF);
+    ret = ilits9882n->wrapper(cmd, 2, NULL, 0, ON, OFF);
 
     if (ilitek_debug_node_buff_control(ENABLE) < 0) {
         ILI_ERR("Failed to allocate debug buf\n");
@@ -304,7 +304,7 @@ static int debug_mode_get_data(struct file_buffer *file, u8 type, u32 frame_coun
         goto out;
     }
 
-    mutex_unlock(&ilits->touch_mutex);
+    mutex_unlock(&ilits9882n->touch_mutex);
 
     if (ret < 0) {
         ILI_ERR("Write 0xFA,0x%x failed\n", type);
@@ -313,15 +313,15 @@ static int debug_mode_get_data(struct file_buffer *file, u8 type, u32 frame_coun
 
     while (write_index < frame_count) {
         file->wlen = 0;
-        ILI_INFO("frame = %d,index = %d,count = %d\n", write_index, ilits->odi, ilits->dbf);
+        ILI_INFO("frame = %d,index = %d,count = %d\n", write_index, ilits9882n->odi, ilits9882n->dbf);
 
-        if (!wait_event_interruptible_timeout(ilits->inq, ilits->dbl[ilits->odi].mark,
+        if (!wait_event_interruptible_timeout(ilits9882n->inq, ilits9882n->dbl[ilits9882n->odi].mark,
                                               msecs_to_jiffies(3000))) {
             ILI_ERR("debug mode get data timeout!\n");
             goto out;
         }
 
-        mutex_lock(&ilits->touch_mutex);
+        mutex_lock(&ilits9882n->touch_mutex);
         memset(file->ptr, 0, file->max_size);
         file->wlen += snprintf(file->ptr + file->wlen, (file->max_size - file->wlen), "\n\nFrame%d,",
                                write_index);
@@ -330,7 +330,7 @@ static int debug_mode_get_data(struct file_buffer *file, u8 type, u32 frame_coun
             file->wlen += snprintf(file->ptr + file->wlen, (file->max_size - file->wlen), "[X%d] ,", j);
         }
 
-        ptr = &ilits->dbl[ilits->odi].data[35];
+        ptr = &ilits9882n->dbl[ilits9882n->odi].data[35];
 
         for (j = 0; j < row * col; j++, ptr += 2) {
             temp = (*ptr << 8) + *(ptr + 1);
@@ -357,9 +357,9 @@ static int debug_mode_get_data(struct file_buffer *file, u8 type, u32 frame_coun
 
         file_write(file, false);
         write_index++;
-        mutex_unlock(&ilits->touch_mutex);
-        ilits->dbl[ilits->odi].mark = false;
-        ilits->odi = ((ilits->odi + 1) % TR_BUF_LIST_SIZE);
+        mutex_unlock(&ilits9882n->touch_mutex);
+        ilits9882n->dbl[ilits9882n->odi].mark = false;
+        ilits9882n->odi = ((ilits9882n->odi + 1) % TR_BUF_LIST_SIZE);
     }
 
 out:
@@ -382,9 +382,9 @@ static ssize_t ilitek_proc_get_delta_data_read(struct file *pFile, char __user *
     }
 
     memset(g_user_buf, 0, USER_STR_BUFF * sizeof(unsigned char));
-    mutex_lock(&ilits->touch_mutex);
-    row = ilits->ych_num;
-    col = ilits->xch_num;
+    mutex_lock(&ilits9882n->touch_mutex);
+    row = ilits9882n->ych_num;
+    col = ilits9882n->xch_num;
     read_length = 4 + 2 * row * col + 1 ;
     ILI_INFO("read length = %d\n", read_length);
     data = kcalloc(read_length + 1, sizeof(u8), GFP_KERNEL);
@@ -403,7 +403,7 @@ static ssize_t ilitek_proc_get_delta_data_read(struct file *pFile, char __user *
 
     cmd[0] = 0xB7;
     cmd[1] = 0x1; //get delta
-    ret = ilits->wrapper(cmd, sizeof(cmd), NULL, 0, OFF, OFF);
+    ret = ilits9882n->wrapper(cmd, sizeof(cmd), NULL, 0, OFF, OFF);
 
     if (ret < 0) {
         ILI_ERR("Failed to write 0xB7,0x1 command, %d\n", ret);
@@ -412,7 +412,7 @@ static ssize_t ilitek_proc_get_delta_data_read(struct file *pFile, char __user *
 
     msleep(120);
     /* read debug packet header */
-    ret = ilits->wrapper(NULL, 0, data, read_length, OFF, OFF);
+    ret = ilits9882n->wrapper(NULL, 0, data, read_length, OFF, OFF);
 
     if (ret < 0) {
         ILI_ERR("Read debug packet header failed, %d\n", ret);
@@ -420,7 +420,7 @@ static ssize_t ilitek_proc_get_delta_data_read(struct file *pFile, char __user *
     }
 
     cmd[1] = 0x03; //switch to normal mode
-    ret = ilits->wrapper(cmd, sizeof(cmd), NULL, 0, ON, OFF);
+    ret = ilits9882n->wrapper(cmd, sizeof(cmd), NULL, 0, ON, OFF);
 
     if (ret < 0) {
         ILI_ERR("Failed to write 0xB7,0x3 command, %d\n", ret);
@@ -458,7 +458,7 @@ static ssize_t ilitek_proc_get_delta_data_read(struct file *pFile, char __user *
 
     *pos += len;
 out:
-    mutex_unlock(&ilits->touch_mutex);
+    mutex_unlock(&ilits9882n->touch_mutex);
     ili_kfree((void **)&data);
     ili_kfree((void **)&delta);
     return len;
@@ -479,9 +479,9 @@ static ssize_t ilitek_proc_fw_get_raw_data_read(struct file *pFile, char __user 
     }
 
     memset(g_user_buf, 0, USER_STR_BUFF * sizeof(unsigned char));
-    mutex_lock(&ilits->touch_mutex);
-    row = ilits->ych_num;
-    col = ilits->xch_num;
+    mutex_lock(&ilits9882n->touch_mutex);
+    row = ilits9882n->ych_num;
+    col = ilits9882n->xch_num;
     read_length = 4 + 2 * row * col + 1 ;
     ILI_INFO("read length = %d\n", read_length);
     data = kcalloc(read_length + 1, sizeof(u8), GFP_KERNEL);
@@ -500,7 +500,7 @@ static ssize_t ilitek_proc_fw_get_raw_data_read(struct file *pFile, char __user 
 
     cmd[0] = 0xB7;
     cmd[1] = 0x2; //get rawdata
-    ret = ilits->wrapper(cmd, sizeof(cmd), NULL, 0, OFF, OFF);
+    ret = ilits9882n->wrapper(cmd, sizeof(cmd), NULL, 0, OFF, OFF);
 
     if (ret < 0) {
         ILI_ERR("Failed to write 0xB7,0x2 command, %d\n", ret);
@@ -509,7 +509,7 @@ static ssize_t ilitek_proc_fw_get_raw_data_read(struct file *pFile, char __user 
 
     msleep(120);
     /* read debug packet header */
-    ret = ilits->wrapper(NULL, 0, data, read_length, OFF, OFF);
+    ret = ilits9882n->wrapper(NULL, 0, data, read_length, OFF, OFF);
 
     if (ret < 0) {
         ILI_ERR("Read debug packet header failed, %d\n", ret);
@@ -517,7 +517,7 @@ static ssize_t ilitek_proc_fw_get_raw_data_read(struct file *pFile, char __user 
     }
 
     cmd[1] = 0x03; //switch to normal mode
-    ret = ilits->wrapper(cmd, sizeof(cmd), NULL, 0, ON, OFF);
+    ret = ilits9882n->wrapper(cmd, sizeof(cmd), NULL, 0, ON, OFF);
 
     if (ret < 0) {
         ILI_ERR("Failed to write 0xB7,0x3 command, %d\n", ret);
@@ -555,7 +555,7 @@ static ssize_t ilitek_proc_fw_get_raw_data_read(struct file *pFile, char __user 
 
     *pos += len;
 out:
-    mutex_unlock(&ilits->touch_mutex);
+    mutex_unlock(&ilits9882n->touch_mutex);
     ili_kfree((void **)&data);
     ili_kfree((void **)&rawdata);
     return len;
@@ -571,8 +571,8 @@ static ssize_t ilitek_proc_fw_pc_counter_read(struct file *pFile, char __user *b
     }
 
     memset(g_user_buf, 0, USER_STR_BUFF * sizeof(unsigned char));
-    ili_ic_get_pc_counter(0);
-    len = snprintf(g_user_buf, PAGE_SIZE, "pc = 0x%x, latch = 0x%x\n", ilits->fw_pc, ilits->fw_latch);
+    ili9882n_ic_get_pc_counter(0);
+    len = snprintf(g_user_buf, PAGE_SIZE, "pc = 0x%x, latch = 0x%x\n", ilits9882n->fw_pc, ilits9882n->fw_latch);
 
     if (copy_to_user(buf, g_user_buf, len)) {
         ILI_ERR("Failed to copy data to user space\n");
@@ -600,13 +600,13 @@ static ssize_t ilitek_proc_rw_tp_reg_read(struct file *pFile, char __user *buf, 
     write_data = rw_reg[3];
     write_len = rw_reg[4];
     ILI_INFO("stop_mcu = %d\n", rw_reg[0]);
-    mutex_lock(&ilits->touch_mutex);
+    mutex_lock(&ilits9882n->touch_mutex);
     memset(g_user_buf, 0, USER_STR_BUFF * sizeof(unsigned char));
 
     if (stop_mcu == mcu_on) {
-        ret = ili_ice_mode_ctrl(ENABLE, ON);
+        ret = ili9882n_ice_mode_ctrl(ENABLE, ON);
     } else {
-        ret = ili_ice_mode_ctrl(ENABLE, OFF);
+        ret = ili9882n_ice_mode_ctrl(ENABLE, OFF);
     }
 
     if (ret < 0) {
@@ -615,7 +615,7 @@ static ssize_t ilitek_proc_rw_tp_reg_read(struct file *pFile, char __user *buf, 
     }
 
     if (type == read) {
-        if (ili_ice_mode_read(addr, &read_data, sizeof(u32)) < 0) {
+        if (ili9882n_ice_mode_read(addr, &read_data, sizeof(u32)) < 0) {
             ILI_ERR("Read data error\n");
             len += snprintf(g_user_buf + len, USER_STR_BUFF - len, "%s\n", "Read data error");
         }
@@ -624,7 +624,7 @@ static ssize_t ilitek_proc_rw_tp_reg_read(struct file *pFile, char __user *buf, 
         len += snprintf(g_user_buf + len, USER_STR_BUFF - len, "READ:addr = 0x%06x, read = 0x%08x\n", addr,
                         read_data);
     } else {
-        if (ili_ice_mode_write(addr, write_data, write_len) < 0) {
+        if (ili9882n_ice_mode_write(addr, write_data, write_len) < 0) {
             ILI_ERR("Write data error\n");
             len += snprintf(g_user_buf + len, USER_STR_BUFF - len, "%s\n", "Write data error");
         }
@@ -635,9 +635,9 @@ static ssize_t ilitek_proc_rw_tp_reg_read(struct file *pFile, char __user *buf, 
     }
 
     if (stop_mcu == mcu_on) {
-        ret = ili_ice_mode_ctrl(DISABLE, ON);
+        ret = ili9882n_ice_mode_ctrl(DISABLE, ON);
     } else {
-        ret = ili_ice_mode_ctrl(DISABLE, OFF);
+        ret = ili9882n_ice_mode_ctrl(DISABLE, OFF);
     }
 
     if (ret < 0) {
@@ -650,7 +650,7 @@ static ssize_t ilitek_proc_rw_tp_reg_read(struct file *pFile, char __user *buf, 
     }
 
     *pos += len;
-    mutex_unlock(&ilits->touch_mutex);
+    mutex_unlock(&ilits9882n->touch_mutex);
     return len;
 }
 
@@ -666,7 +666,7 @@ static ssize_t ilitek_proc_rw_tp_reg_write(struct file *filp, const char *buff, 
         return -1;
     }
 
-    mutex_lock(&ilits->touch_mutex);
+    mutex_lock(&ilits9882n->touch_mutex);
 
     if (buff != NULL) {
         if (copy_from_user(cmd, buff, size - 1)) {
@@ -679,13 +679,13 @@ static ssize_t ilitek_proc_rw_tp_reg_write(struct file *filp, const char *buff, 
     token = cur = cmd;
 
     while ((token = strsep(&cur, ",")) != NULL) {
-        rw_reg[count] = ili_str2hex(token);
+        rw_reg[count] = ili9882n_str2hex(token);
         ILI_INFO("rw_reg[%d] = 0x%x\n", count, rw_reg[count]);
         count++;
     }
 
 out:
-    mutex_unlock(&ilits->touch_mutex);
+    mutex_unlock(&ilits9882n->touch_mutex);
     return size;
 }
 
@@ -699,18 +699,18 @@ static ssize_t ilitek_proc_debug_switch_read(struct file *pFile, char __user *bu
     }
 
     memset(g_user_buf, 0, USER_STR_BUFF * sizeof(unsigned char));
-    mutex_lock(&ilits->debug_read_mutex);
-    open = !ilits->dnp;
+    mutex_lock(&ilits9882n->debug_read_mutex);
+    open = !ilits9882n->dnp;
     ilitek_debug_node_buff_control(open);
     size = snprintf(g_user_buf, USER_STR_BUFF * sizeof(unsigned char), "dnp : %s\n",
-                    ilits->dnp ? "Enabled" : "Disabled");
+                    ilits9882n->dnp ? "Enabled" : "Disabled");
     *pos = size;
 
     if (copy_to_user(buff, g_user_buf, size)) {
         ILI_ERR("Failed to copy data to user space\n");
     }
 
-    mutex_unlock(&ilits->debug_read_mutex);
+    mutex_unlock(&ilits9882n->debug_read_mutex);
     return size;
 }
 
@@ -732,39 +732,39 @@ static ssize_t ilitek_proc_debug_message_read(struct file *filp, char __user *bu
         return -EAGAIN;
     }
 
-    if (!ilits->dnp) {
-        ILI_ERR("Debug flag isn't enabled (%d)\n", ilits->dnp);
+    if (!ilits9882n->dnp) {
+        ILI_ERR("Debug flag isn't enabled (%d)\n", ilits9882n->dnp);
         return -EAGAIN;
     }
 
-    mutex_lock(&ilits->debug_read_mutex);
-    ILI_DBG("f_count= %d, index = %d, mark = %d\n", ilits->dbf, ilits->odi,
-            ilits->dbl[ilits->odi].mark);
+    mutex_lock(&ilits9882n->debug_read_mutex);
+    ILI_DBG("f_count= %d, index = %d, mark = %d\n", ilits9882n->dbf, ilits9882n->odi,
+            ilits9882n->dbl[ilits9882n->odi].mark);
 
-    if (!wait_event_interruptible_timeout(ilits->inq, ilits->dbl[ilits->odi].mark,
+    if (!wait_event_interruptible_timeout(ilits9882n->inq, ilits9882n->dbl[ilits9882n->odi].mark,
                                           msecs_to_jiffies(3000))) {
         ILI_ERR("WARNING ! there's no data received.\n");
-        mutex_unlock(&ilits->debug_read_mutex);
+        mutex_unlock(&ilits9882n->debug_read_mutex);
         *pos = send_data_len;
         return send_data_len;
     }
 
-    mutex_lock(&ilits->debug_mutex);
+    mutex_lock(&ilits9882n->debug_mutex);
     tmpbuf = vmalloc(4096); /* buf size if even */
 
     if (ERR_ALLOC_MEM(tmpbuf)) {
         ILI_ERR("buffer vmalloc error\n");
         send_data_len += snprintf(tmpbufback + send_data_len, sizeof(tmpbufback), "buffer vmalloc error\n");
-        ret = copy_to_user(buff, tmpbufback, send_data_len); /*ilits->dbl[0] */
+        ret = copy_to_user(buff, tmpbufback, send_data_len); /*ilits9882n->dbl[0] */
         goto out;
     }
 
-    if (ilits->dbl[ilits->odi].mark) {
-        if (ilits->dbl[ilits->odi].data[0] == P5_X_DEMO_PACKET_ID) {
+    if (ilits9882n->dbl[ilits9882n->odi].mark) {
+        if (ilits9882n->dbl[ilits9882n->odi].data[0] == P5_X_DEMO_PACKET_ID) {
             need_read_data_len = 43;
-        } else if (ilits->dbl[ilits->odi].data[0] == P5_X_I2CUART_PACKET_ID) {
-            type = ilits->dbl[ilits->odi].data[3] & 0x0F;
-            data_count = ilits->dbl[ilits->odi].data[1] * ilits->dbl[ilits->odi].data[2];
+        } else if (ilits9882n->dbl[ilits9882n->odi].data[0] == P5_X_I2CUART_PACKET_ID) {
+            type = ilits9882n->dbl[ilits9882n->odi].data[3] & 0x0F;
+            data_count = ilits9882n->dbl[ilits9882n->odi].data[1] * ilits9882n->dbl[ilits9882n->odi].data[2];
 
             if (type == 0 || type == 1 || type == 6) {
                 one_data_bytes = 1;
@@ -775,15 +775,15 @@ static ssize_t ilitek_proc_debug_message_read(struct file *filp, char __user *bu
             }
 
             need_read_data_len = data_count * one_data_bytes + 1 + 5;
-        } else if (ilits->dbl[ilits->odi].data[0] == P5_X_DEBUG_PACKET_ID
-                   || ilits->dbl[ilits->odi].data[0] == P5_X_DEBUG_LITE_PACKET_ID) {
-            send_data_len = 0;  /* ilits->dbl[0][1] - 2; */
+        } else if (ilits9882n->dbl[ilits9882n->odi].data[0] == P5_X_DEBUG_PACKET_ID
+                   || ilits9882n->dbl[ilits9882n->odi].data[0] == P5_X_DEBUG_LITE_PACKET_ID) {
+            send_data_len = 0;  /* ilits9882n->dbl[0][1] - 2; */
             need_read_data_len = TR_BUF_SIZE - 8;
         }
 
         for (i = 0; i < need_read_data_len; i++) {
             send_data_len += snprintf(tmpbuf + send_data_len, sizeof(tmpbufback), "%02X",
-                                      ilits->dbl[ilits->odi].data[i]);
+                                      ilits9882n->dbl[ilits9882n->odi].data[i]);
 
             if (send_data_len >= 4096) {
                 ILI_ERR("send_data_len = %d set 4096 i = %d\n", send_data_len, i);
@@ -795,8 +795,8 @@ static ssize_t ilitek_proc_debug_message_read(struct file *filp, char __user *bu
         send_data_len += snprintf(tmpbuf + send_data_len, sizeof(tmpbufback), "\n\n");
 
         if (p == 5 || size == 4096 || size == 2048) {
-            ilits->dbl[ilits->odi].mark = false;
-            ilits->odi = ((ilits->odi + 1) % TR_BUF_LIST_SIZE);
+            ilits9882n->dbl[ilits9882n->odi].mark = false;
+            ilits9882n->odi = ((ilits9882n->odi + 1) % TR_BUF_LIST_SIZE);
         }
     }
 
@@ -823,8 +823,8 @@ static ssize_t ilitek_proc_debug_message_read(struct file *filp, char __user *bu
     }
 
 out:
-    mutex_unlock(&ilits->debug_mutex);
-    mutex_unlock(&ilits->debug_read_mutex);
+    mutex_unlock(&ilits9882n->debug_mutex);
+    mutex_unlock(&ilits9882n->debug_read_mutex);
     ili_vfree((void **)&tmpbuf);
     return send_data_len;
 }
@@ -853,16 +853,16 @@ static ssize_t ilitek_proc_get_debug_mode_data_read(struct file *filp, char __us
     }
 
     /* save data to csv */
-    ILI_INFO("Get Raw data %d frame\n", ilits->raw_count);
-    ILI_INFO("Get Delta data %d frame\n", ilits->delta_count);
+    ILI_INFO("Get Raw data %d frame\n", ilits9882n->raw_count);
+    ILI_INFO("Get Delta data %d frame\n", ilits9882n->delta_count);
     csv.wlen += snprintf(csv.ptr + csv.wlen, (csv.max_size - csv.wlen), "Get Raw data %d frame\n",
-                         ilits->raw_count);
+                         ilits9882n->raw_count);
     csv.wlen += snprintf(csv.ptr + csv.wlen, (csv.max_size - csv.wlen), "Get Delta data %d frame\n",
-                         ilits->delta_count);
+                         ilits9882n->delta_count);
     file_write(&csv, true);
 
     /* change to debug mode */
-    if (ili_set_tp_data_len(DATA_FORMAT_DEBUG, false, NULL) < 0) {
+    if (ili9882n_set_tp_data_len(DATA_FORMAT_DEBUG, false, NULL) < 0) {
         ILI_ERR("Failed to set tp data length\n");
         goto out;
     }
@@ -872,7 +872,7 @@ static ssize_t ilitek_proc_get_debug_mode_data_read(struct file *filp, char __us
     memset(csv.ptr, 0, csv.max_size);
     csv.wlen += snprintf(csv.ptr + csv.wlen, (csv.max_size - csv.wlen), "\n\n=======Raw data=======");
     file_write(&csv, false);
-    ret = debug_mode_get_data(&csv, P5_X_FW_RAW_DATA_MODE, ilits->raw_count);
+    ret = debug_mode_get_data(&csv, P5_X_FW_RAW_DATA_MODE, ilits9882n->raw_count);
 
     if (ret < 0) {
         goto out;
@@ -883,14 +883,14 @@ static ssize_t ilitek_proc_get_debug_mode_data_read(struct file *filp, char __us
     memset(csv.ptr, 0, csv.max_size);
     csv.wlen += snprintf(csv.ptr + csv.wlen, (csv.max_size - csv.wlen), "\n\n=======Delta data=======");
     file_write(&csv, false);
-    ret = debug_mode_get_data(&csv, P5_X_FW_DELTA_DATA_MODE, ilits->delta_count);
+    ret = debug_mode_get_data(&csv, P5_X_FW_DELTA_DATA_MODE, ilits9882n->delta_count);
 
     if (ret < 0) {
         goto out;
     }
 
     /* change to demo mode */
-    if (ili_set_tp_data_len(DATA_FORMAT_DEMO, false, NULL) < 0) {
+    if (ili9882n_set_tp_data_len(DATA_FORMAT_DEMO, false, NULL) < 0) {
         ILI_ERR("Failed to set tp data length\n");
     }
 
@@ -922,16 +922,16 @@ static ssize_t ilitek_proc_get_debug_mode_data_write(struct file *filp, const ch
     token = cur = cmd;
 
     while ((token = strsep(&cur, ",")) != NULL) {
-        temp[count] = ili_str2hex(token);
+        temp[count] = ili9882n_str2hex(token);
         ILI_INFO("temp[%d] = %d\n", count, temp[count]);
         count++;
     }
 
-    ilits->raw_count = ((temp[0] << 8) | temp[1]);
-    ilits->delta_count = ((temp[2] << 8) | temp[3]);
-    ilits->bg_count = ((temp[4] << 8) | temp[5]);
-    ILI_INFO("Raw_count = %d, Delta_count = %d, BG_count = %d\n", ilits->raw_count, ilits->delta_count,
-             ilits->bg_count);
+    ilits9882n->raw_count = ((temp[0] << 8) | temp[1]);
+    ilits9882n->delta_count = ((temp[2] << 8) | temp[3]);
+    ilits9882n->bg_count = ((temp[4] << 8) | temp[5]);
+    ILI_INFO("Raw_count = %d, Delta_count = %d, BG_count = %d\n", ilits9882n->raw_count, ilits9882n->delta_count,
+             ilits9882n->bg_count);
     return size;
 }
 
@@ -945,14 +945,14 @@ static ssize_t ilitek_node_mp_lcm_on_test_read(struct file *filp, char __user *b
     }
 
     ILI_INFO("Run MP test with LCM on\n");
-    mutex_lock(&ilits->touch_mutex);
+    mutex_lock(&ilits9882n->touch_mutex);
     memset(g_user_buf, 0, USER_STR_BUFF * sizeof(unsigned char));
-    ilits->mp_ret_len = 0;
-    ret = ili_mp_test_handler(g_user_buf, ON, NULL, NULL);
+    ilits9882n->mp_ret_len = 0;
+    ret = ili9882n_mp_test_handler(g_user_buf, ON, NULL, NULL);
     ILI_INFO("MP TEST %s, Error code = %d\n", (ret < 0) ? "FAIL" : "PASS", ret);
     g_user_buf[0] = 3;
     g_user_buf[1] = (ret < 0) ? -ret : ret;
-    len += ilits->mp_ret_len;
+    len += ilits9882n->mp_ret_len;
     len += snprintf(g_user_buf + len, USER_STR_BUFF - len, "MP TEST %s\n", (ret < 0) ? "FAIL" : "PASS");
 
     if (g_user_buf[1] == EMP_MODE) {
@@ -981,7 +981,7 @@ static ssize_t ilitek_node_mp_lcm_on_test_read(struct file *filp, char __user *b
     }
 
     *pos += len;
-    mutex_unlock(&ilits->touch_mutex);
+    mutex_unlock(&ilits9882n->touch_mutex);
     return len;
 }
 
@@ -995,14 +995,14 @@ static ssize_t ilitek_node_mp_lcm_off_test_read(struct file *filp, char __user *
     }
 
     ILI_INFO("Run MP test with LCM off\n");
-    mutex_lock(&ilits->touch_mutex);
+    mutex_lock(&ilits9882n->touch_mutex);
     memset(g_user_buf, 0, USER_STR_BUFF * sizeof(unsigned char));
-    ilits->mp_ret_len = 0;
-    ret = ili_mp_test_handler(g_user_buf, OFF, NULL, NULL);
+    ilits9882n->mp_ret_len = 0;
+    ret = ili9882n_mp_test_handler(g_user_buf, OFF, NULL, NULL);
     ILI_INFO("MP TEST %s, Error code = %d\n", (ret < 0) ? "FAIL" : "PASS", ret);
     g_user_buf[0] = 3;
     g_user_buf[1] = (ret < 0) ? -ret : ret;
-    len += ilits->mp_ret_len;
+    len += ilits9882n->mp_ret_len;
     len += snprintf(g_user_buf + len, USER_STR_BUFF - len, "MP TEST %s\n", (ret < 0) ? "FAIL" : "PASS");
 
     if (g_user_buf[1] == EMP_MODE) {
@@ -1031,7 +1031,7 @@ static ssize_t ilitek_node_mp_lcm_off_test_read(struct file *filp, char __user *
     }
 
     *pos += len;
-    mutex_unlock(&ilits->touch_mutex);
+    mutex_unlock(&ilits9882n->touch_mutex);
     return len;
 }
 
@@ -1044,28 +1044,28 @@ static ssize_t ilitek_node_ver_info_read(struct file *filp, char __user *buff, s
         return 0;
     }
 
-    mutex_lock(&ilits->touch_mutex);
+    mutex_lock(&ilits9882n->touch_mutex);
     memset(g_user_buf, 0, USER_STR_BUFF * sizeof(unsigned char));
-    len += snprintf(g_user_buf + len, USER_STR_BUFF - len, "CHIP ID = %x\n", ilits->chip->id);
+    len += snprintf(g_user_buf + len, USER_STR_BUFF - len, "CHIP ID = %x\n", ilits9882n->chip->id);
     len += snprintf(g_user_buf + len, USER_STR_BUFF - len, "FW version = %d.%d.%d.%d\n",
-                    ilits->chip->fw_ver >> 24, (ilits->chip->fw_ver >> 16) & 0xFF,
-                    (ilits->chip->fw_ver >> 8) & 0xFF, ilits->chip->fw_ver & 0xFF);
+                    ilits9882n->chip->fw_ver >> 24, (ilits9882n->chip->fw_ver >> 16) & 0xFF,
+                    (ilits9882n->chip->fw_ver >> 8) & 0xFF, ilits9882n->chip->fw_ver & 0xFF);
     len += snprintf(g_user_buf + len, USER_STR_BUFF - len, "FW MP version = %d.%d.%d.%d\n",
-                    ilits->chip->fw_mp_ver >> 24, (ilits->chip->fw_mp_ver >> 16) & 0xFF,
-                    (ilits->chip->fw_mp_ver >> 8) & 0xFF, ilits->chip->fw_mp_ver & 0xFF);
+                    ilits9882n->chip->fw_mp_ver >> 24, (ilits9882n->chip->fw_mp_ver >> 16) & 0xFF,
+                    (ilits9882n->chip->fw_mp_ver >> 8) & 0xFF, ilits9882n->chip->fw_mp_ver & 0xFF);
 
-    if (ilits->protocol->core_ver_len == P5_X_CORE_VER_THREE_LENGTH)
+    if (ilits9882n->protocol->core_ver_len == P5_X_CORE_VER_THREE_LENGTH)
         len += snprintf(g_user_buf + len, USER_STR_BUFF - len, "Core version = %d.%d.%d\n",
-                        (ilits->chip->core_ver >> 24) & 0xFF, (ilits->chip->core_ver >> 16) & 0xFF,
-                        (ilits->chip->core_ver >> 8) & 0xFF);
+                        (ilits9882n->chip->core_ver >> 24) & 0xFF, (ilits9882n->chip->core_ver >> 16) & 0xFF,
+                        (ilits9882n->chip->core_ver >> 8) & 0xFF);
     else
         len += snprintf(g_user_buf + len, USER_STR_BUFF - len, "Core version = %d.%d.%d.%d\n",
-                        (ilits->chip->core_ver >> 24) & 0xFF, (ilits->chip->core_ver >> 16) & 0xFF,
-                        (ilits->chip->core_ver >> 8) & 0xFF, ilits->chip->core_ver & 0xFF);
+                        (ilits9882n->chip->core_ver >> 24) & 0xFF, (ilits9882n->chip->core_ver >> 16) & 0xFF,
+                        (ilits9882n->chip->core_ver >> 8) & 0xFF, ilits9882n->chip->core_ver & 0xFF);
 
     len += snprintf(g_user_buf + len, USER_STR_BUFF - len, "Protocol version = %d.%d.%d\n",
-                    ilits->protocol->ver >> 16, (ilits->protocol->ver >> 8) & 0xFF,
-                    ilits->protocol->ver & 0xFF);
+                    ilits9882n->protocol->ver >> 16, (ilits9882n->protocol->ver >> 8) & 0xFF,
+                    ilits9882n->protocol->ver & 0xFF);
     len += snprintf(g_user_buf + len, USER_STR_BUFF - len, "Driver version = %s\n", DRIVER_VERSION);
 
     if (copy_to_user((char *)buff, g_user_buf, len)) {
@@ -1073,7 +1073,7 @@ static ssize_t ilitek_node_ver_info_read(struct file *filp, char __user *buff, s
     }
 
     *pos += len;
-    mutex_unlock(&ilits->touch_mutex);
+    mutex_unlock(&ilits9882n->touch_mutex);
     return len;
 }
 
@@ -1086,7 +1086,7 @@ static ssize_t ilitek_node_change_list_read(struct file *filp, char __user *buff
         return 0;
     }
 
-    mutex_lock(&ilits->touch_mutex);
+    mutex_lock(&ilits9882n->touch_mutex);
     memset(g_user_buf, 0, USER_STR_BUFF * sizeof(unsigned char));
     len += snprintf(g_user_buf + len, USER_STR_BUFF - len,
                     "============= Change list ==============\n");
@@ -1100,7 +1100,7 @@ static ssize_t ilitek_node_change_list_read(struct file *filp, char __user *buff
     }
 
     *pos += len;
-    mutex_unlock(&ilits->touch_mutex);
+    mutex_unlock(&ilits9882n->touch_mutex);
     return len;
 }
 
@@ -1114,10 +1114,10 @@ static ssize_t ilitek_proc_fw_process_read(struct file *filp, char __user *buff,
     }
 
     memset(g_user_buf, 0, USER_STR_BUFF * sizeof(unsigned char));
-    len = snprintf(g_user_buf, USER_STR_BUFF * sizeof(unsigned char), "%02d\n", ilits->fw_update_stat);
-    ILI_INFO("update status = %d\n", ilits->fw_update_stat);
+    len = snprintf(g_user_buf, USER_STR_BUFF * sizeof(unsigned char), "%02d\n", ilits9882n->fw_update_stat);
+    ILI_INFO("update status = %d\n", ilits9882n->fw_update_stat);
 
-    if (copy_to_user((char *)buff, &ilits->fw_update_stat, len)) {
+    if (copy_to_user((char *)buff, &ilits9882n->fw_update_stat, len)) {
         ILI_ERR("Failed to copy data to user space\n");
     }
 
@@ -1135,13 +1135,13 @@ static ssize_t ilitek_node_fw_upgrade_read(struct file *filp, char __user *buff,
     }
 
     ILI_INFO("Prepar to upgarde firmware\n");
-    mutex_lock(&ilits->touch_mutex);
+    mutex_lock(&ilits9882n->touch_mutex);
     memset(g_user_buf, 0, USER_STR_BUFF * sizeof(unsigned char));
-    ilits->force_fw_update = ENABLE;
-    ilits->node_update = true;
-    ret = ili_fw_upgrade_handler();
-    ilits->node_update = false;
-    ilits->force_fw_update = DISABLE;
+    ilits9882n->force_fw_update = ENABLE;
+    ilits9882n->node_update = true;
+    ret = ili9882n_fw_upgrade_handler();
+    ilits9882n->node_update = false;
+    ilits9882n->force_fw_update = DISABLE;
     g_user_buf[0] = 0x0;
     g_user_buf[1] = (ret < 0) ? -ret : ret;
 
@@ -1179,7 +1179,7 @@ static ssize_t ilitek_node_fw_upgrade_read(struct file *filp, char __user *buff,
     }
 
     *pos += len;
-    mutex_unlock(&ilits->touch_mutex);
+    mutex_unlock(&ilits9882n->touch_mutex);
     return len;
 }
 
@@ -1191,10 +1191,10 @@ static ssize_t ilitek_proc_debug_level_read(struct file *filp, char __user *buff
     }
 
     memset(g_user_buf, 0, USER_STR_BUFF * sizeof(unsigned char));
-    ili_debug_en = !ili_debug_en;
-    ILI_INFO(" %s debug level = %x\n", ili_debug_en ? "Enable" : "Disable", ili_debug_en);
+    ili9882n_debug_en = !ili9882n_debug_en;
+    ILI_INFO(" %s debug level = %x\n", ili9882n_debug_en ? "Enable" : "Disable", ili9882n_debug_en);
     size = snprintf(g_user_buf, USER_STR_BUFF * sizeof(unsigned char), "debug level : %s\n",
-                    ili_debug_en ? "Enable" : "Disable");
+                    ili9882n_debug_en ? "Enable" : "Disable");
     *pos += size;
 
     if (copy_to_user((u32 *) buff, g_user_buf, size)) {
@@ -1204,40 +1204,40 @@ static ssize_t ilitek_proc_debug_level_read(struct file *filp, char __user *buff
     return size;
 }
 
-int ili_get_tp_recore_ctrl(int data)
+int ili9882n_get_tp_recore_ctrl(int data)
 {
     int ret = 0;
 
     switch ((int)data) {
         case DISABLE_RECORD:
             ILI_INFO("recore disable");
-            ret = ili_ic_func_ctrl("tp_recore", 0);
+            ret = ili9882n_ic_func_ctrl("tp_recore", 0);
             break;
 
         case ENABLE_RECORD:
             ILI_INFO("recore enable");
-            ret = ili_ic_func_ctrl("tp_recore", 1);
+            ret = ili9882n_ic_func_ctrl("tp_recore", 1);
             mdelay(200);
             break;
 
         case DATA_RECORD:
             mdelay(50);
             ILI_INFO("Get data");
-            ret = ili_ic_func_ctrl("tp_recore", 2);
+            ret = ili9882n_ic_func_ctrl("tp_recore", 2);
 
             if (ret < 0) {
                 ILI_ERR("cmd fail\n");
                 goto out;
             }
 
-            ret = ili_get_tp_recore_data(NULL, ilits->xch_num * ilits->ych_num * 2);
+            ret = ili9882n_get_tp_recore_data(NULL, ilits9882n->xch_num * ilits9882n->ych_num * 2);
 
             if (ret < 0) {
                 ILI_ERR("get data fail\n");
             }
 
             ILI_INFO("recore reset");
-            ret = ili_ic_func_ctrl("tp_recore", 3);
+            ret = ili9882n_ic_func_ctrl("tp_recore", 3);
 
             if (ret < 0) {
                 ILI_ERR("cmd fail\n");
@@ -1251,7 +1251,7 @@ out:
     return ret;
 }
 
-int ili_get_tp_recore_data(u16 *out_buf, u32 out_len)
+int ili9882n_get_tp_recore_data(u16 *out_buf, u32 out_len)
 {
     u8 buf[8] = {0};
     u8 record_case = 0;
@@ -1265,10 +1265,10 @@ int ili_get_tp_recore_data(u16 *out_buf, u32 out_len)
     u32 i;
     u8 frame_cnt;
     int ret = 0;
-    bool ice = atomic_read(&ilits->ice_stat);
+    bool ice = atomic_read(&ilits9882n->ice_stat);
     struct record_state record_stat;
 
-    if (ilits->wrapper(NULL, 0, buf, sizeof(buf), OFF, OFF) < 0) {
+    if (ilits9882n->wrapper(NULL, 0, buf, sizeof(buf), OFF, OFF) < 0) {
         ILI_ERR("Get info fail\n");
         return -1;
     }
@@ -1281,7 +1281,7 @@ int ili_get_tp_recore_data(u16 *out_buf, u32 out_len)
     ipio_memcpy(&record_stat, &buf[7], 1, 1);
     ILI_INFO("addr = 0x%x, len = %d, lndex = %d, frame_cnt = %d, record_case = 0x%x\n",
              addr, len, index, frame_cnt, record_case);
-    ili_dump_data(buf, 8, sizeof(buf), 0, "all record bytes");
+    ili9882n_dump_data(buf, 8, sizeof(buf), 0, "all record bytes");
 
     if (len > 4096) {
         ILI_ERR("ilitek_tddi_get_tp_recore_data len is %d.\n", len);
@@ -1296,23 +1296,23 @@ int ili_get_tp_recore_data(u16 *out_buf, u32 out_len)
     }
 
     if (!ice) {
-        ili_ice_mode_ctrl(ENABLE, ON);
+        ili9882n_ice_mode_ctrl(ENABLE, ON);
     }
 
     //for (i = 0, j = 0; i < len; i += 4, j++) {
-    //    ili_ice_mode_read((addr + i), &ptr[j], sizeof(u32));
+    //    ili9882n_ice_mode_read((addr + i), &ptr[j], sizeof(u32));
     //}
     buf[0] = 0x25;
     buf[3] = (char)((addr & 0x00FF0000) >> 16);
     buf[2] = (char)((addr & 0x0000FF00) >> 8);
     buf[1] = (char)((addr & 0x000000FF));
 
-    if (ilits->wrapper(buf, 4, NULL, 0, ON, OFF)) {
+    if (ilits9882n->wrapper(buf, 4, NULL, 0, ON, OFF)) {
         ILI_ERR("Failed to write iram data\n");
         return -ENODEV;
     }
 
-    if (ilits->wrapper(NULL, 0, (u8 *)raw, len, ON, OFF)) {
+    if (ilits9882n->wrapper(NULL, 0, (u8 *)raw, len, ON, OFF)) {
         ILI_ERR("Failed to Read iram data\n");
         return -ENODEV;
     }
@@ -1333,7 +1333,7 @@ int ili_get_tp_recore_data(u16 *out_buf, u32 out_len)
 
         for (i = 0; i < frame_cnt; i ++) {
             raw_ptr = raw + (index * frame_len);
-            ili_dump_data(raw_ptr, 16, frame_len, ilits->xch_num, "recore_data");
+            ili9882n_dump_data(raw_ptr, 16, frame_len, ilits9882n->xch_num, "recore_data");
             index--;
 
             if (index < 0) {
@@ -1345,7 +1345,7 @@ int ili_get_tp_recore_data(u16 *out_buf, u32 out_len)
     }
 
     if (!ice) {
-        ili_ice_mode_ctrl(DISABLE, ON);
+        ili9882n_ice_mode_ctrl(DISABLE, ON);
     }
 
     if (record_case == 2) {
@@ -1359,12 +1359,12 @@ int ili_get_tp_recore_data(u16 *out_buf, u32 out_len)
     return ret;
 }
 
-void ili_gesture_fail_reason(bool enable)
+void ili9882n_gesture_fail_reason(bool enable)
 {
     u8 cmd[24] = {0};
 
     /* set symbol */
-    if (ili_ic_func_ctrl("knock_en", 0x8) < 0) {
+    if (ili9882n_ic_func_ctrl("knock_en", 0x8) < 0) {
         ILI_ERR("set symbol failed");
     }
 
@@ -1382,7 +1382,7 @@ void ili_gesture_fail_reason(bool enable)
     cmd[4] = 0xFF;
     cmd[5] = 0xFF;
 
-    if ((ilits->wrapper(cmd, 6, NULL, 0, ON, OFF)) < 0) {
+    if ((ilits9882n->wrapper(cmd, 6, NULL, 0, ON, OFF)) < 0) {
         ILI_ERR("enable gesture fail reason failed");
     }
 
@@ -1393,7 +1393,7 @@ void ili_gesture_fail_reason(bool enable)
     cmd[3] = 0x01;
     memset(cmd + 4, 0xFF, 20);
 
-    if ((ilits->wrapper(cmd, 24, NULL, 0, ON, OFF)) < 0) {
+    if ((ilits9882n->wrapper(cmd, 24, NULL, 0, ON, OFF)) < 0) {
         ILI_ERR("set gesture parameters failed");
     }
 
@@ -1403,34 +1403,34 @@ void ili_gesture_fail_reason(bool enable)
     cmd[2] = 0x11;
     cmd[3] = 0x01;
 
-    if ((ilits->wrapper(cmd, 4, NULL, 0, ON, OFF)) < 0) {
+    if ((ilits9882n->wrapper(cmd, 4, NULL, 0, ON, OFF)) < 0) {
         ILI_ERR("get gesture parameters failed");
     }
 }
 
-int ili_tp_data_mode_ctrl(u8 *cmd)
+int ili9882n_tp_data_mode_ctrl(u8 *cmd)
 {
     int ret = 0;
 
     switch (cmd[0]) {
         case AP_MODE:
-            if (ilits->tp_suspend) {
-                if (ili_set_tp_data_len(DATA_FORMAT_GESTURE_DEMO, false, NULL) < 0) {
+            if (ilits9882n->tp_suspend) {
+                if (ili9882n_set_tp_data_len(DATA_FORMAT_GESTURE_DEMO, false, NULL) < 0) {
                     ILI_ERR("Failed to set demo len from gesture mode\n");
                     ret = -ENOTTY;
                 }
             } else {
-                if (ilits->actual_tp_mode == P5_X_FW_TEST_MODE) {
-                    if (ili_switch_tp_mode(P5_X_FW_AP_MODE) < 0) {
+                if (ilits9882n->actual_tp_mode == P5_X_FW_TEST_MODE) {
+                    if (ili9882n_switch_tp_mode(P5_X_FW_AP_MODE) < 0) {
                         ILI_ERR("Failed to switch demo mode\n");
                         ret = -ENOTTY;
                         break;
                     }
                 } else {
-                    if (ili_set_tp_data_len(DATA_FORMAT_DEMO, false, NULL) < 0) {
+                    if (ili9882n_set_tp_data_len(DATA_FORMAT_DEMO, false, NULL) < 0) {
                         ILI_ERR("Failed to switch demo mode do reset\n");
 
-                        if (ili_switch_tp_mode(P5_X_FW_AP_MODE) < 0) {
+                        if (ili9882n_switch_tp_mode(P5_X_FW_AP_MODE) < 0) {
                             ILI_ERR("Failed to switch demo mode\n");
                             ret = -ENOTTY;
                         }
@@ -1441,7 +1441,7 @@ int ili_tp_data_mode_ctrl(u8 *cmd)
             break;
 
         case TEST_MODE:
-            if (ili_switch_tp_mode(P5_X_FW_TEST_MODE) < 0) {
+            if (ili9882n_switch_tp_mode(P5_X_FW_TEST_MODE) < 0) {
                 ILI_ERR("Failed to switch test mode\n");
                 ret = -ENOTTY;
             }
@@ -1449,21 +1449,21 @@ int ili_tp_data_mode_ctrl(u8 *cmd)
             break;
 
         case DEBUG_MODE:
-            if (!ilits->tp_suspend && (ilits->actual_tp_mode != P5_X_FW_AP_MODE)) {
-                if (ili_switch_tp_mode(P5_X_FW_AP_MODE) < 0) {
+            if (!ilits9882n->tp_suspend && (ilits9882n->actual_tp_mode != P5_X_FW_AP_MODE)) {
+                if (ili9882n_switch_tp_mode(P5_X_FW_AP_MODE) < 0) {
                     ILI_ERR("Failed to switch demo mode\n");
                     ret = -ENOTTY;
                     break;
                 }
             }
 
-            if (ilits->tp_suspend) {
-                if (ili_set_tp_data_len(DATA_FORMAT_GESTURE_DEBUG, false, NULL) < 0) {
+            if (ilits9882n->tp_suspend) {
+                if (ili9882n_set_tp_data_len(DATA_FORMAT_GESTURE_DEBUG, false, NULL) < 0) {
                     ILI_ERR("Failed to set debug len from gesture mode\n");
                     ret = -ENOTTY;
                 }
             } else {
-                if (ili_set_tp_data_len(DATA_FORMAT_DEBUG, false, NULL) < 0) {
+                if (ili9882n_set_tp_data_len(DATA_FORMAT_DEBUG, false, NULL) < 0) {
                     ILI_ERR("Failed to set debug len\n");
                     ret = -ENOTTY;
                 }
@@ -1472,7 +1472,7 @@ int ili_tp_data_mode_ctrl(u8 *cmd)
             break;
 
         case DEBUG_LITE_ROI:
-            if (ili_set_tp_data_len(DATA_FORMAT_DEBUG_LITE_ROI, false, NULL) < 0) {
+            if (ili9882n_set_tp_data_len(DATA_FORMAT_DEBUG_LITE_ROI, false, NULL) < 0) {
                 ILI_ERR("Failed to set debug lite roi from gesture mode\n");
                 ret = -ENOTTY;
             }
@@ -1480,7 +1480,7 @@ int ili_tp_data_mode_ctrl(u8 *cmd)
             break;
 
         case DEBUG_LITE_WINDOW:
-            if (ili_set_tp_data_len(DATA_FORMAT_DEBUG_LITE_WINDOW, false, NULL) < 0) {
+            if (ili9882n_set_tp_data_len(DATA_FORMAT_DEBUG_LITE_WINDOW, false, NULL) < 0) {
                 ILI_ERR("Failed to set debug lite window from gesture mode\n");
                 ret = -ENOTTY;
             }
@@ -1488,7 +1488,7 @@ int ili_tp_data_mode_ctrl(u8 *cmd)
             break;
 
         case DEBUG_LITE_AREA:
-            if (ili_set_tp_data_len(DATA_FORMAT_DEBUG_LITE_AREA, false, &cmd[1]) < 0) {
+            if (ili9882n_set_tp_data_len(DATA_FORMAT_DEBUG_LITE_AREA, false, &cmd[1]) < 0) {
                 ILI_ERR("Failed to set debug lite area from gesture mode\n");
                 ret = -ENOTTY;
             }
@@ -1501,7 +1501,7 @@ int ili_tp_data_mode_ctrl(u8 *cmd)
             break;
     }
 
-    ilits->tp_data_mode = cmd[0];
+    ilits9882n->tp_data_mode = cmd[0];
     return ret;
 }
 
@@ -1519,7 +1519,7 @@ static ssize_t ilitek_node_ioctl_write(struct file *filp, const char *buff, size
         return -1;
     }
 
-    mutex_lock(&ilits->touch_mutex);
+    mutex_lock(&ilits9882n->touch_mutex);
 
     if (buff != NULL) {
         if (copy_from_user(cmd, buff, size - 1)) {
@@ -1539,7 +1539,7 @@ static ssize_t ilitek_node_ioctl_write(struct file *filp, const char *buff, size
     }
 
     while ((token = strsep(&cur, ",")) != NULL) {
-        data[count] = ili_str2hex(token);
+        data[count] = ili9882n_str2hex(token);
         ILI_INFO("data[%d] = %x\n", count, data[count]);
         count++;
     }
@@ -1547,122 +1547,122 @@ static ssize_t ilitek_node_ioctl_write(struct file *filp, const char *buff, size
     ILI_INFO("cmd = %s\n", cmd);
 
     if (strncmp(cmd, "hwreset", strlen(cmd)) == 0) {
-        ili_reset_ctrl(TP_HW_RST_ONLY);
+        ili9982n_reset_ctrl(TP_HW_RST_ONLY);
     } else if (strcmp(cmd, "rawdatarecore") == 0) {
         if (data[1] == ENABLE_RECORD) {
-            ili_get_tp_recore_ctrl(ENABLE_RECORD);
+            ili9882n_get_tp_recore_ctrl(ENABLE_RECORD);
         } else if (data[1] == DATA_RECORD) {
-            ili_get_tp_recore_ctrl(DATA_RECORD);
+            ili9882n_get_tp_recore_ctrl(DATA_RECORD);
         } else if (data[1] == DISABLE_RECORD) {
-            ili_get_tp_recore_ctrl(DISABLE_RECORD);
+            ili9882n_get_tp_recore_ctrl(DISABLE_RECORD);
         }
     } else if (strcmp(cmd, "switchdemodebuginfomode") == 0) {
-        ili_set_tp_data_len(DATA_FORMAT_DEMO_DEBUG_INFO, false, NULL);
+        ili9882n_set_tp_data_len(DATA_FORMAT_DEMO_DEBUG_INFO, false, NULL);
     } else if (strcmp(cmd, "gesturedemoen") == 0) {
         if (data[1] == DISABLE) {
-            ilits->gesture_demo_ctrl = DISABLE;
+            ilits9882n->gesture_demo_ctrl = DISABLE;
         } else {
-            ilits->gesture_demo_ctrl = ENABLE;
+            ilits9882n->gesture_demo_ctrl = ENABLE;
         }
 
-        ili_set_tp_data_len(DATA_FORMAT_GESTURE_DEMO, false, NULL);
+        ili9882n_set_tp_data_len(DATA_FORMAT_GESTURE_DEMO, false, NULL);
     } else if (strcmp(cmd, "gesturefailrsn") == 0) {
         if (data[1] == DISABLE) {
-            ili_gesture_fail_reason(DISABLE);
+            ili9882n_gesture_fail_reason(DISABLE);
         } else {
-            ili_gesture_fail_reason(ENABLE);
+            ili9882n_gesture_fail_reason(ENABLE);
         }
 
         ILI_INFO("%s gesture fail reason\n", data[1] ? "ENABLE" : "DISABLE");
     } else if (strncmp(cmd, "icwholereset", strlen(cmd)) == 0) {
-        ili_ice_mode_ctrl(ENABLE, OFF);
-        ili_reset_ctrl(TP_IC_WHOLE_RST);
+        ili9882n_ice_mode_ctrl(ENABLE, OFF);
+        ili9982n_reset_ctrl(TP_IC_WHOLE_RST);
     } else if (strncmp(cmd, "iccodereset", strlen(cmd)) == 0) {
-        ili_ice_mode_ctrl(ENABLE, OFF);
-        ili_reset_ctrl(TP_IC_CODE_RST);
-        ili_ice_mode_ctrl(DISABLE, OFF);
+        ili9882n_ice_mode_ctrl(ENABLE, OFF);
+        ili9982n_reset_ctrl(TP_IC_CODE_RST);
+        ili9882n_ice_mode_ctrl(DISABLE, OFF);
     } else if (strncmp(cmd, "enableirq", strlen(cmd)) == 0) {
         ILI_INFO("Enable IRQ\n");
-        ili_irq_enable();
+        ili9882n_irq_enable();
     } else if (strncmp(cmd, "disableirq", strlen(cmd)) == 0) {
         ILI_INFO("Disable IRQ\n");
-        ili_irq_disable();
+        ili9882n_irq_disable();
     } else if (strncmp(cmd, "infofromhex", strlen(cmd)) == 0) {
-        ilits->info_from_hex = data[1];
+        ilits9882n->info_from_hex = data[1];
         ILI_INFO("info from hex = %d\n", data[1]);
     } else if (strncmp(cmd, "getinfo", strlen(cmd)) == 0) {
-        ili_ice_mode_ctrl(ENABLE, OFF);
-        ili_ic_get_info();
-        ili_ice_mode_ctrl(DISABLE, OFF);
-        ili_ic_get_protocl_ver();
-        ili_ic_get_fw_ver();
-        ili_ic_get_core_ver();
-        ili_ic_get_tp_info();
-        ili_ic_get_panel_info();
+        ili9882n_ice_mode_ctrl(ENABLE, OFF);
+        ili9882n_ic_get_info();
+        ili9882n_ice_mode_ctrl(DISABLE, OFF);
+        ili9882n_ic_get_protocl_ver();
+        ili9882n_ic_get_fw_ver();
+        ili9882n_ic_get_core_ver();
+        ili9882n_ic_get_tp_info();
+        ili9882n_ic_get_panel_info();
         ILI_INFO("Driver version = %s\n", DRIVER_VERSION);
-        //ILI_INFO("TP module = %s\n", ilits->md_name);
+        //ILI_INFO("TP module = %s\n", ilits9882n->md_name);
     } else if (strncmp(cmd, "enableicemode", strlen(cmd)) == 0) {
         if (data[1] == ON) {
-            ili_ice_mode_ctrl(ENABLE, ON);
+            ili9882n_ice_mode_ctrl(ENABLE, ON);
         } else {
-            ili_ice_mode_ctrl(ENABLE, OFF);
+            ili9882n_ice_mode_ctrl(ENABLE, OFF);
         }
     } else if (strncmp(cmd, "disableicemode", strlen(cmd)) == 0) {
-        ili_ice_mode_ctrl(DISABLE, OFF);
+        ili9882n_ice_mode_ctrl(DISABLE, OFF);
     } else if (strncmp(cmd, "enablewqesd", strlen(cmd)) == 0) {
-        ilits->esd_check_enabled = true;
-        ILI_INFO("esd_check_enabled flag= %d\n", ilits->esd_check_enabled);
+        ilits9882n->esd_check_enabled = true;
+        ILI_INFO("esd_check_enabled flag= %d\n", ilits9882n->esd_check_enabled);
     } else if (strncmp(cmd, "disablewqesd", strlen(cmd)) == 0) {
-        ilits->esd_check_enabled = false;
-        ILI_INFO("esd_check_enabled flag= %d\n", ilits->esd_check_enabled);
+        ilits9882n->esd_check_enabled = false;
+        ILI_INFO("esd_check_enabled flag= %d\n", ilits9882n->esd_check_enabled);
     } else if (strncmp(cmd, "gesture", strlen(cmd)) == 0) {
-        ilits->gesture = !ilits->gesture;
-        ILI_INFO("gesture = %d\n", ilits->gesture);
+        ilits9882n->gesture = !ilits9882n->gesture;
+        ILI_INFO("gesture = %d\n", ilits9882n->gesture);
     } else if (strncmp(cmd, "esdgesture", strlen(cmd)) == 0) {
-        if (ili_gesture_recovery() < 0) {
+        if (ili9882n_gesture_recovery() < 0) {
             ILI_ERR("Gesture recovery failed\n");
             size = -1;
         }
     } else if (strncmp(cmd, "esdspi", strlen(cmd)) == 0) {
-        ili_spi_recovery();
+        ili9882n_spi_recovery();
     } else if (strncmp(cmd, "sleepin", strlen(cmd)) == 0) {
-        ili_ic_func_ctrl("sleep", SLEEP_IN);
+        ili9882n_ic_func_ctrl("sleep", SLEEP_IN);
     } else if (strncmp(cmd, "deepsleepin", strlen(cmd)) == 0) {
-        ili_ic_func_ctrl("sleep", DEEP_SLEEP_IN);
+        ili9882n_ic_func_ctrl("sleep", DEEP_SLEEP_IN);
     } else if (strncmp(cmd, "iceflag", strlen(cmd)) == 0) {
         if (data[1] == ENABLE) {
-            atomic_set(&ilits->ice_stat, ENABLE);
+            atomic_set(&ilits9882n->ice_stat, ENABLE);
         } else {
-            atomic_set(&ilits->ice_stat, DISABLE);
+            atomic_set(&ilits9882n->ice_stat, DISABLE);
         }
 
-        ILI_INFO("ice mode flag = %d\n", atomic_read(&ilits->ice_stat));
+        ILI_INFO("ice mode flag = %d\n", atomic_read(&ilits9882n->ice_stat));
     } else if (strncmp(cmd, "gesturenormal", strlen(cmd)) == 0) {
-        ilits->gesture_mode = DATA_FORMAT_GESTURE_NORMAL;
-        ILI_INFO("gesture mode = %d\n", ilits->gesture_mode);
+        ilits9882n->gesture_mode = DATA_FORMAT_GESTURE_NORMAL;
+        ILI_INFO("gesture mode = %d\n", ilits9882n->gesture_mode);
     } else if (strncmp(cmd, "gestureinfo", strlen(cmd)) == 0) {
-        ilits->gesture_mode = DATA_FORMAT_GESTURE_INFO;
-        ILI_INFO("gesture mode = %d\n", ilits->gesture_mode);
+        ilits9882n->gesture_mode = DATA_FORMAT_GESTURE_INFO;
+        ILI_INFO("gesture mode = %d\n", ilits9882n->gesture_mode);
     } else if (strncmp(cmd, "netlink", strlen(cmd)) == 0) {
-        ilits->netlink = !ilits->netlink;
-        ILI_INFO("netlink flag= %d\n", ilits->netlink);
+        ilits9882n->netlink = !ilits9882n->netlink;
+        ILI_INFO("netlink flag= %d\n", ilits9882n->netlink);
     } else if (strncmp(cmd, "switchtestmode", strlen(cmd)) == 0) {
-        ili_switch_tp_mode(P5_X_FW_TEST_MODE);
+        ili9882n_switch_tp_mode(P5_X_FW_TEST_MODE);
     } else if (strncmp(cmd, "switchdebugmode", strlen(cmd)) == 0) {
-        ili_set_tp_data_len(DATA_FORMAT_DEBUG, false, NULL);
+        ili9882n_set_tp_data_len(DATA_FORMAT_DEBUG, false, NULL);
     } else if (strncmp(cmd, "switchdemomode", strlen(cmd)) == 0) {
-        ili_set_tp_data_len(DATA_FORMAT_DEMO, false, NULL);
+        ili9882n_set_tp_data_len(DATA_FORMAT_DEMO, false, NULL);
     } else if (strncmp(cmd, "switchgesturedebugmode", strlen(cmd)) == 0) {
-        ili_set_tp_data_len(DATA_FORMAT_GESTURE_DEBUG, false, NULL);
+        ili9882n_set_tp_data_len(DATA_FORMAT_GESTURE_DEBUG, false, NULL);
     } else if (strncmp(cmd, "dbgflag", strlen(cmd)) == 0) {
-        ilits->dnp = !ilits->dnp;
-        ILI_INFO("debug flag message = %d\n", ilits->dnp);
+        ilits9882n->dnp = !ilits9882n->dnp;
+        ILI_INFO("debug flag message = %d\n", ilits9882n->dnp);
     } else if (strncmp(cmd, "spiclk", strlen(cmd)) == 0) {
         ILI_INFO("spi clk num = %d\n", data[1]);
-        ili_core_spi_setup(data[1]);
+        ili9882n_core_spi_setup(data[1]);
     } else if (strncmp(cmd, "ss", strlen(cmd)) == 0) {
         ILI_INFO("sense_stop = %d\n", data[1]);
-        ilits->ss_ctrl = data[1];
+        ilits9882n->ss_ctrl = data[1];
     } else if (strncmp(cmd, "iow", strlen(cmd)) == 0) {
         int w_len = 0;
         w_len = data[1];
@@ -1673,12 +1673,12 @@ static ssize_t ilitek_node_ioctl_write(struct file *filp, const char *buff, size
             ILI_INFO("write[%d] = %x\n", i, temp[i]);
         }
 
-        ilits->wrapper(temp, w_len, NULL, 0, ON, OFF);
+        ilits9882n->wrapper(temp, w_len, NULL, 0, ON, OFF);
     } else if (strncmp(cmd, "ior", strlen(cmd)) == 0) {
         int r_len = 0;
         r_len = data[1];
         ILI_INFO("r_len = %d\n", r_len);
-        ilits->wrapper(NULL, 0, temp, r_len, ON, OFF);
+        ilits9882n->wrapper(NULL, 0, temp, r_len, ON, OFF);
 
         for (i = 0; i < r_len; i++) {
             ILI_INFO("read[%d] = %x\n", i, temp[i]);
@@ -1696,10 +1696,10 @@ static ssize_t ilitek_node_ioctl_write(struct file *filp, const char *buff, size
             ILI_INFO("write[%d] = %x\n", i, temp[i]);
         }
 
-        ret = ilits->wrapper(temp, w_len, NULL, 0, ON, OFF);
+        ret = ilits9882n->wrapper(temp, w_len, NULL, 0, ON, OFF);
         memset(temp, 0, sizeof(temp));
         mdelay(delay);
-        ilits->wrapper(NULL, 0, temp, r_len, ON, OFF);
+        ilits9882n->wrapper(NULL, 0, temp, r_len, ON, OFF);
 
         for (i = 0; i < r_len; i++) {
             ILI_INFO("read[%d] = %x\n", i, temp[i]);
@@ -1717,7 +1717,7 @@ static ssize_t ilitek_node_ioctl_write(struct file *filp, const char *buff, size
             ILI_INFO("write[%d] = %x\n", i, temp[i]);
         }
 
-        ret = ilits->wrapper(temp, w_len, temp, r_len, ON, ON);
+        ret = ilits9882n->wrapper(temp, w_len, temp, r_len, ON, ON);
 
         for (i = 0; i < r_len; i++) {
             ILI_INFO("read[%d] = %x\n", i, temp[i]);
@@ -1725,24 +1725,24 @@ static ssize_t ilitek_node_ioctl_write(struct file *filp, const char *buff, size
     } else if (strncmp(cmd, "getddiregdata", strlen(cmd)) == 0) {
         u8 ddi_data = 0;
         ILI_INFO("Get ddi reg one page: page = %x, reg = %x\n", data[1], data[2]);
-        ili_ic_get_ddi_reg_onepage(data[1], data[2], &ddi_data, OFF);
+        ili9882n_ic_get_ddi_reg_onepage(data[1], data[2], &ddi_data, OFF);
         ILI_INFO("ddi_data = %x\n", ddi_data);
     } else if (strncmp(cmd, "setddiregdata", strlen(cmd)) == 0) {
         ILI_INFO("Set ddi reg one page: page = %x, reg = %x, data = %x\n", data[1], data[2], data[3]);
-        ili_ic_set_ddi_reg_onepage(data[1], data[2], data[3], OFF);
+        ili9882n_ic_set_ddi_reg_onepage(data[1], data[2], data[3], OFF);
     } else if (strncmp(cmd, "dumpiramdata", strlen(cmd)) == 0) {
         ILI_INFO("Start = 0x%x, End = 0x%x, Dump IRAM path = %s\n", data[1], data[2], DUMP_IRAM_PATH);
-        ilits->fw_update_stat = FW_STAT_INIT;
-        ret = ili_fw_dump_iram_data(data[1], data[2], true, OFF);
-        ilits->fw_update_stat = (ret < 0) ? FW_UPDATE_FAIL : FW_UPDATE_PASS;
-        ILI_INFO("ilits->fw_update_stat = %d\n", ilits->fw_update_stat);
+        ilits9882n->fw_update_stat = FW_STAT_INIT;
+        ret = ili9882n_fw_dump_iram_data(data[1], data[2], true, OFF);
+        ilits9882n->fw_update_stat = (ret < 0) ? FW_UPDATE_FAIL : FW_UPDATE_PASS;
+        ILI_INFO("ilits9882n->fw_update_stat = %d\n", ilits9882n->fw_update_stat);
     } else if (strncmp(cmd, "edge_palm_ctrl", strlen(cmd)) == 0) {
-        ili_ic_func_ctrl("edge_palm", data[1]);
+        ili9882n_ic_func_ctrl("edge_palm", data[1]);
     } else if (strncmp(cmd, "uart_mode_ctrl", strlen(cmd)) == 0) {
-        ili_fw_uart_ctrl(data[1]);
+        ili9882n_fw_uart_ctrl(data[1]);
     } else if (strncmp(cmd, "intact", strlen(cmd)) == 0) {
         ILI_INFO("Set INT trigger = %x\n", data[1]);
-        ili_ic_int_trigger_ctrl(data[1]);
+        ili9882n_ic_int_trigger_ctrl(data[1]);
     } else if (strncmp(cmd, "spiw", strlen(cmd)) == 0) {
         int wlen;
         wlen = data[1];
@@ -1753,7 +1753,7 @@ static ssize_t ilitek_node_ioctl_write(struct file *filp, const char *buff, size
             ILI_INFO("write[%d] = %x\n", i, temp[i]);
         }
 
-        ilits->spi_write_then_read(ilits->spi, temp, wlen, NULL, 0);
+        ilits9882n->spi_write_then_read(ilits9882n->spi, temp, wlen, NULL, 0);
     } else if (strncmp(cmd, "spir", strlen(cmd)) == 0) {
         int rlen;
         u8 *rbuf = NULL;
@@ -1767,7 +1767,7 @@ static ssize_t ilitek_node_ioctl_write(struct file *filp, const char *buff, size
         }
 
         temp[0] = 0x83;
-        ilits->spi_write_then_read(ilits->spi, temp, 1, rbuf, rlen);
+        ilits9882n->spi_write_then_read(ilits9882n->spi, temp, 1, rbuf, rlen);
 
         for (i = 0; i < rlen; i++) {
             ILI_INFO("read[%d] = %x\n", i, rbuf[i]);
@@ -1795,7 +1795,7 @@ static ssize_t ilitek_node_ioctl_write(struct file *filp, const char *buff, size
             }
         }
 
-        ilits->spi_write_then_read(ilits->spi, temp, wlen, rbuf, rlen);
+        ilits9882n->spi_write_then_read(ilits9882n->spi, temp, wlen, rbuf, rlen);
 
         if (rlen != 0) {
             for (i = 0; i < rlen; i++) {
@@ -1805,26 +1805,26 @@ static ssize_t ilitek_node_ioctl_write(struct file *filp, const char *buff, size
 
         kfree(rbuf);
     } else if (strncmp(cmd, "ges_sym", strlen(cmd)) == 0) {
-        struct gesture_symbol *ptr_sym = &ilits->ges_sym;
+        struct gesture_symbol *ptr_sym = &ilits9882n->ges_sym;
         u8 *ptr;
         ptr = (u8 *) ptr_sym;
         ptr[0] = data[1];
         ptr[1] = data[2];
         ptr[2] = data[3];
-        ili_dump_data(ptr, 8, 3, 0, "Gesture symbol");
+        ili9882n_dump_data(ptr, 8, 3, 0, "Gesture symbol");
     } else if (strncmp(cmd, "mode", strlen(cmd)) == 0) {
         temp[0] = data[1];
         temp[1] = data[2];
         temp[2] = data[3];
         temp[3] = data[4];
         temp[4] = data[5];
-        ret = ili_tp_data_mode_ctrl(temp);
+        ret = ili9882n_tp_data_mode_ctrl(temp);
     } else if (strncmp(cmd, "switchmpretry", strlen(cmd)) == 0) {
-        ilits->mp_retry = !ilits->mp_retry;
-        ILI_INFO("switchmpretry = %d\n", ilits->mp_retry);
+        ilits9882n->mp_retry = !ilits9882n->mp_retry;
+        ILI_INFO("switchmpretry = %d\n", ilits9882n->mp_retry);
     } else if (strncmp(cmd, "switchmpretry", strlen(cmd)) == 0) {
-        ilits->mp_retry = !ilits->mp_retry;
-        ILI_INFO("switchmpretry = %d\n", ilits->mp_retry);
+        ilits9882n->mp_retry = !ilits9882n->mp_retry;
+        ILI_INFO("switchmpretry = %d\n", ilits9882n->mp_retry);
     }  else {
         ILI_ERR("Unknown command\n");
         size = -1;
@@ -1832,7 +1832,7 @@ static ssize_t ilitek_node_ioctl_write(struct file *filp, const char *buff, size
 
 out:
     ili_kfree((void **)&data);
-    mutex_unlock(&ilits->touch_mutex);
+    mutex_unlock(&ilits9882n->touch_mutex);
     return size;
 }
 
@@ -2026,7 +2026,7 @@ static long ilitek_node_ioctl(struct file *filp, unsigned int cmd, unsigned long
     }
 
     ILI_DBG("cmd = %d\n", _IOC_NR(cmd));
-    mutex_lock(&ilits->touch_mutex);
+    mutex_lock(&ilits9882n->touch_mutex);
     szBuf = kcalloc(IOCTL_I2C_BUFF, sizeof(u8), GFP_KERNEL);
 
     if (ERR_ALLOC_MEM(szBuf)) {
@@ -2052,7 +2052,7 @@ static long ilitek_node_ioctl(struct file *filp, unsigned int cmd, unsigned long
                 break;
             }
 
-            ret = ilits->wrapper(szBuf, i2c_rw_length, NULL, 0, OFF, OFF);
+            ret = ilits9882n->wrapper(szBuf, i2c_rw_length, NULL, 0, OFF, OFF);
 
             if (ret < 0) {
                 ILI_ERR("Failed to write data\n");
@@ -2070,7 +2070,7 @@ static long ilitek_node_ioctl(struct file *filp, unsigned int cmd, unsigned long
                 break;
             }
 
-            ret = ilits->wrapper(NULL, 0, szBuf, i2c_rw_length, OFF, OFF);
+            ret = ilits9882n->wrapper(NULL, 0, szBuf, i2c_rw_length, OFF, OFF);
 
             if (ret < 0) {
                 ILI_ERR("Failed to read data\n");
@@ -2091,7 +2091,7 @@ static long ilitek_node_ioctl(struct file *filp, unsigned int cmd, unsigned long
 
         case ILITEK_IOCTL_TP_HW_RESET:
             ILI_DBG("ioctl: hw reset\n");
-            ili_reset_ctrl(ilits->reset);
+            ili9982n_reset_ctrl(ilits9882n->reset);
             break;
 
         case ILITEK_IOCTL_TP_POWER_SWITCH:
@@ -2108,10 +2108,10 @@ static long ilitek_node_ioctl(struct file *filp, unsigned int cmd, unsigned long
             ILI_DBG("ioctl: report switch = %d\n", szBuf[0]);
 
             if (szBuf[0]) {
-                ilits->report = ENABLE;
+                ilits9882n->report = ENABLE;
                 ILI_DBG("report is enabled\n");
             } else {
-                ilits->report = DISABLE;
+                ilits9882n->report = DISABLE;
                 ILI_DBG("report is disabled\n");
             }
 
@@ -2127,9 +2127,9 @@ static long ilitek_node_ioctl(struct file *filp, unsigned int cmd, unsigned long
             ILI_DBG("ioctl: irq switch = %d\n", szBuf[0]);
 
             if (szBuf[0]) {
-                ili_irq_enable();
+                ili9882n_irq_enable();
             } else {
-                ili_irq_disable();
+                ili9882n_irq_disable();
             }
 
             break;
@@ -2141,8 +2141,8 @@ static long ilitek_node_ioctl(struct file *filp, unsigned int cmd, unsigned long
                 break;
             }
 
-            ili_debug_en = !ili_debug_en;
-            ILI_DBG("ili_debug_en = %d", ili_debug_en);
+            ili9882n_debug_en = !ili9882n_debug_en;
+            ILI_DBG("ili9882n_debug_en = %d", ili9882n_debug_en);
             break;
 
         case ILITEK_IOCTL_TP_FUNC_MODE:
@@ -2153,19 +2153,19 @@ static long ilitek_node_ioctl(struct file *filp, unsigned int cmd, unsigned long
             }
 
             ILI_DBG("ioctl: set func mode = %x,%x,%x\n", szBuf[0], szBuf[1], szBuf[2]);
-            ret = ilits->wrapper(szBuf, 3, NULL, 0, ON, OFF);
+            ret = ilits9882n->wrapper(szBuf, 3, NULL, 0, ON, OFF);
             break;
 
         case ILITEK_IOCTL_TP_FW_VER:
             ILI_DBG("ioctl: get fw and mp version\n");
-            szBuf[7] = ilits->chip->fw_mp_ver & 0xFF;
-            szBuf[6] = (ilits->chip->fw_mp_ver >> 8) & 0xFF;
-            szBuf[5] = (ilits->chip->fw_mp_ver >> 16) & 0xFF;
-            szBuf[4] = ilits->chip->fw_mp_ver >> 24;
-            szBuf[3] = ilits->chip->fw_ver & 0xFF;
-            szBuf[2] = (ilits->chip->fw_ver >> 8) & 0xFF;
-            szBuf[1] = (ilits->chip->fw_ver >> 16) & 0xFF;
-            szBuf[0] = ilits->chip->fw_ver >> 24;
+            szBuf[7] = ilits9882n->chip->fw_mp_ver & 0xFF;
+            szBuf[6] = (ilits9882n->chip->fw_mp_ver >> 8) & 0xFF;
+            szBuf[5] = (ilits9882n->chip->fw_mp_ver >> 16) & 0xFF;
+            szBuf[4] = ilits9882n->chip->fw_mp_ver >> 24;
+            szBuf[3] = ilits9882n->chip->fw_ver & 0xFF;
+            szBuf[2] = (ilits9882n->chip->fw_ver >> 8) & 0xFF;
+            szBuf[1] = (ilits9882n->chip->fw_ver >> 16) & 0xFF;
+            szBuf[0] = ilits9882n->chip->fw_ver >> 24;
             ILI_DBG("Firmware version = %d.%d.%d.%d\n", szBuf[0], szBuf[1], szBuf[2], szBuf[3]);
             ILI_DBG("Firmware MP version = %d.%d.%d.%d\n", szBuf[4], szBuf[5], szBuf[6], szBuf[7]);
 
@@ -2178,9 +2178,9 @@ static long ilitek_node_ioctl(struct file *filp, unsigned int cmd, unsigned long
 
         case ILITEK_IOCTL_TP_PL_VER:
             ILI_DBG("ioctl: get protocl version\n");
-            szBuf[2] = ilits->protocol->ver & 0xFF;
-            szBuf[1] = (ilits->protocol->ver >> 8) & 0xFF;
-            szBuf[0] = ilits->protocol->ver >> 16;
+            szBuf[2] = ilits9882n->protocol->ver & 0xFF;
+            szBuf[1] = (ilits9882n->protocol->ver >> 8) & 0xFF;
+            szBuf[0] = ilits9882n->protocol->ver >> 16;
             ILI_DBG("Protocol version = %d.%d.%d\n", szBuf[0], szBuf[1], szBuf[2]);
 
             if (copy_to_user((u8 *) arg, szBuf, 3)) {
@@ -2193,17 +2193,17 @@ static long ilitek_node_ioctl(struct file *filp, unsigned int cmd, unsigned long
         case ILITEK_IOCTL_TP_CORE_VER:
             ILI_DBG("ioctl: get core version\n");
 
-            if (ilits->protocol->core_ver_len == P5_X_CORE_VER_THREE_LENGTH) {
+            if (ilits9882n->protocol->core_ver_len == P5_X_CORE_VER_THREE_LENGTH) {
                 szBuf[3] = 0xFF;
             } else {
-                szBuf[3] = ilits->chip->core_ver & 0xFF;
+                szBuf[3] = ilits9882n->chip->core_ver & 0xFF;
             }
 
-            szBuf[2] = (ilits->chip->core_ver >> 8) & 0xFF;
-            szBuf[1] = (ilits->chip->core_ver >> 16) & 0xFF;
-            szBuf[0] = ilits->chip->core_ver >> 24;
+            szBuf[2] = (ilits9882n->chip->core_ver >> 8) & 0xFF;
+            szBuf[1] = (ilits9882n->chip->core_ver >> 16) & 0xFF;
+            szBuf[0] = ilits9882n->chip->core_ver >> 24;
             ILI_DBG("Core version = %d.%d.%d.%d, length = %d\n",
-                    szBuf[0], szBuf[1], szBuf[2], szBuf[3], ilits->protocol->core_ver_len);
+                    szBuf[0], szBuf[1], szBuf[2], szBuf[3], ilits9882n->protocol->core_ver_len);
 
             if (copy_to_user((u8 *) arg, szBuf, 4)) {
                 ILI_ERR("Failed to copy data to user space\n");
@@ -2225,9 +2225,9 @@ static long ilitek_node_ioctl(struct file *filp, unsigned int cmd, unsigned long
 
         case ILITEK_IOCTL_TP_CHIP_ID:
             ILI_DBG("ioctl: get chip id\n");
-            id_to_user[0] = ilits->chip->pid;
-            id_to_user[1] = ilits->chip->otp_id;
-            id_to_user[2] = ilits->chip->ana_id;
+            id_to_user[0] = ilits9882n->chip->pid;
+            id_to_user[1] = ilits9882n->chip->otp_id;
+            id_to_user[2] = ilits9882n->chip->ana_id;
 
             if (copy_to_user((u32 *) arg, id_to_user, sizeof(u32) * 3)) {
                 ILI_ERR("Failed to copy driver ver to user space\n");
@@ -2246,19 +2246,19 @@ static long ilitek_node_ioctl(struct file *filp, unsigned int cmd, unsigned long
             ILI_DBG("ioctl: netlink ctrl = %d\n", szBuf[0]);
 
             if (szBuf[0]) {
-                ilits->netlink = ENABLE;
+                ilits9882n->netlink = ENABLE;
                 ILI_DBG("ioctl: Netlink is enabled\n");
             } else {
-                ilits->netlink = DISABLE;
+                ilits9882n->netlink = DISABLE;
                 ILI_DBG("ioctl: Netlink is disabled\n");
             }
 
             break;
 
         case ILITEK_IOCTL_TP_NETLINK_STATUS:
-            ILI_DBG("ioctl: get netlink stat = %d\n", ilits->netlink);
+            ILI_DBG("ioctl: get netlink stat = %d\n", ilits9882n->netlink);
 
-            if (copy_to_user((int *)arg, &ilits->netlink, sizeof(int))) {
+            if (copy_to_user((int *)arg, &ilits9882n->netlink, sizeof(int))) {
                 ILI_ERR("Failed to copy driver ver to user space\n");
                 ret = -ENOTTY;
             }
@@ -2273,13 +2273,13 @@ static long ilitek_node_ioctl(struct file *filp, unsigned int cmd, unsigned long
             }
 
             ILI_DBG("ioctl: switch fw format = %d\n", szBuf[0]);
-            ret = ili_tp_data_mode_ctrl(szBuf);
+            ret = ili9882n_tp_data_mode_ctrl(szBuf);
             break;
 
         case ILITEK_IOCTL_TP_MODE_STATUS:
-            ILI_DBG("ioctl: current firmware mode = %d", ilits->tp_data_mode);
+            ILI_DBG("ioctl: current firmware mode = %d", ilits9882n->tp_data_mode);
 
-            if (copy_to_user((int *)arg, &ilits->tp_data_mode, sizeof(int))) {
+            if (copy_to_user((int *)arg, &ilits9882n->tp_data_mode, sizeof(int))) {
                 ILI_ERR("Failed to copy driver ver to user space\n");
                 ret = -ENOTTY;
             }
@@ -2296,7 +2296,7 @@ static long ilitek_node_ioctl(struct file *filp, unsigned int cmd, unsigned long
 
             ILI_DBG("ioctl: switch ice mode = %d, mcu on = %d\n", szBuf[0], szBuf[1]);
 
-            if (ili_ice_mode_ctrl(szBuf[0] ? ENABLE : DISABLE,
+            if (ili9882n_ice_mode_ctrl(szBuf[0] ? ENABLE : DISABLE,
                                   szBuf[1] ? ENABLE : DISABLE) < 0) {
                 ILI_ERR("ioctl: set ice mode failed\n");
             }
@@ -2331,7 +2331,7 @@ static long ilitek_node_ioctl(struct file *filp, unsigned int cmd, unsigned long
             }
 
             ILI_DBG("ioctl: fw UART  = %d\n", szBuf[0]);
-            ili_fw_uart_ctrl(szBuf[0]);
+            ili9882n_fw_uart_ctrl(szBuf[0]);
             if_to_user = szBuf[0];
 
             if (copy_to_user((u8 *) arg, &if_to_user, sizeof(if_to_user))) {
@@ -2343,8 +2343,8 @@ static long ilitek_node_ioctl(struct file *filp, unsigned int cmd, unsigned long
 
         case ILITEK_IOCTL_TP_PANEL_INFO:
             ILI_DBG("ioctl: get panel resolution\n");
-            id_to_user[0] = ilits->panel_wid;
-            id_to_user[1] = ilits->panel_hei;
+            id_to_user[0] = ilits9882n->panel_wid;
+            id_to_user[1] = ilits9882n->panel_hei;
 
             if (copy_to_user((u32 *) arg, id_to_user, sizeof(u32) * 2)) {
                 ILI_ERR("Failed to copy driver ver to user space\n");
@@ -2355,14 +2355,14 @@ static long ilitek_node_ioctl(struct file *filp, unsigned int cmd, unsigned long
 
         case ILITEK_IOCTL_TP_INFO:
             ILI_DBG("ioctl: get tp info\n");
-            id_to_user[0] = ilits->min_x;
-            id_to_user[1] = ilits->min_y;
-            id_to_user[2] = ilits->max_x;
-            id_to_user[3] = ilits->max_y;
-            id_to_user[4] = ilits->xch_num;
-            id_to_user[5] = ilits->ych_num;
-            id_to_user[6] = ilits->stx;
-            id_to_user[7] = ilits->srx;
+            id_to_user[0] = ilits9882n->min_x;
+            id_to_user[1] = ilits9882n->min_y;
+            id_to_user[2] = ilits9882n->max_x;
+            id_to_user[3] = ilits9882n->max_y;
+            id_to_user[4] = ilits9882n->xch_num;
+            id_to_user[5] = ilits9882n->ych_num;
+            id_to_user[6] = ilits9882n->stx;
+            id_to_user[7] = ilits9882n->srx;
 
             if (copy_to_user((u32 *) arg, id_to_user, sizeof(u32) * 8)) {
                 ILI_ERR("Failed to copy driver ver to user space\n");
@@ -2421,9 +2421,9 @@ static long ilitek_node_ioctl(struct file *filp, unsigned int cmd, unsigned long
             }
 
             ILI_DBG("i2c_irq = %d, spi_irq = %d\n", i2c_irq, spi_irq);
-            ilits->wrapper(szBuf + 5, wrap_wlen, wrap_rbuf, wrap_rlen, spi_irq, i2c_irq);
-            ili_dump_data(szBuf + 5, 8, wrap_wlen, 16, "wrap_wbuf:");
-            ili_dump_data(wrap_rbuf, 8, wrap_rlen, 16, "wrap_rbuf:");
+            ilits9882n->wrapper(szBuf + 5, wrap_wlen, wrap_rbuf, wrap_rlen, spi_irq, i2c_irq);
+            ili9882n_dump_data(szBuf + 5, 8, wrap_wlen, 16, "wrap_wbuf:");
+            ili9882n_dump_data(wrap_rbuf, 8, wrap_rlen, 16, "wrap_rbuf:");
 
             if (copy_to_user((u8 *) arg, wrap_rbuf, wrap_rlen)) {
                 ILI_ERR("Failed to copy driver ver to user space\n");
@@ -2440,7 +2440,7 @@ static long ilitek_node_ioctl(struct file *filp, unsigned int cmd, unsigned long
             }
 
             ILI_DBG("ioctl: page = %x, reg = %x, data = %x\n", szBuf[0], szBuf[1], szBuf[2]);
-            ili_ic_set_ddi_reg_onepage(szBuf[0], szBuf[1], szBuf[2], OFF);
+            ili9882n_ic_set_ddi_reg_onepage(szBuf[0], szBuf[1], szBuf[2], OFF);
             break;
 
         case ILITEK_IOCTL_DDI_READ:
@@ -2451,7 +2451,7 @@ static long ilitek_node_ioctl(struct file *filp, unsigned int cmd, unsigned long
             }
 
             ILI_DBG("ioctl: page = %x, reg = %x\n", szBuf[0], szBuf[1]);
-            ili_ic_get_ddi_reg_onepage(szBuf[0], szBuf[1], &szBuf[2], OFF);
+            ili9882n_ic_get_ddi_reg_onepage(szBuf[0], szBuf[1], &szBuf[2], OFF);
             ILI_DBG("ioctl: data = %x\n", szBuf[2]);
 
             if (copy_to_user((u8 *) arg, szBuf + 2, 1)) {
@@ -2469,7 +2469,7 @@ static long ilitek_node_ioctl(struct file *filp, unsigned int cmd, unsigned long
     ili_kfree((void **)&szBuf);
     ili_kfree((void **)&wrap_rbuf);
 out:
-    mutex_unlock(&ilits->touch_mutex);
+    mutex_unlock(&ilits9882n->touch_mutex);
     return ret;
 }
 
@@ -2548,7 +2548,7 @@ static struct file_operations proc_debug_level_fops = {
     .read = ilitek_proc_debug_level_read,
 };
 
-proc_node iliproc[] = {
+proc_node ili9882nproc[] = {
     {"ioctl", NULL, &proc_ioctl_fops, false},
     {"fw_process", NULL, &proc_fw_process_fops, false},
     {"fw_upgrade", NULL, &proc_fw_upgrade_fops, false},
@@ -2566,22 +2566,22 @@ proc_node iliproc[] = {
     {"change_list", NULL, &proc_change_list_fops, false},
 };
 
-#define NETLINK_USER 21
+#define NETLINK_USER 0xff
 static struct sock *netlink_skb;
 static struct nlmsghdr *netlink_head;
 static struct sk_buff *skb_out;
 static int netlink_pid;
 
-void ili_netlink_reply_msg(void *raw, int size)
+void ili9882n_netlink_reply_msg(void *raw, int size)
 {
     int ret;
     int msg_size = size;
     u8 *data = (u8 *) raw;
     ILI_INFO("The size of data being sent to user = %d\n", msg_size);
     ILI_INFO("pid = %d\n", netlink_pid);
-    ILI_INFO("Netlink is enable = %d\n", ilits->netlink);
+    ILI_INFO("Netlink is enable = %d\n", ilits9882n->netlink);
 
-    if (ilits->netlink) {
+    if (ilits9882n->netlink) {
         skb_out = nlmsg_new(msg_size, 0);
 
         if (!skb_out) {
@@ -2604,7 +2604,7 @@ void ili_netlink_reply_msg(void *raw, int size)
 static void netlink_recv_msg(struct sk_buff *skb)
 {
     netlink_pid = 0;
-    ILI_INFO("Netlink = %d\n", ilits->netlink);
+    ILI_INFO("Netlink = %d\n", ilits9882n->netlink);
     netlink_head = (struct nlmsghdr *)skb->data;
     ILI_INFO("Received a request from client: %s, %d\n",
              (char *)NLMSG_DATA(netlink_head), (int)strlen((char *)NLMSG_DATA(netlink_head)));
@@ -2615,10 +2615,10 @@ static void netlink_recv_msg(struct sk_buff *skb)
     /* TODO: may do something if there's not receiving msg from user. */
     if (netlink_pid != 0) {
         ILI_ERR("The channel of Netlink has been established successfully !\n");
-        ilits->netlink = ENABLE;
+        ilits9882n->netlink = ENABLE;
     } else {
         ILI_ERR("Failed to establish the channel between kernel and user space\n");
-        ilits->netlink = DISABLE;
+        ilits9882n->netlink = DISABLE;
     }
 }
 
@@ -2643,21 +2643,21 @@ static int netlink_init(void)
     return ret;
 }
 
-void ili_node_init(void)
+void ili9882n_node_init(void)
 {
     int i = 0, ret = 0;
     proc_dir_ilitek = proc_mkdir("ilitek", NULL);
 
-    for (; i < ARRAY_SIZE(iliproc); i++) {
-        iliproc[i].node = proc_create(iliproc[i].name, 0644, proc_dir_ilitek, iliproc[i].fops);
+    for (; i < ARRAY_SIZE(ili9882nproc); i++) {
+        ili9882nproc[i].node = proc_create(ili9882nproc[i].name, 0644, proc_dir_ilitek, ili9882nproc[i].fops);
 
-        if (iliproc[i].node == NULL) {
-            iliproc[i].isCreated = false;
-            ILI_ERR("Failed to create %s under /proc\n", iliproc[i].name);
+        if (ili9882nproc[i].node == NULL) {
+            ili9882nproc[i].isCreated = false;
+            ILI_ERR("Failed to create %s under /proc\n", ili9882nproc[i].name);
             ret = -ENODEV;
         } else {
-            iliproc[i].isCreated = true;
-            ILI_INFO("Succeed to create %s under /proc\n", iliproc[i].name);
+            ili9882nproc[i].isCreated = true;
+            ILI_INFO("Succeed to create %s under /proc\n", ili9882nproc[i].name);
         }
     }
 

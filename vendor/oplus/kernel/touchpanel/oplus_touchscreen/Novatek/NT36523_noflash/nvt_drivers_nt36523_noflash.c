@@ -6789,7 +6789,7 @@ static int nvt_spi_resume(struct device *dev)
 static const struct spi_device_id tp_id[] =
 {
 #ifdef CONFIG_TOUCHPANEL_MULTI_NOFLASH
-    { "oplus,tp_noflash", 0 },
+    { "oppo,tp_noflash", 0 },
 #else
     {TPD_DEVICE, 0},
 #endif
@@ -6799,7 +6799,7 @@ static const struct spi_device_id tp_id[] =
 static struct of_device_id tp_match_table[] =
 {
 #ifdef CONFIG_TOUCHPANEL_MULTI_NOFLASH
-    { .compatible = "oplus,tp_noflash",},
+    { .compatible = "oppo,tp_noflash",},
 #else
     { .compatible = TPD_DEVICE},
 #endif

@@ -138,6 +138,8 @@ int kbase_csf_firmware_trace_buffers_init(struct kbase_device *kbdev)
 	u32 mcu_rw_offset = 0, mcu_write_offset = 0;
 	const u32 cache_line_alignment = kbase_get_cache_line_alignment(kbdev);
 
+	mutex_init(&kbdev->csf.firmware_trace_buffers.dump_lock);
+
 	if (list_empty(&kbdev->csf.firmware_trace_buffers.list)) {
 		dev_vdbg(kbdev->dev, "No trace buffers to initialise\n");
 		return 0;
@@ -232,6 +234,8 @@ out:
 
 void kbase_csf_firmware_trace_buffers_term(struct kbase_device *kbdev)
 {
+	mutex_destroy(&kbdev->csf.firmware_trace_buffers.dump_lock);
+
 	if (list_empty(&kbdev->csf.firmware_trace_buffers.list))
 		return;
 

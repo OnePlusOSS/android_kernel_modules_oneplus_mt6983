@@ -1131,6 +1131,14 @@
 #define CFG_SUPPORT_SCAN_NO_AP_RECOVERY    (1)
 #define SCHED_SCAN_CMD_VERSION             (1)
 
+//#ifndef OPLUS_FEATURE_WIFI_SCAN_MDRDY_CLEAN_CHECK
+#ifdef OPLUS_FEATURE_WIFI_SCAN_MDRDY_CLEAN_CHECK
+#define CFG_SCAN_MDRDY_CLEAN_CHECK         (1)
+#else
+#define CFG_SCAN_MDRDY_CLEAN_CHECK         (0)
+#endif
+//#endif /* OPLUS_FEATURE_WIFI_SCAN_MDRDY_CLEAN_CHECK */
+
 /* this value should be aligned to auSsid in struct CMD_SCHED_SCAN_REQ */
 #define CFG_SCAN_HIDDEN_SSID_MAX_NUM       (10)
 /* this value should be aligned to auMatchSsid in struct CMD_SCHED_SCAN_REQ */

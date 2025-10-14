@@ -76,6 +76,7 @@ typedef enum {
     HEALTH_GRIP,
     HEALTH_GRIP_UP,
     HEALTH_BELOW_RATE,
+	HEALTH_GRIP_RECLINING,
 } healthinfo_type;
 
 void reset_healthinfo_time_counter(u64 *time_counter);
