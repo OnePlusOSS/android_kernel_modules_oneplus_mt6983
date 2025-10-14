@@ -1562,6 +1562,14 @@ static ssize_t ilitek_node_ioctl_write(struct file *filp, const char *buff,
 	if (strncmp(cmd, "hwreset", strlen(cmd)) == 0) {
 		ili_reset_ctrl(TP_HW_RST_ONLY);
 
+	} else if (strcmp(cmd, "aod") == 0) {
+		if (data[1] == 0) {
+			ili_aod_control(0);
+		}
+		else if (data[1] == 1) {
+			ili_aod_control(1);
+		}
+
 	} else if (strcmp(cmd, "rawdatarecore") == 0) {
 		if (data[1] == ENABLE_RECORD) {
 			ili_get_tp_recore_ctrl(ENABLE_RECORD);

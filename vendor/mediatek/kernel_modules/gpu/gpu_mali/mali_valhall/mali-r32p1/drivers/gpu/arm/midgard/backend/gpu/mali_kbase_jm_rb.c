@@ -387,8 +387,23 @@ static void kbase_gpu_mark_atom_for_return(struct kbase_device *kbdev,
 {
 	lockdep_assert_held(&kbdev->hwaccess_lock);
 
+	KBASE_KTRACE_ADD_JM_SLOT_INFO(kbdev, JM_MARK_FOR_RETURN_TO_JS,
+				      katom->kctx, katom, katom->jc,
+				      katom->slot_nr, katom->event_code);
 	kbase_gpu_release_atom(kbdev, katom, NULL);
 	katom->gpu_rb_state = KBASE_ATOM_GPU_RB_RETURN_TO_JS;
+}
+
+static inline void kbase_gpu_remove_atom(struct kbase_device *kbdev, struct kbase_jd_atom *katom,
+					 u32 action, bool disjoint)
+{
+	struct kbase_context *kctx = katom->kctx;
+	lockdep_assert_held(&kbdev->hwaccess_lock);
+	katom->event_code = BASE_JD_EVENT_REMOVED_FROM_NEXT;
+	kbase_gpu_mark_atom_for_return(kbdev, katom);
+	kbase_jsctx_slot_prio_blocked_set(kctx, katom->slot_nr, katom->sched_priority);
+	if (disjoint)
+		kbase_job_check_enter_disjoint(kbdev, action, katom->core_req, katom);
 }
 
 /**
@@ -942,6 +957,11 @@ void kbase_backend_slot_update(struct kbase_device *kbdev)
 
 				if (katom[idx]->event_code ==
 						BASE_JD_EVENT_PM_EVENT) {
+					KBASE_KTRACE_ADD_JM_SLOT_INFO(
+						kbdev, JM_MARK_FOR_RETURN_TO_JS,
+						katom[idx]->kctx, katom[idx],
+						katom[idx]->jc, js,
+						katom[idx]->event_code);
 					katom[idx]->gpu_rb_state =
 						KBASE_ATOM_GPU_RB_RETURN_TO_JS;
 					break;
@@ -1043,9 +1063,55 @@ void kbase_backend_run_atom(struct kbase_device *kbdev,
 	kbase_backend_slot_update(kbdev);
 }
 
-#define HAS_DEP(katom) (katom->pre_dep || katom->atom_flags & \
-	(KBASE_KATOM_FLAG_X_DEP_BLOCKED | KBASE_KATOM_FLAG_FAIL_BLOCKER))
+/**
+ * kbase_rb_atom_might_depend - determine if one atom in the slot ringbuffer
+ *                              might depend on another from the same kctx
+ * @katom_a: dependee atom
+ * @katom_b: atom to query
+ *
+ * This can be used on atoms that belong to different slot ringbuffers
+ *
+ * Return: true if @katom_b might depend on @katom_a, false if it cannot depend.
+ */
+static inline bool
+kbase_rb_atom_might_depend(const struct kbase_jd_atom *katom_a,
+			   const struct kbase_jd_atom *katom_b)
+{
+	if (katom_a->kctx != katom_b->kctx)
+		return false;
+	return (katom_b->pre_dep ||
+		(katom_b->atom_flags & (KBASE_KATOM_FLAG_X_DEP_BLOCKED |
+					KBASE_KATOM_FLAG_FAIL_BLOCKER)));
+}
 
+/**
+ * kbase_gpu_irq_evict - evict a slot's JSn_HEAD_NEXT atom from the HW if it is
+ *                       related to a failed JSn_HEAD atom
+ * @kbdev kbase device
+ * @js job slot to check
+ * @completion_code completion code of the failed atom
+ *
+ * Note: 'STOPPED' atoms are considered 'failed', as they are in the HW, but
+ * unlike other failure codes we _can_ re-run them.
+ *
+ * This forms step 1 in a 2-step process of removing any related atoms from a
+ * slot's JSn_HEAD_NEXT (ringbuffer index 1), should there have
+ * been a 'failure' on an atom in JSn_HEAD (ringbuffer index 0).
+ *
+ * This step only removes the atoms from the HW, and marks them as
+ * (potentially) ready to run again.
+ *
+ * Step 2 is on marking the JSn_HEAD atom as complete
+ * (kbase_gpu_complete_hw()), to dequeue said atoms and return them to the JS
+ * as appropriate, or re-submit them.
+ *
+ * Hence, this function must evict at a minimum the atoms related to the atom
+ * in JSn_HEAD that kbase_gpu_complete_hw() will also dequeue. It is acceptable
+ * if this function evicts more atoms than kbase_gpu_complete_hw() dequeues, as
+ * the next kbase_backend_slot_update() will resubmit any remaining.
+ *
+ * Return: true if an atom was evicted, false otherwise.
+ */
 bool kbase_gpu_irq_evict(struct kbase_device *kbdev, int js,
 				u32 completion_code)
 {
@@ -1057,19 +1123,17 @@ bool kbase_gpu_irq_evict(struct kbase_device *kbdev, int js,
 	katom = kbase_gpu_inspect(kbdev, js, 0);
 	next_katom = kbase_gpu_inspect(kbdev, js, 1);
 
-	if (next_katom && katom->kctx == next_katom->kctx &&
-		next_katom->gpu_rb_state == KBASE_ATOM_GPU_RB_SUBMITTED &&
-		(HAS_DEP(next_katom) || next_katom->sched_priority ==
-				katom->sched_priority) &&
-		(kbase_reg_read(kbdev, JOB_SLOT_REG(js, JS_HEAD_NEXT_LO))
-									!= 0 ||
-		kbase_reg_read(kbdev, JOB_SLOT_REG(js, JS_HEAD_NEXT_HI))
-									!= 0)) {
+	if (next_katom &&
+	    next_katom->gpu_rb_state == KBASE_ATOM_GPU_RB_SUBMITTED &&
+	    (kbase_rb_atom_might_depend(katom, next_katom) ||
+	     kbase_js_atom_runs_before(kbdev, katom, next_katom, 0u)) &&
+	    (kbase_reg_read(kbdev, JOB_SLOT_REG(js, JS_HEAD_NEXT_LO)) != 0 ||
+	     kbase_reg_read(kbdev, JOB_SLOT_REG(js, JS_HEAD_NEXT_HI)) != 0)) {
 		kbase_reg_write(kbdev, JOB_SLOT_REG(js, JS_COMMAND_NEXT),
 				JS_COMMAND_NOP);
-		next_katom->gpu_rb_state = KBASE_ATOM_GPU_RB_READY;
 
 		if (completion_code == BASE_JD_EVENT_STOPPED) {
+			kbase_gpu_remove_atom(kbdev, next_katom, JS_COMMAND_SOFT_STOP, false);
 			KBASE_TLSTREAM_TL_NRET_ATOM_LPU(kbdev, next_katom,
 				&kbdev->gpu_props.props.raw_props.js_features
 					[next_katom->slot_nr]);
@@ -1078,10 +1142,13 @@ bool kbase_gpu_irq_evict(struct kbase_device *kbdev, int js,
 			KBASE_TLSTREAM_TL_NRET_CTX_LPU(kbdev, next_katom->kctx,
 				&kbdev->gpu_props.props.raw_props.js_features
 					[next_katom->slot_nr]);
+		} else {
+			next_katom->gpu_rb_state = KBASE_ATOM_GPU_RB_READY;
+			
+			if (next_katom->core_req & BASE_JD_REQ_PERMON)
+				kbase_pm_release_gpu_cycle_counter_nolock(kbdev);
 		}
 
-		if (next_katom->core_req & BASE_JD_REQ_PERMON)
-			kbase_pm_release_gpu_cycle_counter_nolock(kbdev);
 
 		/* On evicting the next_katom, the last submission kctx on the
 		 * given job slot then reverts back to the one that owns katom.
@@ -1096,6 +1163,30 @@ bool kbase_gpu_irq_evict(struct kbase_device *kbdev, int js,
 
 	return false;
 }
+
+/**
+ * kbase_gpu_complete_hw - complete the atom in a slot's JSn_HEAD
+ * @kbdev kbase device
+ * @js job slot to check
+ * @completion_code completion code of the completed atom
+ * @job_tail value read from JSn_TAIL, for STOPPED atoms
+ * @end_timestamp pointer to approximate ktime value when the katom completed
+ *
+ * Among other operations, this also executes step 2 of a 2-step process of
+ * removing any related atoms from a slot's JSn_HEAD_NEXT (ringbuffer index 1),
+ * should there have been a 'failure' on an atom in JSn_HEAD (ringbuffer index
+ * 0). The first step is done in kbase_gpu_irq_evict().
+ *
+ * Note: 'STOPPED' atoms are considered 'failed', as they are in the HW, but
+ * unlike other failure codes we _can_ re-run them.
+ *
+ * When the JSn_HEAD atom is considered to be 'failed', then this will dequeue
+ * and return to the JS some (usually all) of the atoms evicted from the HW
+ * during the kbase_gpu_irq_evict() for that JSn_HEAD atom. If it dequeues an
+ * atom, that atom must not have been running or must already be evicted, as
+ * otherwise we would be in the incorrect state of having an atom both running
+ * on the HW and returned to the JS.
+ */
 
 void kbase_gpu_complete_hw(struct kbase_device *kbdev, int js,
 				u32 completion_code,
@@ -1147,9 +1238,8 @@ void kbase_gpu_complete_hw(struct kbase_device *kbdev, int js,
 		 * registers by kbase_gpu_soft_hard_stop_slot(), to ensure that
 		 * the atoms on this slot are returned in the correct order.
 		 */
-		if (next_katom && katom->kctx == next_katom->kctx &&
-				next_katom->sched_priority ==
-				katom->sched_priority) {
+		if (next_katom &&
+		    kbase_js_atom_runs_before(kbdev, katom, next_katom, 0u)) {
 			WARN_ON(next_katom->gpu_rb_state ==
 					KBASE_ATOM_GPU_RB_SUBMITTED);
 			kbase_gpu_dequeue_atom(kbdev, js, end_timestamp);
@@ -1182,18 +1272,17 @@ void kbase_gpu_complete_hw(struct kbase_device *kbdev, int js,
 			struct kbase_jd_atom *katom_idx1 =
 						kbase_gpu_inspect(kbdev, i, 1);
 
-			if (katom_idx0 && katom_idx0->kctx == katom->kctx &&
-					HAS_DEP(katom_idx0) &&
-					katom_idx0->gpu_rb_state !=
-					KBASE_ATOM_GPU_RB_SUBMITTED) {
+			if (katom_idx0 &&
+			    kbase_rb_atom_might_depend(katom, katom_idx0) &&
+			    katom_idx0->gpu_rb_state !=
+				    KBASE_ATOM_GPU_RB_SUBMITTED) {
 				/* Dequeue katom_idx0 from ringbuffer */
 				kbase_gpu_dequeue_atom(kbdev, i, end_timestamp);
 
-				if (katom_idx1 &&
-						katom_idx1->kctx == katom->kctx
-						&& HAS_DEP(katom_idx1) &&
-						katom_idx0->gpu_rb_state !=
-						KBASE_ATOM_GPU_RB_SUBMITTED) {
+				if (katom_idx1 && kbase_rb_atom_might_depend(
+							  katom, katom_idx1) &&
+				    katom_idx0->gpu_rb_state !=
+					    KBASE_ATOM_GPU_RB_SUBMITTED) {
 					/* Dequeue katom_idx1 from ringbuffer */
 					kbase_gpu_dequeue_atom(kbdev, i,
 							end_timestamp);
@@ -1206,11 +1295,10 @@ void kbase_gpu_complete_hw(struct kbase_device *kbdev, int js,
 				katom_idx0->event_code = BASE_JD_EVENT_STOPPED;
 				kbase_jm_return_atom_to_js(kbdev, katom_idx0);
 
-			} else if (katom_idx1 &&
-					katom_idx1->kctx == katom->kctx &&
-					HAS_DEP(katom_idx1) &&
-					katom_idx1->gpu_rb_state !=
-					KBASE_ATOM_GPU_RB_SUBMITTED) {
+			} else if (katom_idx1 && kbase_rb_atom_might_depend(
+							 katom, katom_idx1) &&
+				   katom_idx1->gpu_rb_state !=
+					   KBASE_ATOM_GPU_RB_SUBMITTED) {
 				/* Can not dequeue this atom yet - will be
 				 * dequeued when atom at idx0 completes
 				 */
@@ -1409,33 +1497,63 @@ void kbase_backend_reset(struct kbase_device *kbdev, ktime_t *end_timestamp)
 	kbase_pm_protected_override_disable(kbdev);
 }
 
+/**
+ * should_stop_next_atom - given a soft/hard stop action, determine if the next
+ *                         atom on a slot should be stopped
+ * @kbdev: kbase devices
+ * @head_katom: atom currently in the JSn_HEAD
+ * @next_katom: atom currently in the JSn_HEAD_NEXT
+ * @action: JS_COMMAND_<...> action for soft/hard-stop
+ *
+ * This is used in cases where @head_katom is the target of the soft/hard-stop.
+ * It only makes sense to call this when @head_katom and @next_katom are from
+ * the same slot.
+ *
+ * Return: true if @next_katom should also be stopped with the given action,
+ * false otherwise
+ */
+static bool should_stop_next_atom(struct kbase_device *kbdev,
+				  const struct kbase_jd_atom *head_katom,
+				  const struct kbase_jd_atom *next_katom,
+				  u32 action)
+{
+	bool ret = false;
+	u32 hw_action = action & JS_COMMAND_MASK;
+
+	switch (hw_action) {
+	case JS_COMMAND_SOFT_STOP:
+		ret = kbase_js_atom_runs_before(kbdev, head_katom, next_katom,
+						0u);
+		break;
+	case JS_COMMAND_HARD_STOP:
+		/* Unlike soft-stop, a hard-stop targeting a particular atom
+		 * should not cause atoms from unrelated contexts to be
+		 * removed
+		 */
+		ret = (head_katom->kctx == next_katom->kctx);
+		break;
+	default:
+		/* Other stop actions are possible, but the driver should not
+		 * be generating them at this point in the call chain
+		 */
+		WARN(1, "Unexpected stop action: 0x%.8x", hw_action);
+		break;
+	}
+	return ret;
+}
+
 static inline void kbase_gpu_stop_atom(struct kbase_device *kbdev,
 					int js,
 					struct kbase_jd_atom *katom,
 					u32 action)
 {
+	struct kbase_context *kctx = katom->kctx;
 	u32 hw_action = action & JS_COMMAND_MASK;
 
 	kbase_job_check_enter_disjoint(kbdev, action, katom->core_req, katom);
 	kbasep_job_slot_soft_or_hard_stop_do_action(kbdev, js, hw_action,
 							katom->core_req, katom);
-	katom->kctx->blocked_js[js][katom->sched_priority] = true;
-}
-
-static inline void kbase_gpu_remove_atom(struct kbase_device *kbdev,
-						struct kbase_jd_atom *katom,
-						u32 action,
-						bool disjoint)
-{
-	lockdep_assert_held(&kbdev->hwaccess_lock);
-
-	katom->event_code = BASE_JD_EVENT_REMOVED_FROM_NEXT;
-	kbase_gpu_mark_atom_for_return(kbdev, katom);
-	katom->kctx->blocked_js[katom->slot_nr][katom->sched_priority] = true;
-
-	if (disjoint)
-		kbase_job_check_enter_disjoint(kbdev, action, katom->core_req,
-									katom);
+	kbase_jsctx_slot_prio_blocked_set(kctx, js, katom->sched_priority);
 }
 
 static int should_stop_x_dep_slot(struct kbase_jd_atom *katom)
@@ -1459,7 +1577,9 @@ bool kbase_backend_soft_hard_stop_slot(struct kbase_device *kbdev,
 					u32 action)
 {
 	struct kbase_jd_atom *katom_idx0;
+	struct kbase_context *kctx_idx0 = NULL;
 	struct kbase_jd_atom *katom_idx1;
+	struct kbase_context *kctx_idx1 = NULL;
 
 	bool katom_idx0_valid, katom_idx1_valid;
 
@@ -1473,30 +1593,32 @@ bool kbase_backend_soft_hard_stop_slot(struct kbase_device *kbdev,
 	katom_idx0 = kbase_gpu_inspect(kbdev, js, 0);
 	katom_idx1 = kbase_gpu_inspect(kbdev, js, 1);
 
-	if (katom_idx0)
+	if (katom_idx0) {
+		kctx_idx0 = katom_idx0->kctx;
 		prio_idx0 = katom_idx0->sched_priority;
-	if (katom_idx1)
+	}
+	if (katom_idx1) {
+		kctx_idx1 = katom_idx1->kctx;
 		prio_idx1 = katom_idx1->sched_priority;
+	}
 
 	if (katom) {
 		katom_idx0_valid = (katom_idx0 == katom);
-		/* If idx0 is to be removed and idx1 is on the same context,
-		 * then idx1 must also be removed otherwise the atoms might be
-		 * returned out of order
-		 */
 		if (katom_idx1)
-			katom_idx1_valid = (katom_idx1 == katom) ||
-						(katom_idx0_valid &&
-							(katom_idx0->kctx ==
-							katom_idx1->kctx));
+			katom_idx1_valid = (katom_idx1 == katom);
 		else
 			katom_idx1_valid = false;
 	} else {
-		katom_idx0_valid =
-			(katom_idx0 && (!kctx || katom_idx0->kctx == kctx));
-		katom_idx1_valid =
-			(katom_idx1 && (!kctx || katom_idx1->kctx == kctx));
+		katom_idx0_valid = (katom_idx0 && (!kctx || kctx_idx0 == kctx));
+		katom_idx1_valid = (katom_idx1 && (!kctx || kctx_idx1 == kctx));
 	}
+	/* If there's an atom in JSn_HEAD_NEXT that we haven't already decided
+	 * to stop, but we're stopping the JSn_HEAD atom, see if they are
+	 * related/ordered in some way that would require the same stop action
+	 */
+	if (!katom_idx1_valid && katom_idx0_valid && katom_idx1)
+		katom_idx1_valid = should_stop_next_atom(kbdev, katom_idx0,
+							 katom_idx1, action);
 
 	if (katom_idx0_valid)
 		stop_x_dep_idx0 = should_stop_x_dep_slot(katom_idx0);
@@ -1512,14 +1634,15 @@ bool kbase_backend_soft_hard_stop_slot(struct kbase_device *kbdev,
 				katom_idx1->event_code =
 						BASE_JD_EVENT_REMOVED_FROM_NEXT;
 				kbase_jm_return_atom_to_js(kbdev, katom_idx1);
-				katom_idx1->kctx->blocked_js[js][prio_idx1] =
-						true;
+				kbase_jsctx_slot_prio_blocked_set(kctx_idx1, js,
+								  prio_idx1);
 			}
 
 			katom_idx0->event_code =
 						BASE_JD_EVENT_REMOVED_FROM_NEXT;
 			kbase_jm_return_atom_to_js(kbdev, katom_idx0);
-			katom_idx0->kctx->blocked_js[js][prio_idx0] = true;
+			kbase_jsctx_slot_prio_blocked_set(kctx_idx0, js,
+							  prio_idx0);
 		} else {
 			/* katom_idx0 is on GPU */
 			if (katom_idx1_valid && katom_idx1->gpu_rb_state ==

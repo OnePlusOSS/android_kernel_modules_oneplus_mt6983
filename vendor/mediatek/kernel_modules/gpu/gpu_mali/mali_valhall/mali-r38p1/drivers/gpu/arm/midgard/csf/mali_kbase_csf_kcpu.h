@@ -281,11 +281,20 @@ struct kbase_kcpu_command_queue {
 	struct mutex lock;
 	struct kbase_context *kctx;
 	struct kbase_kcpu_command commands[KBASEP_KCPU_QUEUE_SIZE];
+#if IS_ENABLED(CONFIG_MALI_MTK_KTHREAD_ENHANCE)
+	struct kthread_worker *worker;
+	struct kthread_work work;
+#else
 	struct workqueue_struct *wq;
 	struct work_struct work;
+#endif
 #ifdef CONFIG_MALI_FENCE_DEBUG
 	struct workqueue_struct *timeout_wq;
+#if IS_ENABLED(CONFIG_MALI_MTK_KTHREAD_ENHANCE)
+	struct kthread_work timeout_work;
+#else
 	struct work_struct timeout_work;
+#endif
 #endif /* CONFIG_MALI_FENCE_DEBUG */
 	u8 start_offset;
 	u8 id;

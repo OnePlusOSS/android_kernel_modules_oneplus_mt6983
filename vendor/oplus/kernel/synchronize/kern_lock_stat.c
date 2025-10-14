@@ -798,6 +798,12 @@ static int track_stat_update(int grp_idx, int type, struct track_stat *ts, u64 t
 	if (NULL == ts)
 		return -1;
 
+	if (type >= LOCK_TYPES) {
+		pr_err("[kern_lock_stat] : futex pass error type param,"
+			"type = %d\n", type);
+		return -1;
+	}
+
 	thres_type = waittime_thres_exceed_type(grp_idx, type, time);
 	if (thres_type < 0)
 		return thres_type;

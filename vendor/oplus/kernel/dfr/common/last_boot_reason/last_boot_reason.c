@@ -29,11 +29,14 @@
 #define BUF_SIZE 512
 #define TARGET_DEV_BLOCK "/dev/block/by-name/oplusreserve1"
 #define OPLUS_RESERVE1_SHUDOWN_KERNEL_UFS_START              (1180 * 4096 + 2048)
+#define OPLUS_RESERVE1_SHUDOWN_KERNEL_EMMC_START              (9076 * 512 + 512)
 #define SHUTDOWN_KERNEL_MAGIC "KERNEL_SHD:"
 
 #if LINUX_VERSION_CODE > KERNEL_VERSION(5, 15, 0)
 static int blkdev_fsync(struct file *filp, loff_t start, loff_t end, int datasync);
 #endif
+
+bool ufs_flag = true;
 
 char global_buffer[LAST_BOOT_REASON_MAX_SIZE] = {0};
 static bool shutdown_recorder_enable = false;
@@ -49,6 +52,15 @@ int format_buf(char *buf, size_t size, const char *fmt, ...)
 
     return r;
 }
+
+void set_device_type_for_mmc(void)
+{
+
+    ufs_flag = false;
+
+}
+
+EXPORT_SYMBOL(set_device_type_for_mmc);
 
 #if LINUX_VERSION_CODE > KERNEL_VERSION(5, 15, 0)
 static int blkdev_fsync(struct file *filp, loff_t start, loff_t end,
@@ -132,7 +144,11 @@ static int reboot_callback_func(struct notifier_block *nb,
 #endif
 
     init_sync_kiocb(&kiocb, &dev_map_file);
-    kiocb.ki_pos = OPLUS_RESERVE1_SHUDOWN_KERNEL_UFS_START; /*start header offset*/
+    if (!ufs_flag) {
+        kiocb.ki_pos = OPLUS_RESERVE1_SHUDOWN_KERNEL_EMMC_START; /*start header offset*/
+    } else {
+        kiocb.ki_pos = OPLUS_RESERVE1_SHUDOWN_KERNEL_UFS_START;
+    }
     iov.iov_base = write_buf;
     iov.iov_len = total_len;
     iov_iter_kvec(&iter, WRITE, &iov, 1, total_len);
@@ -293,6 +309,7 @@ static ssize_t shutdown_recorder_show(struct file *file, char __user *buf,
     struct file_operations shutdown_recorder_fops = {
     .write       = shutdown_recorder_trigger,
     .read        = shutdown_recorder_show,
+    };
 #endif
 
 int __init init_last_boot_reason(void)

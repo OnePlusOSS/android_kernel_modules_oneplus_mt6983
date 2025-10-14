@@ -202,7 +202,7 @@ inline int ux_state_to_priority(int ux_state)
 {
 	int prio = (uint)(ux_state & SCHED_ASSIST_UX_PRIORITY_MASK) >> SCHED_ASSIST_UX_PRIORITY_SHIFT;
 
-	DEBUG_BUG_ON(prio < 0 || prio >= PRIORITY_LEVEL_NUM);
+	DEBUG_WARN_ON(prio < 0 || prio >= PRIORITY_LEVEL_NUM);
 
 	if (prio >= PRIORITY_LEVEL_NUM) {
 		prio = PRIORITY_LEVEL_NUM - 1;
@@ -539,6 +539,7 @@ void android_vh_sched_stat_runtime_handler(void *unused, struct task_struct *tas
 	}
 
 	spin_lock_irqsave(orq->ux_list_lock, irqflag);
+	smp_mb__after_spinlock();
 	if (!oplus_rbnode_empty(&ots->ux_entry)) {
 		unsigned int limit;
 

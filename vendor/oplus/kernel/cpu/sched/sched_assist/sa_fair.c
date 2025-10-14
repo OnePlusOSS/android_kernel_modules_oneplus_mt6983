@@ -194,18 +194,98 @@ static inline bool strict_ux_task(struct task_struct *task)
 		&& (task->tgid == save_top_app_tgid) && !is_launcher(task);
 }
 
+/*
+ * The margin used when comparing utilization with CPU capacity.
+ *
+ * (default: ~20%)
+ */
+#define fits_capacity(cap, max)	((cap) * 1280 < (max) * 1024)
+
+#ifdef CONFIG_UCLAMP_TASK
+static inline unsigned long uclamp_task_util(struct task_struct *p)
+{
+	return clamp(oplus_task_util(p),
+		     uclamp_eff_value(p, UCLAMP_MIN),
+		     uclamp_eff_value(p, UCLAMP_MAX));
+}
+#else
+static inline unsigned long uclamp_task_util(struct task_struct *p)
+{
+	return oplus_task_util(p);
+}
+#endif
+
+static inline bool task_fits_capacity(struct task_struct *p, long capacity)
+{
+	return fits_capacity(uclamp_task_util(p), capacity);
+}
+
+static inline bool task_fits_max(struct task_struct *p, int dst_cpu)
+{
+	unsigned long capacity = 0;
+
+#ifdef CONFIG_OPLUS_SYSTEM_KERNEL_QCOM
+	capacity = capacity_orig_of(dst_cpu);
+#else
+	struct rq *rq = cpu_rq(dst_cpu);
+
+	capacity = rq->cpu_capacity;
+#endif
+
+	return task_fits_capacity(p, capacity);
+}
+
+
+/* Todo:  @bug:7901603 This function needs to be put into is_ux_task_prefer_cpu_for_scene */
+#ifdef CONFIG_ARCH_MEDIATEK
+static inline bool ux_eas_skip_little_cluster(struct task_struct *p, int dst_cpu)
+{
+	int cls_id = topology_physical_package_id(dst_cpu);
+	int prefer_cls_id = get_task_cls_for_scene(p);
+
+	if (cls_id == 0 && prefer_cls_id == 0)
+		return task_fits_max(p, dst_cpu);
+
+	return true;
+}
+#endif
+
+static inline bool select_target_cpu_fastpath(struct task_struct *task, int target_cpu)
+{
+	struct rq *orig_rq = cpu_rq(target_cpu);
+	struct oplus_rq *orig_orq = (struct oplus_rq *)orig_rq->android_oem_data1;
+
+	if (test_task_ux(orig_rq->curr))
+		return false;
+
+	if (orq_has_ux_tasks(orig_orq))
+		return false;
+
+	if (orig_rq->rt.rt_nr_running)
+		return false;
+
+#ifdef CONFIG_ARCH_MEDIATEK
+	if (!ux_eas_skip_little_cluster(task, target_cpu))
+		return false;
+#endif
+
+	if (!is_ux_task_prefer_cpu_for_scene(task, target_cpu))
+		return false;
+
+	return true;
+}
+
+
 bool set_ux_task_to_prefer_cpu(struct task_struct *task, int *orig_target_cpu)
 {
-	struct rq *rq = NULL, *orig_rq = NULL;
-	struct oplus_rq *orq = NULL, *orig_orq = NULL;
+	struct rq *rq = NULL;
+	struct oplus_rq *orq = NULL;
 	struct ux_sched_cputopo ux_cputopo = ux_sched_cputopo;
 	int cls_nr = ux_cputopo.cls_nr - 1;
 	int start_cls = -1;
 	int cpu = 0;
 	int direction = -1;
-	int strict_cpu = -1, subopt_cpu = -1;
-	bool walk_next_cls = false;
-	bool invalid_target = false;
+	int subopt_cpu = -1;
 	int orig_cls_id = 0;
 
 	if (unlikely(!global_sched_assist_enabled))
@@ -217,17 +297,12 @@ bool set_ux_task_to_prefer_cpu(struct task_struct *task, int *orig_target_cpu)
 	if (!test_task_ux(task))
 		return false;
 
-	if (*orig_target_cpu < 0 || *orig_target_cpu >= OPLUS_NR_CPUS)
-		invalid_target = true;
-
-	if (!invalid_target) {
-		orig_rq = cpu_rq(*orig_target_cpu);
-		orig_orq = (struct oplus_rq *) orig_rq->android_oem_data1;
+	/* 1. fastpath */
+	if (*orig_target_cpu >= 0 && *orig_target_cpu < OPLUS_NR_CPUS) {
 		orig_cls_id = topology_physical_package_id(*orig_target_cpu);
+		if (select_target_cpu_fastpath(task, *orig_target_cpu))
+			return false;
 	}
-	if (!invalid_target && !test_task_ux(orig_rq->curr) && !orq_has_ux_tasks(orig_orq) && !orig_rq->rt.rt_nr_running &&
-		!sched_assist_scene(SA_LAUNCH) && is_ux_task_prefer_cpu_for_scene(task, *orig_target_cpu))
-		return false;
 
 	start_cls = cls_nr = get_task_cls_for_scene(task);
 	if (start_cls < orig_cls_id) {
@@ -241,19 +316,16 @@ retry:
 		rq = cpu_rq(cpu);
 		orq = (struct oplus_rq *) rq->android_oem_data1;
 
-		if (strict_ux_task(task) && cpu_online(cpu) && cpu_active(cpu) && cpumask_test_cpu(cpu, task->cpus_ptr)) {
-			/*
-			 * If the thread running on the CPU being traversed is neither UX nor RT,
-			 * then it is the best one, otherwise it is an alternative CPU.
-			 */
-			if (oplus_rbtree_empty(&orq->ux_list) && !rt_rq_is_runnable(&rq->rt)) {
-				strict_cpu = cpu;
-				walk_next_cls = false;
-			} else {
-				subopt_cpu = cpu;
-				walk_next_cls = (direction == 1) && (cls_nr != ux_cputopo.cls_nr - 1);
-			}
-		}
+		/* fit status to check if taks util fits cpu capacity */
+		if (cls_nr == 0 && !task_fits_max(task, cpu))
+			break;
+
+		/*
+		 * strict_ux case: The system runs on a heavy load picking no cpu,
+		 *  and prevent EAS picking a small core
+		 */
+		if (strict_ux_task(task) && (subopt_cpu == -1)&& cpu_online(cpu) && cpu_active(cpu) && cpumask_test_cpu(cpu, task->cpus_ptr))
+			subopt_cpu = cpu;
 
 		/* If an ux thread running on this CPU, drop it! */
 		if (oplus_get_ux_state(rq->curr) & SCHED_ASSIST_UX_MASK)
@@ -271,28 +343,21 @@ retry:
 
 		if (cpu_online(cpu) && cpu_active(cpu) && cpumask_test_cpu(cpu, task->cpus_ptr)) {
 			*orig_target_cpu = cpu;
-			trace_set_ux_task_to_prefer_cpu(task, *orig_target_cpu, strict_cpu, cls_nr, start_cls);
+			trace_set_ux_task_to_prefer_cpu(task, "normal", *orig_target_cpu, subopt_cpu, cls_nr, start_cls);
 			return true;
 		}
 	}
 
-	if (strict_ux_task(task)) {
-		if (strict_cpu != -1) {
-			*orig_target_cpu = strict_cpu;
-		} else if (!walk_next_cls) {
-			*orig_target_cpu = subopt_cpu;
-		}
-
-		if (!walk_next_cls) {
-			trace_set_ux_task_to_prefer_cpu(task, *orig_target_cpu, strict_cpu, cls_nr, start_cls);
-			return true;
-		}
-	}
 
 	cls_nr = cls_nr + direction;
 	if (cls_nr > 0 && cls_nr < ux_cputopo.cls_nr)
 		goto retry;
 
+	if (subopt_cpu != -1) {
+		*orig_target_cpu = subopt_cpu;
+		trace_set_ux_task_to_prefer_cpu(task, "subopt", *orig_target_cpu, subopt_cpu, cls_nr, start_cls);
+		return true;
+	}
 	return false;
 }
 EXPORT_SYMBOL(set_ux_task_to_prefer_cpu);
@@ -313,6 +378,7 @@ void oplus_replace_next_task_fair(struct rq *rq, struct task_struct **p, struct 
 		return;
 
 	spin_lock_irqsave(orq->ux_list_lock, irqflag);
+	smp_mb__after_spinlock();
 	if (!orq_has_ux_tasks(orq)) {
 		spin_unlock_irqrestore(orq->ux_list_lock, irqflag);
 		return;
@@ -415,6 +481,7 @@ inline void oplus_check_preempt_wakeup(struct rq *rq, struct task_struct *p, boo
 	/* both of wake_task and curr_task are ux */
 	orq = (struct oplus_rq *) rq->android_oem_data1;
 	spin_lock_irqsave(orq->ux_list_lock, irqflag);
+	smp_mb__after_spinlock();
 	if (!IS_ERR_OR_NULL(ots) && !oplus_rbnode_empty(&ots->ux_entry)) {
 		/* account_ux_runtime(rq, curr); */
 		if (need_wakeup_preempt(orq, ots)) {
@@ -678,6 +745,7 @@ void android_rvh_check_preempt_tick_handler(void *unused, struct task_struct *ta
 	}
 
 	spin_lock_irqsave(orq->ux_list_lock, irqflag);
+	smp_mb__after_spinlock();
 	if (!oplus_rbnode_empty(&ots->ux_entry)) {
 		if (need_resched_ux(orq, ots, delta_exec)) {
 			resched_curr(rq);

@@ -46,6 +46,7 @@
 /*********PART2:Define Area**********************/
 
 #define PAGESIZE 512
+#define MAX_AIINFO_SIZE 4096
 #define MAX_GESTURE_COORD 6
 #define MAX_FINGER_NUM 10
 
@@ -177,6 +178,9 @@
 
 #define MAX_TEMPERATURE             70
 #define MIN_TEMPERATURE             -40
+
+#define MAX_AIUNIT_GET_NUM          30
+#define MAX_AIUNIT_SET_NUM          7
 /*********PART3:Struct Area**********************/
 typedef enum {
 	TYPE_ONCELL = 0,   /*such as synaptic s3706*/
@@ -208,6 +212,7 @@ typedef enum {
 	MODE_PALM_TO_SLEEP,
 	MODE_WATERPROOF,
 	MODE_LEATHER_COVER,
+	MODE_AOD,
 } work_mode;
 
 typedef enum {
@@ -231,6 +236,16 @@ typedef enum {
 	FW_NORMAL,     /*fw might update, depend on the fw id*/
 	FW_ABNORMAL,   /*fw abnormal, need update*/
 } fw_check_state;
+
+/******For Game Hot Zone******/
+struct tp_aiunit_game_info {
+	u8  gametype;
+	u8  aiunit_game_type;
+	u16 left;
+	u16 top;
+	u16 right;
+	u16 bottom;
+};
 
 typedef enum {
 	FW_UPDATE_SUCCESS,
@@ -329,6 +344,7 @@ typedef enum lcd_event_type {
 	LCD_CTL_CS_OFF,
 	LCD_CTL_IRQ_ON,
 	LCD_CTL_IRQ_OFF,
+	LCD_CTL_AOD_OFF = 0x30,
 } lcd_event_type;
 
 typedef enum {
@@ -997,12 +1013,19 @@ struct touchpanel_data {
 	bool tp_data_record_support;                        /*feature used to data record when get tp log*/
 	bool suspend_work_support;                          /*feature used to support suspend work queue*/
 	int glove_enable;                                   /*control state of glove gesture*/
+	int pocket_prevent_mode;
 	bool touch_event_diasble;                           /*diasble touch event report*/
 	int leather_cover_enable;                           /*control state of leather_cover gesture*/
 	bool force_bus_ready_support;                       /*force bus ready to true afer notify*/
 	bool skip_reinit_device_support;                    /*spi need skip complete_all, prevent error in access reg*/
 	bool edge_pull_out_support;                         /*feature used to edge coordinates pull out*/
+	bool aiunit_game_info_support;                      /*feature used to aiunit game info*/
+	u8 aiunit_game_get_num;
+	u8 aiunit_game_set_num;
+	int aiunit_game_enable;
+	u32 aiunit_game_valid_bits;
 	/******For FW update area********/
+	bool lpwg_fw_support;                               /*feature to support low power wakeup gesture firmware and effect firmware are separated.*/
 	bool loading_fw;                                    /*touchpanel FW updating*/
 	int firmware_update_type;                           /*firmware_update_type: 0=check firmware version 1=force update; 2=for FAE debug*/
 	struct completion fw_complete;						/*completion for control fw update*/
@@ -1019,6 +1042,7 @@ struct touchpanel_data {
 	struct engineer_test_operations   *engineer_ops;     /*call_back function*/
 	bool auto_test_need_cal_support;
 	bool sportify_aod_gesture_support;
+	bool aod_gesture_support;
 	/******For button key area********/
 	/*every bit declear one state of key "reserve(keycode)|home(keycode)|menu(keycode)|back(keycode)"*/
 	u8   vk_bitmap;
@@ -1047,6 +1071,8 @@ struct touchpanel_data {
 	struct gesture_info    gesture;                     /*gesture related info*/
 	int gesture_enable_indep;                         /*independent control state of black gesture*/
 
+	bool in_aod_flag;
+	bool out_aod_flag;
 	/******For fingerprint area********/
 	int fp_enable;                                      /*underscreen fingerprint enable or not*/
 	int fp_quick_start_data;                            /*for fingerprint quick start featrue*/
@@ -1091,6 +1117,9 @@ struct touchpanel_data {
 	struct touchpanel_last_x_y_point   last_x_y_point[MAX_FINGER_NUM];        /*last_x_y_point data*/
 	struct exception_data    exception_data;			/*exception_data monitor data*/
 
+	/******For Game Hot Zone*******/
+	struct tp_aiunit_game_info tp_ic_aiunit_game_info[MAX_AIUNIT_SET_NUM];    /*tp ic aiunit game info*/
+	struct tp_aiunit_game_info tp_get_aiunit_game_info[MAX_AIUNIT_GET_NUM];   /*tp get aiunit game info*/
 	/******For prevention area********/
 	struct mutex		report_mutex;                /*mutex for lock input report flow*/
 	struct kernel_grip_info *grip_info;	/*grip setting and resources*/
@@ -1384,6 +1413,7 @@ struct oplus_touchpanel_operations {
 	void (*get_pen_points)       (void *chip_data, struct pen_info *pen_info);
 	int (*pen_uplink_msg)(void *chip_data, u32 buf_len, u8 *buf, u32 *out_len);
 	int (*pen_downlink_msg)(void *chip_data, u32 cmd, u32 buf_len, u8 *buf);
+	void (*aiunit_game_info)(void *chip_data);
 };
 
 struct aging_test_proc_operations {

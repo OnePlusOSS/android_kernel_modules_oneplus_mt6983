@@ -64,4 +64,6 @@
 #include <linux/timekeeping.h>
 #endif
 
+void set_device_type_for_mmc(void);
+
 #endif

@@ -963,7 +963,7 @@ void mtk_common_gpu_fence_debug_dump(int fd, int pid, int type, int timeouts)
 
 	lockdep_on();
 
-#if IS_ENABLED(CONFIG_MALI_MTK_DEBUG) && IS_ENABLED(CONFIG_MALI_MTK_FENCE_DEBUG)
+#if IS_ENABLED(CONFIG_MALI_MTK_DEBUG) && IS_ENABLED(CONFIG_MALI_MTK_FENCE_DEBUG) && IS_ENABLED(CONFIG_MALI_CSF_SUPPORT)
 	if (!mtk_common_gpufreq_bringup()) {
 //#ifdef CONFIG_MALI_FENCE_DEBUG
 //		if (timeouts > 3000)

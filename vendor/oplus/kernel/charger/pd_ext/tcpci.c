@@ -671,28 +671,6 @@ int tcpci_notify_hvdcp_detect_dn(struct tcpc_device *tcpc, bool hvdcp_detect_dn)
 }
 EXPORT_SYMBOL(tcpci_notify_hvdcp_detect_dn);
 
-int tcpci_notify_switch_get_state(struct tcpc_device *tcpc, bool (*pfunc)(int))
-{
-	struct tcp_notify tcp_noti;
-
-	tcp_noti.switch_get_status.pfunc = pfunc;
-	return tcpc_check_notify_time(tcpc, &tcp_noti, TCP_NOTIFY_IDX_MISC,
-				TCP_NOTIFY_SWITCH_GET_STATE);
-}
-EXPORT_SYMBOL(tcpci_notify_switch_get_state);
-
-int tcpci_notify_switch_set_state(struct tcpc_device *tcpc, bool state, bool (*pfunc)(int))
-{
-	struct tcp_notify tcp_noti;
-
-	tcp_noti.switch_set_status.state = state;
-	tcp_noti.switch_set_status.pfunc = pfunc;
-	pr_err("%s state: %d\n", __func__, state);
-	return tcpc_check_notify_time(tcpc, &tcp_noti, TCP_NOTIFY_IDX_MISC,
-			TCP_NOTIFY_SWITCH_SET_STATE);
-}
-EXPORT_SYMBOL(tcpci_notify_switch_set_state);
-
 bool tcpm_inquire_usb_comm(struct tcpc_device *tcpc)
 {
 	struct pd_port *pd_port = &tcpc->pd_port;

@@ -679,6 +679,7 @@ void ili_set_gesture_symbol(void)
 	}
 
 	ILI_DBG(" double_tap = %d\n", ilits->ges_sym.double_tap);
+	ILI_DBG(" single_tap = %d\n", ilits->ges_sym.single_tap);
 	ILI_DBG(" alphabet_line_2_top = %d\n", ilits->ges_sym.alphabet_line_2_top);
 	ILI_DBG(" alphabet_line_2_bottom = %d\n",
 		ilits->ges_sym.alphabet_line_2_bottom);
@@ -798,6 +799,135 @@ u8 ili_calc_packet_checksum(u8 *packet, int len)
 
 	return (u8)((-sum) & 0xFF);
 }
+
+int ili_touch_aod_gesture_iram(void)
+{
+	int ret = 0, retry = 100;
+	u32 answer = 0;
+	int ges_pwd_addr = SPI_ESD_GESTURE_CORE146_PWD_ADDR;
+	int ges_pwd = AOD_GESTURE_CORE146_PWD;
+	int ges_run = SPI_ESD_GESTURE_CORE146_RUN;
+	int pwd_len = 2;
+	ret = ili_ice_mode_ctrl(ENABLE, OFF);
+
+	if (ret < 0) {
+		ILI_ERR("Enable ice mode failed during gesture recovery\n");
+		return ret;
+	}
+
+	if (!ilits->gesture_load_code) {
+		ges_run = I2C_ESD_GESTURE_CORE146_RUN;
+	}
+
+	if (ilits->chip->core_ver < CORE_VER_1460) {
+		if (ilits->chip->core_ver >= CORE_VER_1420) {
+			ges_pwd_addr = I2C_ESD_GESTURE_PWD_ADDR;
+
+		} else {
+			ges_pwd_addr = SPI_ESD_GESTURE_PWD_ADDR;
+		}
+
+		ges_pwd = ESD_GESTURE_PWD;
+		ges_run = SPI_ESD_GESTURE_RUN;
+		pwd_len = 4;
+	}
+
+	ILI_INFO("AOD Gesture PWD Addr = 0x%X, PWD = 0x%X, GES_RUN = 0x%X, core_ver = 0x%X\n",
+		 ges_pwd_addr, ges_pwd, ges_run, ilits->chip->core_ver);
+	/* write a special password to inform FW go back into gesture mode */
+	ret = ili_ice_mode_write(ges_pwd_addr, ges_pwd, pwd_len);
+
+	if (ret < 0) {
+		ILI_ERR("write password failed\n");
+		goto out;
+	}
+
+	/* Host download gives effect to FW receives password successed */
+	ilits->actual_tp_mode = P5_X_FW_AP_MODE;
+	ret = ili_fw_upgrade_handler();
+
+	if (ret < 0) {
+		ILI_ERR("FW upgrade failed during gesture recovery\n");
+		goto out;
+	}
+
+	/* Wait for fw running code finished. */
+	if (ilits->info_from_hex || (ilits->chip->core_ver >= CORE_VER_1410)) {
+		msleep(50);
+	}
+
+	ret = ili_ice_mode_ctrl(ENABLE, ON);
+
+	if (ret < 0) {
+		ILI_ERR("Enable ice mode failed during gesture recovery\n");
+		goto fail;
+	}
+
+	/* polling another specific register to see if gesutre is enabled properly */
+	do {
+		ret = ili_ice_mode_read(ges_pwd_addr, &answer, pwd_len);
+
+		if (ret < 0) {
+			ILI_ERR("Read gesture answer error\n");
+			goto fail;
+		}
+
+		if (answer != ges_run) {
+			ILI_INFO("ret = 0x%X, answer = 0x%X\n", answer, ges_run);
+		}
+
+		mdelay(1);
+	} while (answer != ges_run && --retry > 0);
+
+	if (retry <= 0) {
+		ILI_ERR("Enter gesture failed\n");
+		ret = -1;
+		goto fail;
+	}
+
+	ILI_INFO("Enter gesture successfully\n");
+	ret = ili_ice_mode_ctrl(DISABLE, ON);
+
+	if (ret < 0) {
+		ILI_ERR("Disable ice mode failed during gesture recovery\n");
+		goto fail;
+	}
+
+	ILI_INFO("Gesture code loaded by %s\n",
+		 ilits->gesture_load_code ? "driver" : "firmware");
+
+	if (!ilits->gesture_load_code) {
+		ilits->actual_tp_mode = P5_X_FW_GESTURE_MODE;
+		ili_set_tp_data_len(ilits->gesture_mode, false, NULL);
+		goto out;
+	}
+
+	/* Load gesture code */
+	ilits->actual_tp_mode = P5_X_FW_GESTURE_MODE;
+	ili_set_tp_data_len(ilits->gesture_mode, false, NULL);
+	ret = ili_fw_upgrade_handler();
+
+	if (ret < 0) {
+		ILI_ERR("Failed to load code during gesture recovery\n");
+		goto out;
+	}
+
+	/* Resume gesture loader */
+	ret = ili_ic_func_ctrl("lpwg", 0x6);
+
+	if (ret < 0) {
+		ILI_ERR("write resume loader error");
+		goto fail;
+	}
+
+out:
+	return ret;
+fail:
+	ilits->actual_tp_mode = P5_X_FW_GESTURE_MODE;
+	ili_ice_mode_ctrl(DISABLE, ON);
+	return ret;
+}
+
 
 int ili_touch_esd_gesture_iram(void)
 {
@@ -1464,6 +1594,27 @@ void ili_report_debug_lite_mode(u8 *buf, int len)
 	ilitek_tddi_touch_send_debug_data(buf, len);
 }
 
+int ili_aod_control(bool ctrl)
+{
+	int ret = 0;
+	ILI_INFO("AOD control start\n");
+
+	if (ctrl) {
+		ILI_INFO("Doing aod gesture\n");
+		ret = ili_touch_aod_gesture_iram();
+		ilits->aod_in = 1;
+		if (ret < 0) {
+			ILI_ERR("AOD in fail\n");
+		}
+	} else {
+		ILI_INFO("Doing actual ap mode \n");
+		ili_sleep_handler(TP_RESUME);
+		ilits->aod_in = 0;
+	}
+	ILI_INFO("AOD control end\n");
+	return ret;
+}
+
 void ili_report_gesture_mode(u8 *buf, int len)
 {
 	int lu_x = 0, lu_y = 0, rd_x = 0, rd_y = 0, score = 0;
@@ -1528,6 +1679,12 @@ void ili_report_gesture_mode(u8 *buf, int len)
 	switch (gc->code) {
 	case GESTURE_DOUBLECLICK:
 		gc->type  = DOU_TAP;
+		gc->clockwise = 1;
+		gc->pos_end.x = gc->pos_start.x;
+		gc->pos_end.y = gc->pos_start.y;
+		break;
+	case GESTURE_SINGLECLICK:
+		gc->type  = SINGLE_TAP;
 		gc->clockwise = 1;
 		gc->pos_end.x = gc->pos_start.x;
 		gc->pos_end.y = gc->pos_start.y;
@@ -2009,7 +2166,10 @@ int ili_sleep_handler(int mode)
 				ILI_ERR("Write sleep in cmd failed\n");
 			}
 		}
-
+		if (ilits->ts->aod_gesture_support) {
+			ilits->aod_in = 0;
+			ILI_INFO("tp suspend aod_in set 0 \n");
+		}
 		ILI_INFO("TP suspend end\n");
 		break;
 
@@ -2035,6 +2195,10 @@ int ili_sleep_handler(int mode)
 				ILI_ERR("Write deep sleep in cmd failed\n");
 			}
 		}
+		if (ilits->ts->aod_gesture_support) {
+			ilits->aod_in = 0;
+			ILI_INFO("tp suspend aod_in set 0 \n");
+		}
 
 		ILI_INFO("TP deep suspend end\n");
 		break;
@@ -2054,6 +2218,10 @@ int ili_sleep_handler(int mode)
 			if (ili_reset_ctrl(ilits->reset) < 0) {
 				ILI_ERR("TP Reset failed during resume\n");
 			}
+		}
+		if (ilits->ts->aod_gesture_support) {
+			ilits->aod_in = 0;
+			ILI_INFO("tp suspend aod_in set 0 \n");
 		}
 
 		ilits->tp_suspend = false;
@@ -2253,6 +2421,36 @@ int ili_set_tp_data_len(int format, bool send, u8 *data)
 	return ret;
 }
 
+void ili_aod_gesture_mode (u8 *buf, int len)
+{
+	u8 ges[P5_X_GESTURE_INFO_LENGTH_HIGH_RESOLUTION] = {0};
+	struct gesture_coordinate *gc = ilits->gcoord;
+
+	ipio_memcpy(ges, buf, len, P5_X_GESTURE_INFO_LENGTH_HIGH_RESOLUTION);
+
+	memset(gc, 0x0, sizeof(struct gesture_coordinate));
+
+	gc->code = ges[1];
+	ILI_INFO("aod_gesture_mode start!\n");
+	ILI_INFO("%s : gesture type 0x%x \n", __func__, gc->code);
+	switch (gc->code) {
+	case GESTURE_DOUBLECLICK:
+		gc->type  = DOU_TAP;
+		gc->clockwise = 1;
+		gc->pos_end.x = gc->pos_start.x;
+		gc->pos_end.y = gc->pos_start.y;
+		break;
+	case GESTURE_SINGLECLICK:
+		gc->type  = SINGLE_TAP;
+		gc->clockwise = 1;
+		gc->pos_end.x = gc->pos_start.x;
+		gc->pos_end.y = gc->pos_start.y;
+		break;
+	default:
+		ILI_ERR("Unknown gesture code\n");
+		break;
+	}
+}
 int ili_report_handler(void *chip_data)
 {
 	struct ilitek_ts_data *chip_info = (struct ilitek_ts_data *)chip_data;
@@ -2381,6 +2579,10 @@ int ili_report_handler(void *chip_data)
 
 	case P5_X_DEMO_DEBUG_INFO_PACKET_ID:
 		ili_demo_debug_info_mode(trdata, rlen);
+		break;
+
+	case P5_X_GESTURE_AOD_ID:
+		ili_aod_gesture_mode(trdata, rlen);
 		break;
 
 	default:
@@ -2712,6 +2914,7 @@ static void ilitek_reset_queue_work_prepare(void *chip_data)
 		ili_ice_mode_ctrl(ENABLE, OFF);
 		chip_info->ddi_rest_done = true;
 	}
+	ilits->aod_in = 0;
 	/*mdelay(5);*/
 	mutex_unlock(&chip_info->touch_mutex);
 }
@@ -2723,11 +2926,13 @@ static int ilitek_reset(void *chip_data)
 	mutex_lock(&chip_info->touch_mutex);
 	ilits->tp_suspend = false;
 	chip_info->actual_tp_mode = P5_X_FW_AP_MODE;
+	ILI_INFO("\n");
 	ret = ili_fw_upgrade_handler();
 
 	if (ret < 0) {
 		ILI_ERR("Failed to upgrade firmware, ret = %d\n", ret);
 	}
+	ilits->aod_in = 0;
 
 	mutex_unlock(&chip_info->touch_mutex);
 	return 0;
@@ -2888,7 +3093,8 @@ static int ilitek_mode_switch(void *chip_data, work_mode mode, int flag)
 		ILI_INFO("doing other process!\n");
 		return ret;
 	}
-
+	ILI_INFO("mode switch start!\n");
+	ILI_INFO("MODE TYPE is %d \n", mode);
 	mutex_lock(&chip_info->touch_mutex);
 
 	switch (mode) {
@@ -2908,6 +3114,10 @@ static int ilitek_mode_switch(void *chip_data, work_mode mode, int flag)
 		}
 
 		break;
+	case MODE_AOD:
+		ILI_INFO("MODE_AOD flag = %d\n", flag);
+		ret = ili_aod_control(flag);
+		break;
 
 	case MODE_GESTURE:
 		ILI_INFO("MODE_GESTURE flag = %d\n", flag);
@@ -2923,6 +3133,8 @@ static int ilitek_mode_switch(void *chip_data, work_mode mode, int flag)
 			if (chip_info->actual_tp_mode != P5_X_FW_GESTURE_MODE) {
 				ili_sleep_handler(TP_SUSPEND);
 
+			} else if (ilits->aod_in && ilits->ts->aod_gesture_support) {
+				ili_sleep_handler(TP_SUSPEND);
 			} else {
 				ili_proximity_far(WAKE_UP_SWITCH_GESTURE_MODE);
 			}
@@ -2967,6 +3179,11 @@ static int ilitek_mode_switch(void *chip_data, work_mode mode, int flag)
 		break;
 
 	case MODE_HEADSET:
+		if (ilits->aod_in && ilits->ts->aod_gesture_support) {
+			ILI_DBG("aod state not set MODE_HEADSET\n");
+			break;
+		}
+
 		ILI_INFO("MODE_HEADSET flag = %d\n", flag);
 
 		if (ili_ic_func_ctrl("ear_phone", flag) < 0) {
@@ -2976,6 +3193,11 @@ static int ilitek_mode_switch(void *chip_data, work_mode mode, int flag)
 		break;
 
 	case MODE_CHARGE:
+		if (ilits->aod_in && ilits->ts->aod_gesture_support) {
+			ILI_DBG("aod state not set MODE_CHARGE\n");
+			break;
+		}
+
 		ILI_INFO("MODE_CHARGE flag = %d\n", flag);
 
 		if (ili_ic_func_ctrl("plug", !flag) < 0) {
@@ -2985,6 +3207,10 @@ static int ilitek_mode_switch(void *chip_data, work_mode mode, int flag)
 		break;
 
 	case MODE_GAME:
+		if (ilits->aod_in && ilits->ts->aod_gesture_support) {
+			ILI_DBG("aod state not set MODE_GAME\n");
+			break;
+		}
 		ILI_INFO("MODE_GAME flag = %d\n", flag);
 
 		if (ili_ic_func_ctrl("lock_point", !flag) < 0) {
@@ -2994,7 +3220,8 @@ static int ilitek_mode_switch(void *chip_data, work_mode mode, int flag)
 		break;
 
 	case MODE_GLOVE:
-		ILI_INFO("MODE_GLOVE flag = %d\n", flag);
+		ILI_INFO("MODE_GLOVE flag = %d ts->pocket_prevent_mode = %d\n",
+			flag, chip_info->ts->pocket_prevent_mode);
 
 		if (ili_ic_func_ctrl("glove", flag) < 0) {
 			ILI_ERR("write MODE_GLOVE flag failed\n");
@@ -3005,6 +3232,7 @@ static int ilitek_mode_switch(void *chip_data, work_mode mode, int flag)
 	default:
 		ILI_INFO("%s: Wrong mode.\n", __func__);
 	}
+	ILI_INFO("mode switch end!\n");
 
 	mutex_unlock(&chip_info->touch_mutex);
 	return ret;
@@ -3112,7 +3340,11 @@ static int ilitek_get_vendor(void *chip_data, struct panel_info *panel_data)
 	struct ilitek_ts_data *chip_info = (struct ilitek_ts_data *)chip_data;
 	chip_info->tp_type = panel_data->tp_type;
 	/*get ftm firmware ini from touch.h*/
-	chip_info->p_firmware_headfile = chip_info->ts->firmware_in_dts;
+	if (chip_info->ts->firmware_in_dts != NULL) {
+		chip_info->p_firmware_headfile = chip_info->ts->firmware_in_dts;
+	} else {
+		chip_info->p_firmware_headfile_h = &panel_data->firmware_headfile;
+	}
 	ILI_INFO("chip_info->tp_type = %d, "
 		 "panel_data->test_limit_name = %s, panel_data->fw_name = %s\n",
 		 chip_info->tp_type,
@@ -3159,6 +3391,10 @@ static int ilitek_smooth_lv_set(void *chip_data, int level)
 	struct ilitek_ts_data *chip_info = (struct ilitek_ts_data *)chip_data;
 	int ret = 0;
 	uint8_t temp[4] = {0x01, 0x0B, 0x02, 0x00};
+	if (ilits->aod_in && ilits->ts->aod_gesture_support) {
+		ILI_DBG("aod state not set smooth\n");
+		return ret;
+	}
 
 	mutex_lock(&chip_info->touch_mutex);
 	temp[3] = level;
@@ -3173,6 +3409,10 @@ static int ilitek_sensitive_lv_set(void *chip_data, int level)
 	struct ilitek_ts_data *chip_info = (struct ilitek_ts_data *)chip_data;
 	int ret = 0;
 	uint8_t temp[4] = {0x01, 0x0B, 0x01, 0x00};
+	if (ilits->aod_in && ilits->ts->aod_gesture_support) {
+		ILI_DBG("aod state not set sensitive\n");
+		return ret;
+	}
 
 	mutex_lock(&chip_info->touch_mutex);
 	temp[3] = level;
@@ -3783,6 +4023,9 @@ static int  ili_apk_gesture_info(void *chip_data, char *buf, int len)
 		case GESTURE_DOUBLECLICK:
 			buf[0]  = DOU_TAP;
 			break;
+		case GESTURE_SINGLECLICK:
+			buf[0]  = SINGLE_TAP;
+			break;
 
 		case GESTURE_V :
 			buf[0]  = UP_VEE;
@@ -4017,6 +4260,7 @@ static void ilitek_flag_data_init(void)
 	ilits->wait_int_timeout = AP_INT_TIMEOUT;
 	ilits->gesture = DISABLE;
 	ilits->ges_sym.double_tap = DOUBLE_TAP;
+	ilits->ges_sym.single_tap = SINGL_TAP;
 	ilits->ges_sym.alphabet_line_2_top = ALPHABET_LINE_2_TOP;
 	ilits->ges_sym.alphabet_line_2_bottom = ALPHABET_LINE_2_BOTTOM;
 	ilits->ges_sym.alphabet_line_2_left = ALPHABET_LINE_2_LEFT;
@@ -4192,7 +4436,11 @@ int ilitek7807s_spi_probe(struct spi_device *spi)
 	ts->chip_data = ilits;
 	ilits->hw_res = &ts->hw_res;
 	/*get ftm firmware ini from touch.h*/
-	ilits->p_firmware_headfile = ts->firmware_in_dts;
+	if (ts->firmware_in_dts) {
+		ilits->p_firmware_headfile = ts->firmware_in_dts;
+	} else {
+		ilits->p_firmware_headfile_h = &ts->panel_data.firmware_headfile;
+	}
 	/*idev->tp_type = TP_AUO;*/
 	ts->ts_ops = &ilitek_ops;
 	ts->engineer_ops = &ilitek_7807_engineer_test_ops;
@@ -4231,8 +4479,14 @@ int ilitek7807s_spi_probe(struct spi_device *spi)
 	}
 	ILI_INFO("position_high_resolution = %d\n", ilits->position_high_resolution);
 
-	if (!ERR_ALLOC_MEM(ilits->p_firmware_headfile)) {
-		ILI_INFO("ILI firmware_size = 0x%X\n", (u32)ilits->p_firmware_headfile->size);
+	if (ts->firmware_in_dts) {
+		if (!ERR_ALLOC_MEM(ilits->p_firmware_headfile)) {
+			ILI_INFO("ILI firmware_size = 0x%X\n", (u32)ilits->p_firmware_headfile->size);
+		}
+	} else {
+		if (!ERR_ALLOC_MEM(ilits->p_firmware_headfile_h)) {
+			ILI_INFO("ILI firmware_h_size = 0x%X\n", (u32)ilits->p_firmware_headfile_h->firmware_size);
+		}
 	}
 
 	/*ili_irq_disable();*/

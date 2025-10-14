@@ -7,7 +7,7 @@ struct tcs_command TcsCmd[] = {
 	{  5,  0, 0, 1, 0 },	/* TP_STD_CMD_INFO_FW_VER_RO */
 	{  7,  0, 0, 1, 0 },	/* TP_STD_CMD_INFO_TOUCH_XY_INFO_RO */
 	{ 17,  0, 0, 1, 0 },	/* TP_STD_CMD_INFO_MODULE_ID_RO */
-	
+
 	{  1,  1, 1, 1, 0 },	/* TP_STD_CMD_TP_DATA_OFFSET_AND_TYPE_CFG_RW */
 	{  2,  1, 0, 1, 0 },	/* TP_STD_CMD_TP_DATA_READ_START_RO */
 	{  3,  1, 0, 1, 0 },	/* TP_STD_CMD_TP_DATA_COORDINATES_RO */
@@ -19,7 +19,7 @@ struct tcs_command TcsCmd[] = {
 	{ 21,  1, 1, 0, 0 },	/* TP_STD_CMD_TP_DATA_WR_REG_RAM_BATCH_WO */
 	{ 22,  1, 1, 0, 0 },	/* TP_STD_CMD_TP_DATA_WR_DDI_REG_SEQUENCE_WO */
 	{ 35,  1, 0, 1, 0 },	/* TP_STD_CMD_GET_DATA_BY_POLLING_RO */
-	
+
 	{  0,  2, 0, 1, 0 },	/* TP_STD_CMD_SYS_STS_READ_RO */
 	{  1,  2, 1, 1, 0 },	/* TP_STD_CMD_SYS_STS_WORK_MODE_RW */
 	{  3,  2, 1, 1, 0 },	/* TP_STD_CMD_SYS_STS_DAT_RDY_FLAG_RW */
@@ -48,28 +48,29 @@ struct tcs_command TcsCmd[] = {
 	{ 86,  2, 1, 1, 0 },    /*TP_STD_CMD_SYS_STS_sensitive*/
 	{ 87,  2, 1, 1, 0 },    /*TP_STD_CMD_SYS_STS_ctrl_rate*/
 	{ 88,  2, 1, 1, 0 },    /*TP_STD_CMD_SYS_STS_get_water_flag*/
-	
+	{ 89,  2, 1, 1, 0 },    /*TP_STD_CMD_SYS_STS_AOD_MODE_EN_RW*/
+
 	{  1,  3, 1, 1, 0 },	/* TP_STD_CMD_GSTR_WAKEUP_EN_RW */
 	{ 30,  3, 1, 1, 0 },	/* TP_STD_CMD_GSTR_DAT_RDY_FLAG_GSTR_RW */
 	{ 32,  3, 1, 1, 0 },	/* TP_STD_CMD_GSTR_RAW_DBG_MODE_RW */
 	{ 40,  3, 1, 1, 0 },	/* TP_STD_CMD_GSTR_ENTER_MAP_RW */
 	{ 43,  3, 1, 1, 0 },	/* TP_STD_CMD_GSTR_RECOVER_PWR_MODE_RW */
-	
+
 	{  1,  4, 1, 1, 0 },	/* TP_STD_CMD_MNT_EN_RW */
 	{  3,  4, 1, 0, 0 },	/* TP_STD_CMD_MNT_FORCE_EXIT_MNT_WO */
-	
+
 	{  1,  5, 1, 1, 0 },	/* TP_STD_CMD_DDI_ESD_EN_RW */
 	{  2,  5, 1, 1, 0 },	/* TP_STD_CMD_DDI_ESD_OPTIONS_RW */
-	
+
 	{  1,  6, 1, 1, 0 },	/* TP_STD_CMD_CNEG_EN_RW */
 	{  2,  6, 1, 1, 0 },	/* TP_STD_CMD_CNEG_OPTIONS_RW */
-	
+
 	{  2,  7, 1, 1, 0 },	/* TP_STD_CMD_COORD_FLIP_X_EN_RW */
 	{  3,  7, 1, 1, 0 },	/* TP_STD_CMD_COORD_FLIP_Y_EN_RW */
 	{  4,  7, 1, 1, 0 },	/* TP_STD_CMD_COORD_SWAP_AXES_EN_RW */
 	{ 18,  9, 1, 1, 0 },	/* TP_STD_CMD_PARA_WATER_MODE_RW */
 	{ 42,  9, 1, 1, 0 },	/* TP_STD_CMD_PARA_PROXI_EN_RW */
-	
+
 	{  1, 11, 1, 1, 0 },	/* TP_STD_CMD_OPENSHORT_EN_RW */
 	{  2, 11, 1, 1, 0 },	/* TP_STD_CMD_OPENSHORT_MODE_SEL_RW */
 	{  3, 11, 1, 1, 0 },	/* TP_STD_CMD_OPENSHORT_SHORT_SEL_RW */

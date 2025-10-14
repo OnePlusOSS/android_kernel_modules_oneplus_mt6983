@@ -7,6 +7,7 @@
 #include <linux/irqflags.h>
 #include <connectivity_build_in_adapter.h>
 #include <linux/pm_runtime.h>
+#include <linux/ktime.h>
 
 #include "consys_hw.h" /* for semaphore index */
 /* platform dependent */
@@ -33,7 +34,7 @@
 #define MT6637E1 0x66378A00
 #define MT6637E2 0x66378A01
 
-#define SEMA_HOLD_TIME_THRESHOLD 5 //5 ms
+#define SEMA_HOLD_TIME_THRESHOLD 500 //us
 /*******************************************************************************
 *                             D A T A   T Y P E S
 ********************************************************************************
@@ -53,8 +54,8 @@ struct a_die_reg_config {
 *                  F U N C T I O N   D E C L A R A T I O N S
 ********************************************************************************
 */
-static u64 sema_get_time[CONN_SEMA_NUM_MAX];
-static u64 log_sema_time[10];
+static ktime_t sema_get_time[CONN_SEMA_NUM_MAX];
+static s64 log_sema_time[10];
 static unsigned int sema_count = 0;
 static unsigned long g_sema_irq_flags = 0;
 
@@ -404,7 +405,7 @@ int consys_sema_acquire_timeout_mt6895(unsigned int index, unsigned int usec)
 		return CONN_SEMA_GET_FAIL;
 	for (i = 0; i < usec; i++) {
 		if (consys_sema_acquire(index) == CONN_SEMA_GET_SUCCESS) {
-			sema_get_time[index] = jiffies;
+			sema_get_time[index] = ktime_get();
 			if (index == CONN_SEMA_RFSPI_INDEX)
 				local_irq_save(g_sema_irq_flags);
 			return CONN_SEMA_GET_SUCCESS;
@@ -427,29 +428,38 @@ int consys_sema_acquire_timeout_mt6895(unsigned int index, unsigned int usec)
 
 void consys_sema_release_mt6895(unsigned int index)
 {
-	u64 duration;
+	s64 duration;
+	int wifi_queueing;
 
 	if (index >= CONN_SEMA_NUM_MAX)
 		return;
+
+	/* check whether wifi is queueing before releasing semaphore */
+	wifi_queueing = CONSYS_REG_READ(CONN_SEMAPHORE_CONN_SEMA_M0_QUEUEING_STA_REP_1_ADDR) & (0x1 << index);
+	/* release semaphore */
 	CONSYS_REG_WRITE(
 		(CONN_SEMAPHORE_CONN_SEMA00_M2_OWN_REL_ADDR + index*4), 0x1);
 
-	duration = jiffies_to_msecs(jiffies - sema_get_time[index]);
+	duration = ktime_us_delta(ktime_get(), sema_get_time[index]);
 	if (index == CONN_SEMA_RFSPI_INDEX) {
 		local_irq_restore(g_sema_irq_flags);
-
 		if (sema_count == 10)
 			sema_count = 0;
 
 		log_sema_time[sema_count] = duration;
 		sema_count++;
 		/* delay for firmware to take semaphore */
-		udelay(2);
+		if (wifi_queueing) {
+			pr_notice("%s wifi mcu is queueing for rfspi semaphore.\n", __func__);
+			udelay(10);
+		} else {
+			udelay(2);
+		}
 	}
 
 	if (duration > SEMA_HOLD_TIME_THRESHOLD) {
-		pr_notice("%s hold semaphore (%d) for %llu ms\n", __func__, index, duration);
-		pr_notice("[%s] log_sema_time: [%llu][%llu][%llu][%llu][%llu][%llu][%llu][%llu][%llu][%llu]\n",
+		pr_notice("%s hold semaphore (%d) for %lld us\n", __func__, index, duration);
+		pr_notice("[%s] log_sema_time(us): [%lld][%lld][%lld][%lld][%lld][%lld][%lld][%lld][%lld][%lld]\n",
 			__func__, log_sema_time[0], log_sema_time[1], log_sema_time[2], log_sema_time[3],
 			log_sema_time[4], log_sema_time[5], log_sema_time[6],
 			log_sema_time[7], log_sema_time[8], log_sema_time[9]);
@@ -544,7 +554,7 @@ int consys_spi_read_nolock_mt6895(enum sys_spi_subsystem subsystem, unsigned int
 	}
 #ifndef CONFIG_FPGA_EARLY_PORTING
 	CONSYS_REG_BIT_POLLING(
-		CONN_REG_CONN_RF_SPI_MST_REG_ADDR + op->busy_cr, op->polling_bit, 0, 100, 50, check);
+		CONN_REG_CONN_RF_SPI_MST_REG_ADDR + op->busy_cr, op->polling_bit, 0, 1000, 5, check);
 	if (check != 0) {
 		pr_notice("[%s][%s][STEP1] polling 0x%08x bit %d fail. Value=0x%08x\n",
 			__func__, get_spi_sys_name(subsystem), CONN_REG_CONN_RF_SPI_MST_REG_ADDR + op->busy_cr,
@@ -562,7 +572,7 @@ int consys_spi_read_nolock_mt6895(enum sys_spi_subsystem subsystem, unsigned int
 	udelay(1);
 	check = 0;
 	CONSYS_REG_BIT_POLLING(
-		CONN_REG_CONN_RF_SPI_MST_REG_ADDR + op->busy_cr, op->polling_bit, 0, 100, 50, check);
+		CONN_REG_CONN_RF_SPI_MST_REG_ADDR + op->busy_cr, op->polling_bit, 0, 1000, 5, check);
 	if (check != 0) {
 		pr_notice("[%s][%d][STEP4] polling 0x%08x bit %d fail. Value=0x%08x\n",
 			__func__, subsystem, CONN_REG_CONN_RF_SPI_MST_REG_ADDR + op->busy_cr,
@@ -613,7 +623,7 @@ int consys_spi_write_nolock_mt6895(enum sys_spi_subsystem subsystem, unsigned in
 #ifndef CONFIG_FPGA_EARLY_PORTING
 	CONSYS_REG_BIT_POLLING(
 		CONN_REG_CONN_RF_SPI_MST_REG_ADDR + op->busy_cr,
-		op->polling_bit, 0, 100, 50, check);
+		op->polling_bit, 0, 1000, 5, check);
 	if (check != 0) {
 		pr_notice("[%s][%s][STEP1] polling 0x%08x bit %d fail. Value=0x%08x\n",
 			__func__, get_spi_sys_name(subsystem), CONN_REG_CONN_RF_SPI_MST_REG_ADDR + op->busy_cr,
@@ -629,7 +639,7 @@ int consys_spi_write_nolock_mt6895(enum sys_spi_subsystem subsystem, unsigned in
 #ifndef CONFIG_FPGA_EARLY_PORTING
 	udelay(1);
 	check = 0;
-	CONSYS_REG_BIT_POLLING(CONN_REG_CONN_RF_SPI_MST_REG_ADDR + op->busy_cr, op->polling_bit, 0, 100, 50, check);
+	CONSYS_REG_BIT_POLLING(CONN_REG_CONN_RF_SPI_MST_REG_ADDR + op->busy_cr, op->polling_bit, 0, 1000, 5, check);
 	if (check != 0) {
 		pr_notice("[%s][%s][STEP4] polling 0x%08x bit %d fail. Value=0x%08x\n",
 			__func__, get_spi_sys_name(subsystem), CONN_REG_CONN_RF_SPI_MST_REG_ADDR + op->busy_cr,

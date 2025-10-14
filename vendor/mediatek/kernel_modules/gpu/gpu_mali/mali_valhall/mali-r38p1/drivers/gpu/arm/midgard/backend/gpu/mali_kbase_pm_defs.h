@@ -26,6 +26,7 @@
 #ifndef _KBASE_PM_HWACCESS_DEFS_H_
 #define _KBASE_PM_HWACCESS_DEFS_H_
 
+#include <linux/kthread.h>
 #include "mali_kbase_pm_always_on.h"
 #include "mali_kbase_pm_coarse_demand.h"
 
@@ -454,9 +455,13 @@ struct kbase_pm_backend_data {
 	bool poweroff_wait_in_progress;
 	bool invoke_poweroff_wait_wq_when_l2_off;
 	bool poweron_required;
-
+#if IS_ENABLED(CONFIG_MALI_MTK_KTHREAD_ENHANCE)
+	struct kthread_worker *gpu_poweroff_wait_worker;
+	struct kthread_work gpu_poweroff_wait_work;
+#else
 	struct workqueue_struct *gpu_poweroff_wait_wq;
 	struct work_struct gpu_poweroff_wait_work;
+#endif
 
 	wait_queue_head_t poweroff_wait;
 

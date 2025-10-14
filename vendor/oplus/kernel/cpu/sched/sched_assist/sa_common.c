@@ -385,6 +385,12 @@ void oplus_set_ux_state_lock(struct task_struct *t, int ux_state, bool need_lock
 	else
 		rq = task_rq(t);
 
+	if (!raw_spin_is_locked(&t->pi_lock)) {
+		DEBUG_BUG_ON(1);
+	}
+	if (!raw_spin_is_locked(&rq->lock)) {
+		DEBUG_BUG_ON(2);
+	}
 	ots = get_oplus_task_struct(t);
 	if (IS_ERR_OR_NULL(ots) || !test_task_is_fair(t) || (ux_state == ots->ux_state)) {
 		goto out;
@@ -397,7 +403,7 @@ void oplus_set_ux_state_lock(struct task_struct *t, int ux_state, bool need_lock
 
 	orq = (struct oplus_rq *) rq->android_oem_data1;
 	spin_lock_irqsave(orq->ux_list_lock, irqflag);
-
+	smp_mb__after_spinlock();
 	ots->ux_state = ux_state;
 
 	if (!(ux_state & SCHED_ASSIST_UX_MASK)) {
@@ -869,6 +875,7 @@ static void enqueue_ux_thread(struct rq *rq, struct task_struct *p)
 
 	orq = (struct oplus_rq *) rq->android_oem_data1;
 	spin_lock_irqsave(orq->ux_list_lock, irqflag);
+	smp_mb__after_spinlock();
 	if (!oplus_rbnode_empty(&ots->ux_entry)) {
 		DEBUG_BUG_ON(1);
 		spin_unlock_irqrestore(orq->ux_list_lock, irqflag);
@@ -911,6 +918,7 @@ static void dequeue_ux_thread(struct rq *rq, struct task_struct *p)
 
 	orq = (struct oplus_rq *) rq->android_oem_data1;
 	spin_lock_irqsave(orq->ux_list_lock, irqflag);
+	smp_mb__after_spinlock();
 	if (!oplus_rbnode_empty(&ots->ux_entry)) {
 		update_ux_timeline_task_removal(orq, ots);
 
@@ -1086,12 +1094,27 @@ void unset_inherit_ux(struct task_struct *task, int type)
 }
 EXPORT_SYMBOL_GPL(unset_inherit_ux);
 
-bool im_mali(char *comm)
+#ifndef CONFIG_OPLUS_SYSTEM_KERNEL_QCOM
+bool im_mali(const char *comm)
 {
-	return !strcmp(comm, "mali-event-hand") || !strcmp(comm, "mali-cmar-backe") ||
-		!strcmp(comm, "mali-mem-purge") || !strcmp(comm, "mali-cpu-comman") ||
-		!strcmp(comm, "mali-compiler");
+	if (comm == NULL) {
+		return false;
+	}
+
+	if (!strncmp(comm, "mali-", 5)) {
+		const char *postfix = comm + 5;
+		return !strcmp(postfix, "event-hand") || !strcmp(postfix, "cmar-backe") ||
+			!strcmp(postfix, "mem-purge") || !strcmp(postfix, "cpu-comman") ||
+			!strcmp(postfix, "compiler");
+	}
+	return false;
 }
+#else
+inline bool im_mali(const char *comm) {
+	return false;
+}
+#endif
+
 
 bool cgroup_check_set_sched_assist_boost(char *comm)
 {

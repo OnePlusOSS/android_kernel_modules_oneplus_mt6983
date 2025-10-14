@@ -864,14 +864,18 @@ int tp_touch_healthinfo_handle(struct monitor_data *monitor_data,
 								 monitor_data->report_rate))) { /*up and down in short time(2.5 frames) and short distance. judge as broken swipe*/
 						/*add_swipe_to_record(&monitor_data->broken_swipes,
 								    monitor_data->points_state[i].last_point, points[i]);*/
-						monitor_data->broken_swipes_count_array[points[i].y * (monitor_data->rx_num / 2) /
-								    monitor_data->max_y * (monitor_data->tx_num / 2) +
-								    points[i].x * (monitor_data->tx_num / 2) / monitor_data->max_x]++;
-						TPD_DETAIL("broken swipe:[%d %d] to [%d %d].\n",
-							   monitor_data->points_state[i].first_point.x,
-							   monitor_data->points_state[i].first_point.y,
-							   monitor_data->points_state[i].last_point.x,
-							   monitor_data->points_state[i].last_point.y);
+						if ((points[i].y >= 0 && points[i].y < monitor_data->max_y)
+								&& (points[i].x >= 0 && points[i].x < monitor_data->max_x)
+								&& (monitor_data->max_y != 0 && monitor_data->max_x != 0)) {
+								monitor_data->broken_swipes_count_array[points[i].y * (monitor_data->rx_num / 2) /
+									monitor_data->max_y * (monitor_data->tx_num / 2) +
+									points[i].x * (monitor_data->tx_num / 2) / monitor_data->max_x]++;
+								TPD_DETAIL("broken swipe:[%d %d] to [%d %d].\n",
+									monitor_data->points_state[i].first_point.x,
+									monitor_data->points_state[i].first_point.y,
+									monitor_data->points_state[i].last_point.x,
+									monitor_data->points_state[i].last_point.y);
+						}
 					}
 
 					if (monitor_data->points_state[i].touch_action == ACTION_CLICK
@@ -937,10 +941,14 @@ int tp_touch_healthinfo_handle(struct monitor_data *monitor_data,
 				if (monitor_data->points_state[i].jumping_times > JUMPING_POINT_TIMES) {
 					if (!monitor_data->points_state[i].is_down_handled) {
 						/*add_point_to_record(&monitor_data->jumping_points, points[i]);*/
-						monitor_data->jumping_points_count_array[points[i].y *
-								 (monitor_data->rx_num / 2) / monitor_data->max_y *
-								 (monitor_data->tx_num / 2) + points[i].x *
-								 (monitor_data->tx_num / 2) / monitor_data->max_x]++;
+						if ((points[i].y >= 0 && points[i].y < monitor_data->max_y)
+								&& (points[i].x >= 0 && points[i].x < monitor_data->max_x)
+								&& (monitor_data->max_y != 0 && monitor_data->max_x != 0)) {
+								monitor_data->jumping_points_count_array[points[i].y *
+										(monitor_data->rx_num / 2) / monitor_data->max_y *
+										(monitor_data->tx_num / 2) + points[i].x *
+										(monitor_data->tx_num / 2) / monitor_data->max_x]++;
+						} /* Judge whether it is abnormal */
 						catch_delta_data(monitor_data,
 								 monitor_data->jumping_point_delta_data);/*catch delta data*/
 						monitor_data->points_state[i].is_down_handled = true;
@@ -958,18 +966,25 @@ int tp_touch_healthinfo_handle(struct monitor_data *monitor_data,
 							monitor_data->points_state[i].time_counter, STUCK_POINT_TIME)) {
 					if (direction == VERTICAL_SCREEN) {
 						/*add_point_to_record(&monitor_data->stuck_points, points[i]);*/
-						monitor_data->stuck_points_count_array[points[i].y * (monitor_data->rx_num / 2) /
-							   monitor_data->max_y * (monitor_data->tx_num / 2) + points[i].x *
-							   (monitor_data->tx_num / 2) / monitor_data->max_x]++;
-						TPD_DETAIL("stuck point:[%d %d]\n", points[i].x, points[i].y);
-
+						if ((points[i].y >= 0 && points[i].y < monitor_data->max_y)
+								&& (points[i].x >= 0 && points[i].x < monitor_data->max_x)
+								&& (monitor_data->max_y != 0 && monitor_data->max_x != 0)) {
+								monitor_data->stuck_points_count_array[points[i].y * (monitor_data->rx_num / 2) /
+									monitor_data->max_y * (monitor_data->tx_num / 2) + points[i].x *
+									(monitor_data->tx_num / 2) / monitor_data->max_x]++;
+								TPD_DETAIL("stuck point:[%d %d]\n", points[i].x, points[i].y);
+						}
 					} else {
 						/*add_point_to_record(&monitor_data->lanscape_stuck_points, points[i]);*/
-						monitor_data->lanscape_stuck_points_count_array[points[i].y *
-							   (monitor_data->rx_num / 2) / monitor_data->max_y *
-							   (monitor_data->tx_num / 2) + points[i].x *
-							   (monitor_data->tx_num / 2) / monitor_data->max_x]++;
-						TPD_DETAIL("lanscape stuck point:[%d %d]\n", points[i].x, points[i].y);
+						if ((points[i].y >= 0 && points[i].y < monitor_data->max_y)
+								&& (points[i].x >= 0 && points[i].x < monitor_data->max_x)
+								&& (monitor_data->max_y != 0 && monitor_data->max_x != 0)) {
+								monitor_data->lanscape_stuck_points_count_array[points[i].y *
+									(monitor_data->rx_num / 2) / monitor_data->max_y *
+									(monitor_data->tx_num / 2) + points[i].x *
+									(monitor_data->tx_num / 2) / monitor_data->max_x]++;
+								TPD_DETAIL("lanscape stuck point:[%d %d]\n", points[i].x, points[i].y);
+						}
 					}
 
 					catch_delta_data(monitor_data,

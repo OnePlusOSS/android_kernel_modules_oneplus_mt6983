@@ -533,7 +533,9 @@ static void release_frame_task_list(struct list_head *task_list)
 {
 	struct oplus_task_struct *ots = NULL;
 	struct oplus_task_struct *tmp = NULL;
+	unsigned long flags;
 
+	local_irq_save(flags);
 	list_for_each_entry_safe(ots, tmp, task_list, fbg_list) {
 		struct task_struct *p = ots_to_ts(ots);
 		raw_spinlock_t *lock = fbg_list_entry_lock(p);
@@ -542,12 +544,11 @@ static void release_frame_task_list(struct list_head *task_list)
 			list_del_init(&ots->fbg_list);
 			ots->fbg_state = NONE_FRAME_TASK;
 			ots->fbg_depth = INVALID_FBG_DEPTH;
-
-			put_task_struct(p);
 		}
-
 		fbg_list_entry_unlock(lock);
+		put_task_struct(p);
 	}
+	local_irq_restore(flags);
 }
 
 static bool add_task_to_frame_group(struct frame_group *grp, struct task_struct *task)
