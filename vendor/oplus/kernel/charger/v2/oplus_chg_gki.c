@@ -1195,6 +1195,9 @@ static void oplus_gki_wired_online_update_work(struct work_struct *work)
 			chg_debug("gki_update_work_retention_state=%d\n", chip->retention_state);
 		} else if (chip->cc_detect == CC_DETECT_NOTPLUG) {
 			chip->retention_state = 0;
+		} else if (chip->wired_type == OPLUS_CHG_USB_TYPE_PD_SDP || chip->wired_type ==
+			  OPLUS_CHG_USB_TYPE_SDP || chip->wired_type == OPLUS_CHG_USB_TYPE_CDP) {
+			chip->retention_state = 0;
 		}
 	}
 

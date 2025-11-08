@@ -114,7 +114,8 @@
 #define PPS_ACTION_START_DIFF_VOLT_V2 600
 #define PPS_ACTION_START_DIFF_VOLT_3RD 450
 #define PPS_ACTION_VOLT_CHANGE_DIFF_VOLT_3RD 100
-#define PPS_ACTION_CURR_MIN 800
+#define PPS_ACTION_CURR_MIN_OPLUS 800
+#define PPS_ACTION_CURR_MIN_THIRD 1000
 
 #define PPS_ACTION_START_DELAY 300
 #define PPS_ACTION_MOS_DELAY 50
@@ -528,7 +529,7 @@ struct pps_current_limits {
 	int cp_r_down;
 	int cp_tdie_down;
 	int current_slow_chg;
-	int full_1time_limit;
+	int current_fcl;
 };
 
 struct oplus_pps_limits {

@@ -1500,22 +1500,23 @@ void kbase_jd_done_worker(struct work_struct *data)
 		 * drop our reference. But do not call kbase_jm_idle_ctx(), as
 		 * the context is active and fast-starting is allowed.
 		 *
-		 * If an atom has been fast-started then kctx->atoms_pulled will
-		 * be non-zero but KCTX_ACTIVE will still be false (as the
-		 * previous pm reference has been inherited). Do NOT drop our
-		 * reference, as it has been re-used, and leave the context as
-		 * active.
+		 * If an atom has been fast-started then
+		 * kbase_jsctx_atoms_pulled(kctx) will return non-zero but
+		 * KCTX_ACTIVE will still be false (as the previous pm
+		 * reference has been inherited). Do NOT drop our reference, as
+		 * it has been re-used, and leave the context as active.
 		 *
-		 * If no new atoms have been started then KCTX_ACTIVE will still
-		 * be false and atoms_pulled will be zero, so drop the reference
-		 * and call kbase_jm_idle_ctx().
+		 * If no new atoms have been started then KCTX_ACTIVE will
+		 * still be false and kbase_jsctx_atoms_pulled(kctx) will
+		 * return zero, so drop the reference and call
+		 * kbase_jm_idle_ctx().
 		 *
 		 * As the checks are done under both the queue_mutex and
 		 * hwaccess_lock is should be impossible for this to race
 		 * with the scheduler code.
 		 */
 		if (kbase_ctx_flag(kctx, KCTX_ACTIVE) ||
-		    !atomic_read(&kctx->atoms_pulled)) {
+		    !kbase_jsctx_atoms_pulled(kctx)) {
 			/* Calling kbase_jm_idle_ctx() here will ensure that
 			 * atoms are not fast-started when we drop the
 			 * hwaccess_lock. This is not performed if

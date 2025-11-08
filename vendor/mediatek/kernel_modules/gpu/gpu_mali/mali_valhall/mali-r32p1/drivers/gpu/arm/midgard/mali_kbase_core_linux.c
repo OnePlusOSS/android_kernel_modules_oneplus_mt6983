@@ -1696,7 +1696,7 @@ static int kbasep_ioctl_local_fence_wait(struct kbase_context *kctx,
 		fence_wait->pid);
 #endif
 
-#if IS_ENABLED(CONFIG_MALI_MTK_DEBUG) && IS_ENABLED(CONFIG_MALI_MTK_FENCE_DEBUG)
+#if IS_ENABLED(CONFIG_MALI_MTK_DEBUG) && IS_ENABLED(CONFIG_MALI_MTK_FENCE_DEBUG) && IS_ENABLED(CONFIG_MALI_CSF_SUPPORT)
 	if (fence_wait->flags & BASE_LOCAL_FENCE_DUMP_FLAG)
 		mtk_debug_csf_dump_groups_and_queues(kctx->kbdev, (int)fence_wait->pid);
 #endif

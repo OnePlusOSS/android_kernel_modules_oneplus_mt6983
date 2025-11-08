@@ -160,6 +160,8 @@ enum test_item_bit {
 	TYPE_PT11 				= 11,
 	TYPE_DYNAMIC_RANGE_DOZE = 14,
 	TYPE_NOISE_DOZE			= 15,
+	TYPE_PT17 				= 17,
+	TYPE_PT18 				= 18,
 	TYPE_HYBRIDRAW_CAP      = 18,
 	TYPE_RAW_CAP            = 22,
 	TYPE_TREXSHORT_CUSTOM   = 25,
@@ -233,6 +235,8 @@ enum dynamic_config_id {
 	DC_GLOVE_MODE_ENABLED = 0x0D,
 	DC_GLOVE_MODE_STATE = 0xF5,
 	DC_GESTURE_MASK   = 0xFE,
+	DC_LOW_TEMP_ENABLE = 0xFD,
+	DC_WATERPROOF_ENABLE = 0xFC,
 };
 
 enum command {
@@ -332,6 +336,13 @@ enum flash_data {
 enum palm_mode {
 	PALM_TO_DEFAULT = 0,
 	PALM_TO_SLEEP   = 1,
+};
+
+enum diaphragm_mode {
+	DIAPHRAGM_DEFAULT_MODE = 0,
+	DIAPHRAGM_FILM_MODE = 1,
+	DIAPHRAGM_WATERPROO_MODE = 2,
+	DIAPHRAGM_FILM_WATERPROO_MODE = 3,
 };
 
 enum glove_mode {
@@ -581,6 +592,7 @@ struct syna_tcm_hcd {
 	bool irq_trigger_hdl_support;
 	bool health_monitor_support;
 	bool health_monitor_v2_support;
+	bool pt17_pt18_test_support;
 };
 
 struct device_hcd {

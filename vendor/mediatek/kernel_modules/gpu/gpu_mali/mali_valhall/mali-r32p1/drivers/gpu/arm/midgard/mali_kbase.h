@@ -488,7 +488,8 @@ void kbase_pm_metrics_stop(struct kbase_device *kbdev);
  * @kctx:  KBase context pointer
  * @katom: Atome for which to return ID
  */
-static inline int kbase_jd_atom_id(struct kbase_context *kctx, struct kbase_jd_atom *katom)
+static inline int kbase_jd_atom_id(struct kbase_context *kctx,
+				   const struct kbase_jd_atom *katom)
 {
 	int result;
 

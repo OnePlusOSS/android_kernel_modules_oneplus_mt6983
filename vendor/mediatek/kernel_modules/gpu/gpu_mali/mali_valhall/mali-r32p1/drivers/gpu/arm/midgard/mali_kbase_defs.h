@@ -1639,17 +1639,10 @@ struct kbase_sub_alloc {
  *                        of RB-tree holding currently runnable atoms on the job slot
  *                        and the head item of the linked list of atoms blocked on
  *                        cross-slot dependencies.
- * @atoms_pulled:         Total number of atoms currently pulled from the context.
- * @atoms_pulled_slot:    Per slot count of the number of atoms currently pulled
- *                        from the context.
- * @atoms_pulled_slot_pri: Per slot & priority count of the number of atoms currently
- *                        pulled from the context. hwaccess_lock shall be held when
- *                        accessing it.
- * @blocked_js:           Indicates if the context is blocked from submitting atoms
- *                        on a slot at a given priority. This is set to true, when
- *                        the atom corresponding to context is soft/hard stopped or
- *                        removed from the HEAD_NEXT register in response to
- *                        soft/hard stop.
+ * @slot_tracking:        Tracking and control of this context's use of all job
+ *                        slots
+ * @atoms_pulled_all_slots: Total number of atoms currently pulled from the
+ *                        context, across all slots.
  * @slots_pullable:       Bitmask of slots, indicating the slots for which the
  *                        context has pullable atoms in the runnable tree.
  * @work:                 Work structure used for deferred ASID assignment.
@@ -1795,17 +1788,14 @@ struct kbase_context {
 	struct kbase_jd_context jctx;
 	struct jsctx_queue jsctx_queue
 		[KBASE_JS_ATOM_SCHED_PRIO_COUNT][BASE_JM_MAX_NR_SLOTS];
+	struct kbase_jsctx_slot_tracking slot_tracking[BASE_JM_MAX_NR_SLOTS];
+	atomic_t atoms_pulled_all_slots;
 
 	struct list_head completed_jobs;
 	atomic_t work_count;
 	struct timer_list soft_job_timeout;
 
-	atomic_t atoms_pulled;
-	atomic_t atoms_pulled_slot[BASE_JM_MAX_NR_SLOTS];
-	int atoms_pulled_slot_pri[BASE_JM_MAX_NR_SLOTS][
-			KBASE_JS_ATOM_SCHED_PRIO_COUNT];
 	int priority;
-	bool blocked_js[BASE_JM_MAX_NR_SLOTS][KBASE_JS_ATOM_SCHED_PRIO_COUNT];
 	s16 atoms_count[KBASE_JS_ATOM_SCHED_PRIO_COUNT];
 	u32 slots_pullable;
 	u32 age_count;

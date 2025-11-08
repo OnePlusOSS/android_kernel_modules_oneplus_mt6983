@@ -1999,7 +1999,7 @@ retry:
 #endif
 
 	UNLOCK_BUFFER(tcm_hcd->in);
-
+	usleep_range(5, 10);
 	retval = syna_tcm_continued_read(tcm_hcd);
 	if (retval < 0) {
 		TPD_INFO("Failed to do continued read\n");
@@ -3334,6 +3334,30 @@ static int synaptics_enable_game_mode(struct syna_tcm_hcd *tcm_hcd, bool enable)
 
 	return ret;
 }
+
+static int synaptics_enable_waterproof_mode(struct syna_tcm_hcd *tcm_hcd, bool enable)
+{
+	int8_t ret = -1;
+
+	TPD_DEBUG("%s:enable = %d\n", __func__, enable);
+
+	if (enable) {
+		ret = syna_tcm_set_dynamic_config(tcm_hcd, DC_WATERPROOF_ENABLE, 0);
+		if (ret < 0) {
+			TPD_INFO("%s:failed to enable waterproof mode\n", __func__);
+			return ret;
+		}
+	} else {
+		ret = syna_tcm_set_dynamic_config(tcm_hcd, DC_WATERPROOF_ENABLE, 1);
+		if (ret < 0) {
+			TPD_INFO("%s:failed to disable waterproof mode\n", __func__);
+			return ret;
+		}
+	}
+
+	return ret;
+}
+
 /* void tp_wait_hdl_finished(void); */
 
 static int syna_mode_switch(void *chip_data, work_mode mode, int flag)
@@ -3411,6 +3435,13 @@ static int syna_mode_switch(void *chip_data, work_mode mode, int flag)
 		ret = synaptics_enable_game_mode(tcm_hcd, flag);
 		if (ret < 0) {
 			TPD_INFO("%s: enable game mode : %d failed\n", __func__, flag);
+		}
+		break;
+
+	case MODE_WATERPROOF:
+		ret = synaptics_enable_waterproof_mode(tcm_hcd, flag);
+		if (ret < 0) {
+			TPD_INFO("%s: enable waterproof mode : %d failed\n", __func__, flag);
 		}
 		break;
 
@@ -4172,6 +4203,207 @@ static int syna_testing_pt11(struct seq_file *s, void *chip_data,
 	return error_count;
 }
 
+
+static int syna_get_test_max_adc_value(struct syna_tcm_hcd *tcm_hcd, unsigned short *value)
+{
+	int retval;
+	unsigned char out_buf;
+	unsigned char *resp_buf;
+	unsigned int resp_buf_size;
+	unsigned int resp_length;
+
+	resp_buf = NULL;
+	resp_buf_size = 0;
+	out_buf = (unsigned char)0xa5;
+
+	retval = syna_tcm_write_message(tcm_hcd,
+					CMD_PRODUCTION_TEST,
+					&out_buf,
+					sizeof(out_buf),
+					&resp_buf,
+					&resp_buf_size,
+					&resp_length,
+					RESPONSE_TIMEOUT_MS_SHORT);
+	if (retval < 0 || resp_length < 2) {
+		retval = -EINVAL;
+		TPD_INFO("Failed to read test max adc value\n");
+		goto exit;
+	}
+
+	*value = (unsigned short)le2_to_uint(resp_buf);
+exit:
+	kfree(resp_buf);
+	return retval;
+}
+
+static int syna_testing_pt17(struct seq_file *s, void *chip_data,
+				  struct auto_testdata *syna_testdata, struct test_item_info *p_test_item_info)
+{
+	int16_t data16 = 0;
+	int i = 0, ret = 0, index = 0, byte_cnt = 2;
+	int error_count = 0;
+	struct syna_tcm_hcd *tcm_info = (struct syna_tcm_hcd *)chip_data;
+	struct auto_test_item_header *item_header = NULL;
+	int32_t *p_mutual_p = NULL, *p_mutual_n = NULL;
+	struct syna_tcm_test *test_hcd = tcm_info->test_hcd;
+	unsigned char *buf = NULL;
+	unsigned short  max_adc_value = 0;
+
+	item_header = (struct auto_test_item_header *)(syna_testdata->fw->data + p_test_item_info->item_offset);
+	if (item_header->item_limit_type == LIMIT_TYPE_TX_RX_DATA) {
+		p_mutual_p = (int32_t *)(syna_testdata->fw->data + item_header->top_limit_offset);
+		p_mutual_n = (int32_t *)(syna_testdata->fw->data + item_header->floor_limit_offset);
+	} else {
+		TPD_INFO("raw cap test limit type(%2x) is wrong.\n",
+		item_header->item_limit_type);
+
+		error_count++;
+		return error_count;
+	}
+
+	ret = syna_get_test_max_adc_value(tcm_info, &max_adc_value);
+	if (ret < 0) {
+		TPD_INFO("syna_get_test_max_adc_value failed.\n");
+
+		error_count++;
+		return error_count;
+	}
+
+	if (max_adc_value == 0) {
+		TPD_INFO("wrong max adc value:%d\n", max_adc_value);
+
+		error_count++;
+		return error_count;
+	}
+
+	ret = testing_run_prod_test_item(tcm_info, TYPE_PT17);
+
+	if (ret < 0) {
+		TPD_INFO("run raw cap test failed.\n");
+
+		error_count++;
+		return error_count;
+	}
+
+	LOCK_BUFFER(test_hcd->test_resp);
+	buf = test_hcd->test_resp.buf;
+	TPD_INFO("%s read data size:%d\n", __func__, test_hcd->test_resp.data_length);
+	store_to_file(syna_testdata->fp, syna_testdata->length,
+			syna_testdata->pos, "pt17:");
+
+	for (i = 0; i < test_hcd->test_resp.data_length;) {
+		index = i / byte_cnt;
+		data16 = (buf[i] | (buf[i + 1] << 8));
+		data16 =((unsigned int)data16 * 200)/ max_adc_value;
+
+		if (0 == index % (syna_testdata->rx_num))
+			store_to_file(syna_testdata->fp, syna_testdata->length,
+				syna_testdata->pos, "\n");
+
+		store_to_file(syna_testdata->fp, syna_testdata->length,
+			syna_testdata->pos, "%04d, ", data16);
+
+		if ((data16 < p_mutual_n[index]) || (data16 > p_mutual_p[index])) {
+			TPD_INFO("rawcap test failed at node[%d]=%d [%d %d].\n", index, data16,
+				p_mutual_n[index], p_mutual_p[index]);
+
+			error_count++;
+		}
+
+		i += byte_cnt;
+	}
+
+	UNLOCK_BUFFER(test_hcd->test_resp);
+	store_to_file(syna_testdata->fp, syna_testdata->length,
+		syna_testdata->pos, "\n");
+
+	return error_count;
+}
+
+static int syna_testing_pt18(struct seq_file *s, void *chip_data,
+				  struct auto_testdata *syna_testdata, struct test_item_info *p_test_item_info)
+{
+	int16_t data16 = 0;
+	int i = 0, ret = 0, index = 0, byte_cnt = 2;
+	int error_count = 0;
+	struct syna_tcm_hcd *tcm_info = (struct syna_tcm_hcd *)chip_data;
+	struct auto_test_item_header *item_header = NULL;
+	int32_t *p_mutual_p = NULL, *p_mutual_n = NULL;
+	struct syna_tcm_test *test_hcd = tcm_info->test_hcd;
+	unsigned char *buf = NULL;
+	unsigned short  max_adc_value = 0;
+
+	item_header = (struct auto_test_item_header *)(syna_testdata->fw->data + p_test_item_info->item_offset);
+	if (item_header->item_limit_type == LIMIT_TYPE_TX_RX_DATA) {
+		p_mutual_p = (int32_t *)(syna_testdata->fw->data + item_header->top_limit_offset);
+		p_mutual_n = (int32_t *)(syna_testdata->fw->data + item_header->floor_limit_offset);
+	} else {
+		TPD_INFO("raw cap test limit type(%2x) is wrong.\n",
+		item_header->item_limit_type);
+
+		error_count++;
+		return error_count;
+	}
+
+	ret = syna_get_test_max_adc_value(tcm_info, &max_adc_value);
+	if (ret < 0) {
+		TPD_INFO("syna_get_test_max_adc_value failed.\n");
+
+		error_count++;
+		return error_count;
+	}
+	if (max_adc_value == 0) {
+		TPD_INFO("wrong max adc value:%d\n", max_adc_value);
+
+		error_count++;
+		return error_count;
+	}
+
+	ret = testing_run_prod_test_item(tcm_info, TYPE_PT18);
+
+	if (ret < 0) {
+		TPD_INFO("run raw cap test failed.\n");
+
+		error_count++;
+		return error_count;
+	}
+
+	LOCK_BUFFER(test_hcd->test_resp);
+	buf = test_hcd->test_resp.buf;
+	TPD_INFO("%s read data size:%d\n", __func__, test_hcd->test_resp.data_length);
+	store_to_file(syna_testdata->fp, syna_testdata->length,
+			syna_testdata->pos, "pt18:");
+
+	for (i = 0; i < test_hcd->test_resp.data_length;) {
+		index = i / byte_cnt;
+		data16 = (buf[i] | (buf[i + 1] << 8));
+		data16 =((unsigned int)data16 * 200)/ max_adc_value;
+		if (0 == index % (syna_testdata->rx_num))
+			store_to_file(syna_testdata->fp, syna_testdata->length,
+				syna_testdata->pos, "\n");
+
+		store_to_file(syna_testdata->fp, syna_testdata->length,
+			syna_testdata->pos, "%04d, ", data16);
+
+		if ((data16 < p_mutual_n[index]) || (data16 > p_mutual_p[index])) {
+			TPD_INFO("rawcap test failed at node[%d]=%d [%d %d].\n", index, data16,
+				p_mutual_n[index], p_mutual_p[index]);
+
+		error_count++;
+		}
+
+		i += byte_cnt;
+	}
+
+	UNLOCK_BUFFER(test_hcd->test_resp);
+	store_to_file(syna_testdata->fp, syna_testdata->length,
+		syna_testdata->pos, "\n");
+
+	msleep(100);
+
+	return error_count;
+}
+
 static int syna_testing_Doze_noise(struct seq_file *s, void *chip_data,
 					struct auto_testdata *syna_testdata, struct test_item_info *p_test_item_info)
 {
@@ -4711,6 +4943,23 @@ static struct syna_auto_test_operations synaptics_test_ops = {
 	.syna_auto_black_screen_test_endoperation  =  synaptics_auto_black_screen_test_endoperation,
 };
 
+static struct syna_auto_test_operations synaptics_test_ops2 = {
+	.test1       =  syna_testing_noise,
+	.test2       =  syna_testing_pt17,
+	.test3       =  syna_testing_pt18,
+	.test4       =  syna_testing_Doze_noise,
+	.test5       =  syna_testing_dynamic_range,
+	.test6       =  syna_testing_Doze_dynamic_range,
+	.test7       =  syna_testing_Doze_dynamic_range_NULL,
+	.test8       =  syna_testing_dynamic_range_NULL,
+	.syna_black_screen_test_noise    =  syna_black_screen_test_noise,
+	.syna_black_screen_test_dynamic  =  syna_black_screen_test_dynamic,
+	.syna_auto_test_preoperation  =  synaptics_auto_test_preoperation,
+	.syna_auto_test_endoperation  =  synaptics_auto_test_endoperation,
+	.syna_auto_black_screen_test_preoperation  =  synaptics_auto_black_screen_test_preoperation,
+	.syna_auto_black_screen_test_endoperation  =  synaptics_auto_black_screen_test_endoperation,
+};
+
 static struct engineer_test_operations syna_engineer_test_ops = {
 	.auto_test                  = synaptics_auto_test,
 	.black_screen_test 			= synaptics_black_screen_test,
@@ -4961,6 +5210,54 @@ static void syna_getglove_mode_status(void *chip_data, int *enable)
 	return;
 }
 
+static int syna_tcm_diaphragm_touch_lv_set(void *chip_data, int level)
+{
+	struct syna_tcm_hcd *tcm_info = (struct syna_tcm_hcd *)chip_data;
+	unsigned short regval = 0;
+	int retval = 0;
+
+	retval = syna_tcm_get_dynamic_config(tcm_info, DC_LOW_TEMP_ENABLE, &regval);
+	if (retval < 0) {
+		TPD_INFO("Failed to get diaphragm_touch config\n");
+		return 0;
+	}
+
+	switch (level) {
+	case DIAPHRAGM_DEFAULT_MODE:
+		regval = 0xfcff & regval;
+		break;
+	case DIAPHRAGM_FILM_MODE:
+		regval = 0xfcff & regval;
+		regval = 0x0100 | regval;
+		break;
+	case DIAPHRAGM_WATERPROO_MODE:
+		regval = 0xfcff & regval;
+		regval = 0x0200 | regval;
+		break;
+	case DIAPHRAGM_FILM_WATERPROO_MODE:
+		regval = 0xfcff & regval;
+		regval = 0x0200 | regval;
+		break;
+	default:
+		TPD_INFO("error, level = %d", level);
+		return 0;
+	}
+
+	retval = syna_tcm_set_dynamic_config(tcm_info, DC_LOW_TEMP_ENABLE, regval);
+	if (retval < 0) {
+		TPD_INFO("Failed to set diaphragm_touch config\n");
+		return 0;
+	}
+
+	retval = syna_tcm_get_dynamic_config(tcm_info, DC_LOW_TEMP_ENABLE, &regval);
+	if (retval < 0) {
+		TPD_INFO("Failed to get diaphragm_touch config\n");
+		return 0;
+	}
+	TPD_INFO("diaphragm_touch_lv_set level = %d regval = %d", level, regval);
+
+	return 0;
+}
 
 static struct oplus_touchpanel_operations syna_tcm_ops = {
 	.ftm_process       = syna_ftm_process,
@@ -4990,6 +5287,7 @@ static struct oplus_touchpanel_operations syna_tcm_ops = {
 	.smooth_lv_set    = syna_tcm_smooth_lv_set,
 	.sensitive_lv_set = syna_tcm_sensitive_lv_set,
 	.get_glove_mode         = syna_getglove_mode_status,
+	.diaphragm_touch_lv_set    = syna_tcm_diaphragm_touch_lv_set,
 };
 
 /*
@@ -5008,11 +5306,11 @@ void tp_wait_hdl_finished(void)
 
 	do {
 		if (retry_cnt) {
-			msleep(100);
+			msleep(10);
 		}
 		retry_cnt++;
 		TPD_INFO("Wait hdl finished retry %d times...  \n", retry_cnt);
-	} while (!g_tcm_hcd->hdl_finished_flag && retry_cnt < 20);
+	} while (!g_tcm_hcd->hdl_finished_flag && retry_cnt < 200);
 }
 
 /*
@@ -5189,6 +5487,7 @@ static void syna_tcm_parse_dts(struct syna_tcm_hcd *tcm_hcd, struct spi_device *
 	}
 
 	tcm_hcd->irq_trigger_hdl_support = of_property_read_bool(np, "synaptics,irq_trigger_hdl_support");
+	tcm_hcd->pt17_pt18_test_support = of_property_read_bool(np, "pt17_pt18_test_support");
 }
 
 static int syna_tcm_spi_probe(struct spi_device *spi)
@@ -5262,6 +5561,9 @@ static int syna_tcm_spi_probe(struct spi_device *spi)
 	atomic_set(&tcm_hcd->command_status, CMD_IDLE);
 
 	syna_tcm_parse_dts(tcm_hcd, spi);
+	if (tcm_hcd->pt17_pt18_test_support) {
+		ts->com_test_data.chip_test_ops = &synaptics_test_ops2;
+	}
 #if defined(CONFIG_SPI_MT65XX)
 	spi->controller_data = (void *)&spi_ctrdata;
 #endif
@@ -5271,14 +5573,27 @@ static int syna_tcm_spi_probe(struct spi_device *spi)
 		return retval;
 	}
 
+	if(ts->firmware_in_dts != NULL) {
+		tcm_hcd->tcm_firmware_headfile = ts->firmware_in_dts;
+		TPD_INFO("tcm_firmware_headfile run\n");
+	} else {
+		tcm_hcd->p_firmware_headfile = &ts->panel_data.firmware_headfile;
+		TPD_INFO("p_firmware_headfile run\n");
+	}
+
+	init_completion(&tcm_hcd->config_complete);
+	tcm_hcd->init_okay = false;
+	g_tcm_hcd->hdl_finished_flag = 0;
+	tcm_hcd->init_okay = true;
+	syna_remote_zeroflash_init(tcm_hcd);
+
 	retval = register_common_touch_device(ts);
 
-	tcm_hcd->tcm_firmware_headfile = ts->firmware_in_dts;
 	if (retval < 0 && (retval != -EFTM)) {
 		TPD_INFO("Failed to init device information\n");
 		goto err_register_driver;
 	}
-	tcm_hcd->p_firmware_headfile = &ts->panel_data.firmware_headfile;
+
 	tcm_hcd->health_monitor_support = ts->health_monitor_support;
 	if (tcm_hcd->health_monitor_support) {
 		tcm_hcd->monitor_data = &ts->monitor_data;
@@ -5295,7 +5610,6 @@ static int syna_tcm_spi_probe(struct spi_device *spi)
 	}
 
 	synaptics_create_proc(ts, tcm_hcd->syna_ops);
-	init_completion(&tcm_hcd->config_complete);
 
 	device_hcd = syna_remote_device_init(tcm_hcd);
 	if (device_hcd) {
@@ -5305,11 +5619,6 @@ static int syna_tcm_spi_probe(struct spi_device *spi)
 		device_hcd->reset = syna_tcm_reset;
 		device_hcd->report_touch = syna_device_report_touch;
 	}
-	tcm_hcd->init_okay = false;
-	g_tcm_hcd->hdl_finished_flag = 0;
-
-	tcm_hcd->init_okay = true;
-	syna_remote_zeroflash_init(tcm_hcd);
 /*#ifdef CONFIG_TOUCHPANEL_MTK_PLATFORM
     if (ts->boot_mode == RECOVERY_BOOT)
 #else

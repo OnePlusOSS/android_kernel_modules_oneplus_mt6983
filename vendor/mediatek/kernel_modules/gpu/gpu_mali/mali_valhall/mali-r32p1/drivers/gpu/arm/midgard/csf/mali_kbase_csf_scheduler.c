@@ -5612,8 +5612,6 @@ void kbase_csf_scheduler_context_term(struct kbase_context *kctx)
 	cancel_work_sync(&kctx->csf.sched.sync_update_work);
 	destroy_workqueue(kctx->csf.sched.sync_update_wq);
 #endif
-
-	kbase_ctx_sched_remove_ctx(kctx);
 }
 
 int kbase_csf_scheduler_init(struct kbase_device *kbdev)

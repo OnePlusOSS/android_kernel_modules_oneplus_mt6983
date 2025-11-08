@@ -272,8 +272,13 @@ static int zeroflash_get_fw_image(void)
 				TPD_INFO("%s kzalloc failed!\n", __func__);
 				return -1;
 			} else {
-				request_fw_headfile->data = tcm_hcd->tcm_firmware_headfile->data;
-				request_fw_headfile->size = tcm_hcd->tcm_firmware_headfile->size;
+				if (tcm_hcd->tcm_firmware_headfile != NULL) {
+					request_fw_headfile->data = tcm_hcd->tcm_firmware_headfile->data;
+					request_fw_headfile->size = tcm_hcd->tcm_firmware_headfile->size;
+				} else if (tcm_hcd->p_firmware_headfile != NULL) {
+					request_fw_headfile->data = tcm_hcd->p_firmware_headfile->firmware_data;
+					request_fw_headfile->size = tcm_hcd->p_firmware_headfile->firmware_size;
+				}
 				g_zeroflash_hcd->fw_entry = request_fw_headfile;
 				tcm_hcd->tp_fw_update_headfile = true;
 			}

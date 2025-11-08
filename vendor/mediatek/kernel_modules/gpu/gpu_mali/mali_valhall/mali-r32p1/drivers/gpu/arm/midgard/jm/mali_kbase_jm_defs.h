@@ -648,6 +648,48 @@ static inline bool kbase_jd_katom_is_protected(
 	return (bool)(katom->atom_flags & KBASE_KATOM_FLAG_PROTECTED);
 }
 
+/**
+ * kbase_atom_is_younger - query if one atom is younger by age than another
+ * @katom_a the first atom
+ * @katom_a the second atom
+ *
+ * Return: true if the first atom is strictly younger than the second, false
+ * otherwise.
+ */
+static inline bool kbase_jd_atom_is_younger(const struct kbase_jd_atom *katom_a,
+					    const struct kbase_jd_atom *katom_b)
+{
+	return ((s32)(katom_a->age - katom_b->age) < 0);
+}
+
+/**
+ * kbase_jd_atom_is_earlier
+ * @katom_a: the first atom
+ * @katom_b: the second atom
+ *
+ * Return: true if the first atom has been submitted earlier than the
+ * second atom. It is used to understand if an atom that is ready has been
+ * submitted earlier than the currently running atom, so that the currently
+ * running atom should be preempted to allow the ready atom to run.
+ */
+static inline bool kbase_jd_atom_is_earlier(const struct kbase_jd_atom *katom_a,
+					    const struct kbase_jd_atom *katom_b)
+{
+	/* No seq_nr set? */
+	if (!katom_a->seq_nr || !katom_b->seq_nr)
+		return false;
+
+	/* Efficiently handle the unlikely case of wrapping.
+	 * The following code assumes that the delta between the sequence number
+	 * of the two atoms is less than INT64_MAX.
+	 * In the extremely unlikely case where the delta is higher, the comparison
+	 * defaults for no preemption.
+	 * The code also assumes that the conversion from unsigned to signed types
+	 * works because the signed integers are 2's complement.
+	 */
+	return (s64)(katom_a->seq_nr - katom_b->seq_nr) < 0;
+}
+
 /*
  * Theory of operations:
  *

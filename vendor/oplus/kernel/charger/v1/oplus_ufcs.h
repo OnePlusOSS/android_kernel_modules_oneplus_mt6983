@@ -87,7 +87,8 @@
 /*ufcs aciton*/
 #define UFCS_ACTION_START_DIFF_VOLT_V1 300
 #define UFCS_ACTION_START_DIFF_VOLT_V2 600
-#define UFCS_ACTION_CURR_MIN 800
+#define UFCS_ACTION_CURR_MIN_OPLUS 800
+#define UFCS_ACTION_CURR_MIN_THIRD 1000
 #define UFCS_MASTER_ENALBE_CHECK_CNTS 10
 
 #define UFCS_ACTION_START_DELAY 100
@@ -514,7 +515,7 @@ struct ufcs_current_limits {
 	int btb_diff_down;
 	int current_imax;
 	int current_slow_chg;
-	int full_1time_limit;
+	int current_fcl;
 };
 
 struct oplus_ufcs_limits {
@@ -752,6 +753,7 @@ struct oplus_ufcs_chip {
 	int ufcs_keep_last_status;
 	int ufcs_startup_retry_times;
 	int ufcs_recover_cnt;
+	bool fcl_trigger;
 
 	u8 int_column[UFCS_DUMP_REG_CNT];
 	u8 reg_dump[UFCS_DUMP_REG_CNT];

@@ -47,8 +47,8 @@
 
 static const unsigned int orders[] = {0, 1};
 /* 32M for order 0, 8M  for order1 by default */
-static const unsigned int page_pool_nr_pages[] = {((SZ_32M + SZ_16M) >> PAGE_SHIFT),
-                                                  (SZ_8M >> PAGE_SHIFT)};
+static const unsigned int page_pool_nr_pages[] = {(SZ_64M >> PAGE_SHIFT), (SZ_8M >> PAGE_SHIFT)};
+
 #define NUM_ORDERS ARRAY_SIZE(orders)
 static struct page_pool *pools[NUM_ORDERS];
 static struct task_struct *ux_page_pool_tsk = NULL;
@@ -203,7 +203,7 @@ struct page_pool *ux_page_pool_create(gfp_t gfp_mask, unsigned int order, unsign
 	for (i = 0; i < POOL_MIGRATETYPE_TYPES_SIZE; i++) {
 		pool->count[i] = 0;
 		/* MIGRATETYPE: UNMOVABLE & MOVABLE */
-		pool->high[i] = nr_pages/POOL_MIGRATETYPE_TYPES_SIZE;
+		pool->high[i] = (nr_pages / POOL_MIGRATETYPE_TYPES_SIZE) >> order;
 		/* wakeup kthread on count < low*/
 		pool->low[i]  = pool->high[i]/2;
 		INIT_LIST_HEAD(&pool->items[i]);
@@ -233,6 +233,12 @@ static struct page *page_pool_remove(struct page_pool *pool, int migratetype)
 
 	spin_lock_irqsave(&pool->lock, flags);
 	page = list_first_entry_or_null(&pool->items[migratetype], struct page, lru);
+	/* FIXME: migratetype is not needed for uxmem pool and needs to be removed */
+	if (!page) {
+		/* fallback to the other migratetype */
+		migratetype = (migratetype + 1) % POOL_MIGRATETYPE_TYPES_SIZE;
+		page = list_first_entry_or_null(&pool->items[migratetype], struct page, lru);
+	}
 	if (page) {
 		pool->count[migratetype]--;
 		list_del(&page->lru);

@@ -378,6 +378,7 @@ void oplus_replace_next_task_fair(struct rq *rq, struct task_struct **p, struct 
 		return;
 
 	spin_lock_irqsave(orq->ux_list_lock, irqflag);
+	smp_mb__after_spinlock();
 	if (!orq_has_ux_tasks(orq)) {
 		spin_unlock_irqrestore(orq->ux_list_lock, irqflag);
 		return;
@@ -480,6 +481,7 @@ inline void oplus_check_preempt_wakeup(struct rq *rq, struct task_struct *p, boo
 	/* both of wake_task and curr_task are ux */
 	orq = (struct oplus_rq *) rq->android_oem_data1;
 	spin_lock_irqsave(orq->ux_list_lock, irqflag);
+	smp_mb__after_spinlock();
 	if (!IS_ERR_OR_NULL(ots) && !oplus_rbnode_empty(&ots->ux_entry)) {
 		/* account_ux_runtime(rq, curr); */
 		if (need_wakeup_preempt(orq, ots)) {
@@ -743,6 +745,7 @@ void android_rvh_check_preempt_tick_handler(void *unused, struct task_struct *ta
 	}
 
 	spin_lock_irqsave(orq->ux_list_lock, irqflag);
+	smp_mb__after_spinlock();
 	if (!oplus_rbnode_empty(&ots->ux_entry)) {
 		if (need_resched_ux(orq, ots, delta_exec)) {
 			resched_curr(rq);

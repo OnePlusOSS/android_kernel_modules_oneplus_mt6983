@@ -1141,6 +1141,20 @@ struct dec_cv_data {
 	int spec_dec_cv_mv;
 };
 
+#define FCL_TABLE_MAX 2
+#define FCL_CURVE_MAX 3
+struct fcl_table {
+	int volt_diff;
+	int curr_dec;
+	int min_curr;
+} __attribute__((packed));
+
+struct fcl_curves {
+	struct fcl_table limits[FCL_CURVE_MAX];
+	int nums;
+	int index;
+};
+
 struct oplus_chg_chip {
 	struct i2c_client *client;
 	struct device *dev;
@@ -1324,6 +1338,8 @@ struct oplus_chg_chip {
 	int curr_plc_status;
 	bool plc_support;
 	int plc_buck;
+	bool usb_aicl_enhance;
+	bool usb_aicl_enable_flag;
 	struct delayed_work plc_disable_wait_work;
 	int unwakelock_chg;
 	int stop_chg;
@@ -1332,6 +1348,7 @@ struct oplus_chg_chip {
 	int boot_mode;
 	int vooc_project;
 	int limit_current_area_vooc_project;
+	int sw_check_full_cnt;
 	bool suspend_after_full;
 	bool check_batt_full_by_sw;
 	bool external_gauge;
@@ -1684,6 +1701,8 @@ struct oplus_chg_chip {
 	int pre_chg_up_limit_mmi_val;
 	struct dec_cv_data dec_cv;
 	bool dec_spec_support;
+	struct fcl_curves fcl;
+	int fcl_offset;
 };
 
 #define TTF_UPDATE_UEVENT_BIT		BIT(30)
@@ -1957,6 +1976,7 @@ int oplus_chg_get_cool_down_status(void);
 int oplus_chg_get_normal_cool_down_status(void);
 void oplus_smart_charge_by_cool_down(struct oplus_chg_chip *chip, int val);
 int oplus_convert_current_to_level(struct oplus_chg_chip *chip, int val);
+int oplus_convert_level_to_current(struct oplus_chg_chip *chip, int val);
 int oplus_convert_pps_current_to_level(struct oplus_chg_chip *chip, int val);
 void oplus_smart_charge_by_shell_temp(struct oplus_chg_chip *chip, int val);
 int oplus_smart_charge_by_bcc(struct oplus_chg_chip *chip, int val);
@@ -2094,5 +2114,7 @@ int oplus_charger_get_dec_delta(void);
 void oplus_comm_set_rechg_soc_limit(int rechg_soc, bool en);
 void oplus_comm_get_rechg_soc_limit(int *rechg_soc, bool *en);
 int oplus_plc_based_buck_setting(struct oplus_chg_chip *chip, int enable);
+bool oplus_chg_get_fcl_curr(int hw_vth, int sw_vth, int vbat, int *curr_dec, int *min_curr, bool *hw);
+int oplus_chg_get_vb_offset(void);
 //#endif
 #endif /*_OPLUS_CHARGER_H_*/
