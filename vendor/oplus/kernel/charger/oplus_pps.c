@@ -1890,23 +1890,11 @@ static int oplus_pps_set_current_temp_normal_range(struct oplus_pps_chip *chip, 
 			chip->pps_fastchg_batt_temp_status = PPS_BAT_TEMP_NORMAL_HIGH;
 			ret = chip->limits.pps_strategy_normal_current;
 		} else {
-			chip->limits.pps_strategy_change_count++;
-			if (chip->limits.pps_strategy_change_count >= PPS_TEMP_OVER_COUNTS) {
-				chip->limits.pps_strategy_change_count = 0;
-				if (oplus_chg_get_ui_soc() <= chip->limits.pps_strategy_soc_high) {
-					chip->pps_fastchg_batt_temp_status = PPS_BAT_TEMP_NORMAL_LOW;
-					chip->pps_temp_cur_range = PPS_TEMP_RANGE_INIT;
-					chip->pps_stop_status = PPS_STOP_VOTER_CHOOSE_CURVE;
-					pps_err(" switch temp range:%d, lessthan normal_low:%d", vbat_temp_cur,
-						chip->limits.pps_normal_low_temp);
-				} else {
-					chip->pps_fastchg_batt_temp_status = PPS_BAT_TEMP_NORMAL_LOW;
-					chip->pps_temp_cur_range = PPS_TEMP_RANGE_NORMAL_LOW;
-				}
-				ret = chip->limits.pps_strategy_normal_current;
-				oplus_pps_reset_temp_range(chip);
-				chip->limits.pps_normal_low_temp += PPS_TEMP_LOW_RANGE_THD;
-			}
+			chip->pps_fastchg_batt_temp_status = PPS_BAT_TEMP_NORMAL_LOW;
+			chip->pps_temp_cur_range = PPS_TEMP_RANGE_NORMAL_LOW;
+			ret = chip->limits.pps_strategy_normal_current;
+			oplus_pps_reset_temp_range(chip);
+			chip->limits.pps_normal_low_temp += PPS_TEMP_WARM_RANGE_THD;
 		}
 		break;
 	case PPS_BAT_TEMP_HIGH0:
@@ -2025,37 +2013,13 @@ static int oplus_pps_set_current_temp_low_normal_range(struct oplus_pps_chip *ch
 		ret = chip->limits.pps_strategy_normal_current;
 	} else {
 		if (vbat_temp_cur >= chip->limits.pps_normal_low_temp) {
-			chip->limits.pps_strategy_change_count++;
-			if (chip->limits.pps_strategy_change_count >= PPS_TEMP_OVER_COUNTS) {
-				chip->limits.pps_strategy_change_count = 0;
-				if (oplus_chg_get_ui_soc() <= chip->limits.pps_strategy_soc_high) {
-					chip->pps_fastchg_batt_temp_status = PPS_BAT_TEMP_NORMAL_HIGH;
-					chip->pps_temp_cur_range = PPS_TEMP_RANGE_INIT;
-					chip->pps_stop_status = PPS_STOP_VOTER_CHOOSE_CURVE;
-					pps_err(" switch temp range:%d, morethan normal_low:%d", vbat_temp_cur,
-						chip->limits.pps_normal_low_temp);
-				} else {
-					chip->pps_fastchg_batt_temp_status = PPS_BAT_TEMP_NORMAL_HIGH;
-					chip->pps_temp_cur_range = PPS_TEMP_RANGE_NORMAL_HIGH;
-				}
-				ret = chip->limits.pps_strategy_normal_current;
-				oplus_pps_reset_temp_range(chip);
-				chip->limits.pps_normal_low_temp -= PPS_TEMP_LOW_RANGE_THD;
-			}
+			chip->limits.pps_normal_low_temp -= PPS_TEMP_LOW_RANGE_THD;
+			chip->pps_fastchg_batt_temp_status = PPS_BAT_TEMP_NORMAL_HIGH;
+			ret = chip->limits.pps_strategy_normal_current;
+			chip->pps_temp_cur_range = PPS_TEMP_RANGE_NORMAL_HIGH;
 		} else {
-			if (oplus_chg_get_ui_soc() <= chip->limits.pps_strategy_soc_high) {
-				chip->limits.pps_strategy_change_count++;
-				if (chip->limits.pps_strategy_change_count >= PPS_TEMP_OVER_COUNTS) {
-					chip->limits.pps_strategy_change_count = 0;
-					chip->pps_fastchg_batt_temp_status = PPS_BAT_TEMP_LITTLE_COOL;
-					chip->pps_temp_cur_range = PPS_TEMP_RANGE_INIT;
-					chip->pps_stop_status = PPS_STOP_VOTER_CHOOSE_CURVE;
-					pps_err(" switch temp range:%d", vbat_temp_cur);
-				}
-			} else {
-				chip->pps_fastchg_batt_temp_status = PPS_BAT_TEMP_LITTLE_COOL;
-				chip->pps_temp_cur_range = PPS_TEMP_RANGE_LITTLE_COOL;
-			}
+			chip->pps_fastchg_batt_temp_status = PPS_BAT_TEMP_LITTLE_COOL;
+			chip->pps_temp_cur_range = PPS_TEMP_RANGE_LITTLE_COOL;
 			ret = chip->limits.pps_strategy_normal_current;
 			oplus_pps_reset_temp_range(chip);
 			chip->limits.pps_little_cool_temp += PPS_TEMP_LOW_RANGE_THD;

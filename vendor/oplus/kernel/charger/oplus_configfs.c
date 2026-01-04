@@ -2,7 +2,7 @@
 /*
  * Copyright (C) 2020-2022 Oplus. All rights reserved.
  */
-#include <linux/delay.h>
+
 #include <linux/configfs.h>
 #include <linux/slab.h>
 #include <linux/device.h>
@@ -3001,7 +3001,6 @@ static ssize_t protocol_type_show(struct device *dev,
 	bool vooc_online = false;
 	static int pre_fast_chg_type = CHARGER_SUBTYPE_DEFAULT;
 	union oplus_chg_mod_propval pval = {0, };
-	static bool is_fastchg_first_check_type = true;
 
 	chip = (struct oplus_chg_chip *)dev_get_drvdata(oplus_common_dir);
 	if (!chip) {
@@ -3027,20 +3026,15 @@ static ssize_t protocol_type_show(struct device *dev,
 	subtype = oplus_chg_get_fast_chg_type();
 
 	if (vooc_online) {
-		if (oplus_get_vooc_adapter_type(subtype) == CHARGER_TYPE_SVOOC) {
+		if (oplus_get_vooc_adapter_type(subtype) == CHARGER_TYPE_SVOOC)
 			fast_chg_type = CHARGER_SUBTYPE_FASTCHG_SVOOC;
-		} else if ((!subtype) && (is_fastchg_first_check_type)) {
-			is_fastchg_first_check_type = false;
-			msleep(300);
-		} else {
+		else
 			fast_chg_type = CHARGER_SUBTYPE_FASTCHG_VOOC;
-		}
 		pre_fast_chg_type = fast_chg_type;
 	} else if (oplus_abnormal_adapter_disconnect_keep()) {
 		fast_chg_type = pre_fast_chg_type;
 	} else {
 		fast_chg_type = subtype;
-		is_fastchg_first_check_type = true;
 		if ((subtype == CHARGER_SUBTYPE_PD) || (subtype == CHARGER_SUBTYPE_PPS)) {
 			if (!chip->check_pd_svooc_complete)
 				fast_chg_type = CHARGER_SUBTYPE_DEFAULT;
