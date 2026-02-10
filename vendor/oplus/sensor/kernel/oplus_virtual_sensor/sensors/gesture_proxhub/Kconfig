@@ -1,0 +1,4 @@
+
+config OPLUS_FEATURE_GESTURE_PROX
+	bool "gesture_proxhub for MediaTek package"
+	default n

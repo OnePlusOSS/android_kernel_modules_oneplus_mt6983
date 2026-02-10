@@ -1,0 +1,5 @@
+config OPLUS_FEATURE_FILE_RECORD
+    tristate "record IO file path"
+    default n
+    help
+      define this config to record IO file path.

@@ -1,0 +1,4 @@
+
+config OPLUS_FEATURE_AMBIENTE_PROX
+	bool "ambiente_proxhub for MediaTek package"
+	default n
