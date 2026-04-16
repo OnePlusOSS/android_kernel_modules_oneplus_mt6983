@@ -538,10 +538,9 @@ void nic_rxd_v2_check_wakeup_reason(
 #ifdef OPLUS_FEATURE_CONN_POWER_MONITOR
 	//add for mtk connectivity power monitor
 	char pucLogContent[256] = {'\0'};
+	char pucwktypeContent[1024] = {'\0'};
 	uint16_t packageType = 0;
-	packageType = ParseRxPackage(prSwRfb);
-	snprintf(pucLogContent, sizeof(pucLogContent), "%d", packageType);
-	kalSendUevent(pucLogContent);
+	uint16_t uWkreason = OPLUS_WIFI_RX_OTHERS;
 #endif /* OPLUS_FEATURE_CONN_POWER_MONITOR */
 
 	prChipInfo = prAdapter->chip_info;
@@ -582,6 +581,20 @@ void nic_rxd_v2_check_wakeup_reason(
 			nicUpdateWakeupStatistics(prAdapter, RX_EVENT_INT);
 			prAdapter->wake_event_count[prEvent->ucEID]++;
 #endif
+#ifdef OPLUS_FEATURE_CONN_POWER_MONITOR
+			if(prEvent){
+				packageType = prEvent->ucEID;
+			}else{
+				DBGLOG(RX, WARN, "pvEvent is NULL\n");
+			}
+#ifdef CFG_SUPPORT_UNIFIED_COMMAND
+			if (IS_UNI_EVENT(prEvent))
+				uWkreason = OPLUS_WIFI_RX_EVENT_Uni;
+			else
+#endif
+				uWkreason = OPLUS_WIFI_RX_EVENT;
+#endif /* OPLUS_FEATURE_CONN_POWER_MONITOR */
+
 			DBGLOG(RX, INFO, "Event 0x%02x wakeup host\n",
 				prEvent->ucEID);
 			break;
@@ -627,12 +640,20 @@ void nic_rxd_v2_check_wakeup_reason(
 			ucSubtype = (prWlanMgmtHeader->u2FrameCtrl &
 				MASK_FC_SUBTYPE) >> OFFSET_OF_FC_SUBTYPE;
 
+#ifdef OPLUS_FEATURE_CONN_POWER_MONITOR
+			packageType = ucSubtype;
+			uWkreason = OPLUS_WIFI_RX_MGMT;
+#endif /* OPLUS_FEATURE_CONN_POWER_MONITOR */
 			DBGLOG(RX, INFO,
 				" frame subtype:%d, SeqCtrl %d wakeup host\n",
 				ucSubtype, prWlanMgmtHeader->u2SeqCtrl);
 			DBGLOG_MEM8(RX, INFO,
 					pvHeader, u2PktLen > 50 ? 50:u2PktLen);
 		} else {
+#ifdef OPLUS_FEATURE_CONN_POWER_MONITOR
+			packageType = NIC_RX_GET_U2_SW_PKT_TYPE(prSwRfb->prRxStatus);
+			uWkreason = OPLUS_WIFI_OUT_OF_DEF;
+#endif /* OPLUS_FEATURE_CONN_POWER_MONITOR */
 			DBGLOG(RX, ERROR,
 			"[%s]: u2PktTYpe(0x%04X) is OUT OF DEF.!!!\n",
 			__func__,
@@ -676,6 +697,10 @@ void nic_rxd_v2_check_wakeup_reason(
 
 			if ((prWlanMacHeader->u2FrameCtrl & MASK_FRAME_TYPE) ==
 				MAC_FRAME_BLOCK_ACK_REQ) {
+#ifdef OPLUS_FEATURE_CONN_POWER_MONITOR
+				packageType = MAC_FRAME_BLOCK_ACK_REQ;
+				uWkreason = OPLUS_WIFI_RX_FRAME;
+#endif /* OPLUS_FEATURE_CONN_POWER_MONITOR */
 				DBGLOG(RX, INFO,
 					"BAR frame[SSN:%d,TID:%d] wakeup host\n"
 					, prSwRfb->u2SSN, prSwRfb->ucTid);
@@ -709,7 +734,12 @@ void nic_rxd_v2_check_wakeup_reason(
 				(pvHeader[ETH_HLEN + 20] << 8) | pvHeader[ETH_HLEN + 21],
 				pvHeader[ETH_HLEN + 16], pvHeader[ETH_HLEN + 17], pvHeader[ETH_HLEN + 18], pvHeader[ETH_HLEN + 19],
 				(pvHeader[ETH_HLEN + 22] << 8) | pvHeader[ETH_HLEN + 23]);
-			kalSendUevent(pucLogContent);
+			if (prSwRfb->pvPacket) {
+				packageType = oplusStatsParseIPV4Info((struct sk_buff *)(prSwRfb->pvPacket), &pvHeader[ETH_HLEN]);
+			} else {
+				packageType = ETH_P_IPV4;
+				DBGLOG(RX, WARN, "pvPacket is NULL, use default ETH_P_IPV4 for packageType\n");
+			}
 #endif /* OPLUS_FEATURE_CONN_POWER_MONITOR */
 			break;
 		case ETH_P_ARP:
@@ -729,8 +759,9 @@ void nic_rxd_v2_check_wakeup_reason(
                                         (pvHeader[ETH_HLEN + 40] << 8) | pvHeader[ETH_HLEN + 41],
                                         &(pvHeader[ETH_HLEN + 24]),
                                         (pvHeader[ETH_HLEN + 42] << 8) | pvHeader[ETH_HLEN + 43]);
-                                kalSendUevent(pucLogContent);
                         }
+			packageType = u2Temp;
+			uWkreason = OPLUS_WIFI_RX_DATA;
 #endif /* OPLUS_FEATURE_CONN_POWER_MONITOR */
 
 		case ETH_P_IPX:
@@ -747,6 +778,10 @@ void nic_rxd_v2_check_wakeup_reason(
 				HAL_MAC_CONNAC2X_RX_STATUS_IS_ERROR(
 					prRxStatus));
 			} else {
+#ifdef OPLUS_FEATURE_CONN_POWER_MONITOR
+				packageType = u2Temp;
+				uWkreason = OPLUS_WIFI_RX_DATA;
+#endif /* OPLUS_FEATURE_CONN_POWER_MONITOR */
 				DBGLOG(RX, WARN,
 				"EthType 0x%04x packet DST[%d%d] TRS[%d] wakeup host\n",
 				u2Temp,
@@ -773,10 +808,24 @@ void nic_rxd_v2_check_wakeup_reason(
 #if CFG_SUPPORT_WAKEUP_STATISTICS
 		nicUpdateWakeupStatistics(prAdapter, RX_OTHERS_INT);
 #endif
+#ifdef OPLUS_FEATURE_CONN_POWER_MONITOR
+		//packageType = ParseRxPackage(prSwRfb, OPLUS_WIFI_RX_OTHERS, 0);
+		packageType = prSwRfb->ucPacketType;
+		uWkreason = OPLUS_WIFI_RX_OTHERS;
+#endif /* OPLUS_FEATURE_CONN_POWER_MONITOR */
 		DBGLOG(RX, WARN, "Unknown Packet %d wakeup host\n",
 			prSwRfb->ucPacketType);
 		break;
 	}
+#ifdef OPLUS_FEATURE_CONN_POWER_MONITOR
+	if (pucLogContent[0] != 0) {
+		snprintf(pucwktypeContent, sizeof(pucwktypeContent), "%s,wakeup_type=%d_%d", pucLogContent, uWkreason, packageType);
+	} else {
+		snprintf(pucwktypeContent, sizeof(pucwktypeContent), "wakeup_reason= ,wakeup_type=%d_%d", uWkreason, packageType);
+	}
+	kalSendUevent(pucwktypeContent);
+	DBGLOG(RX, INFO, "wf wakeup reason is %d,type is 0x%02x\n", uWkreason, packageType);
+#endif /* OPLUS_FEATURE_CONN_POWER_MONITOR */
 }
 #endif /* CFG_SUPPORT_WAKEUP_REASON_DEBUG */
 

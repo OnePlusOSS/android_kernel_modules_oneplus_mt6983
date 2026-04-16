@@ -321,11 +321,6 @@ static int sc6607_ufcs_read_msg(struct ufcs_dev *ufcs, unsigned char *buf, int l
 		chg_err("can't read rx buf, rc=%d\n", rc);
 		return rc;
 	}
-	rc = sc6607_write_byte(chip, SC6607_ADDR_UFCS_CTRL1, 0x10);
-	if (rc < 0) {
-		chg_err("can't write SC6607_ADDR_UFCS_CTRL1, rc=%d\n", rc);
-		return rc;
-	}
 	return (int)rx_buf_len;
 }
 
@@ -415,6 +410,9 @@ static int sc6607_ufcs_enable(struct ufcs_dev *ufcs)
 
 	chip = ufcs->drv_data;
 
+	if (chip->sc6607_buck && chip->sc6607_buck->is_sc6607a)
+		sc6607a_set_dpdm_ctrl(chip->sc6607_buck, true);
+
 	for (i = 0; i < SC6607_ENABLE_REG_NUM; i++) {
 		rc = sc6607_write_byte(chip, addr_buf[i], cmd_buf[i]);
 		if (rc < 0) {
@@ -449,6 +447,9 @@ static int sc6607_ufcs_disable(struct ufcs_dev *ufcs)
 		chg_err("write i2c failed\n");
 		return rc;
 	}
+
+	if (chip->sc6607_buck && chip->sc6607_buck->is_sc6607a)
+		sc6607a_set_dpdm_ctrl(chip->sc6607_buck, false);
 
 	return 0;
 }

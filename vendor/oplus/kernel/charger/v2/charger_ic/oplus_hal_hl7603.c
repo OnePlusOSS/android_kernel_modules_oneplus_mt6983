@@ -126,6 +126,7 @@ struct chip_hl7603 {
 	int id_match_status;
 	int vout_mv;
 	bool i2c_success;
+	int hl7603_init_track_count;
 	int probe_gpio_status;
 	int ilim_ma;
 	bool fpga_support;
@@ -427,17 +428,22 @@ error:
 	return rc;
 }
 
-
+static int hl7603_reg_dump(struct oplus_chg_ic_dev *ic_dev);
 #define HL7603_CHIP_ID_REV	0xB3	/* the HL7603 default value of address 0x0 */
 static int hl7603_hardware_init(struct chip_hl7603 *chip)
 {
 	int rc = 0;
 	u8 buf[HL7603_REG_CNT + 4] = { 0 };
 
+	if (chip->ic_dev == NULL) {
+		chg_err("chip->ic_dev is NULL\n");
+		return 0;
+	}
+
 	rc = hl7603_read(chip, DEV_ID_REV_REG, (unsigned int *)&buf[6]);
 	if (rc >= 0 && buf[6] != HL7603_CHIP_ID_REV) {
 		chip->chip_id = buf[6];
-		chg_info("chip_id 0x%x is not HL7603\n", chip->chip_id);
+		chg_info("chip_id 0x%x is not HL7603%d\n", chip->chip_id, chip->ic_dev->index);
 		return 0;
 	}
 
@@ -455,18 +461,23 @@ static int hl7603_hardware_init(struct chip_hl7603 *chip)
 	rc = hl7603_read(chip, HL7603_STATUS_REG, (unsigned int *)&buf[4]);
 
 	chg_info("buf[0]=0x%x, buf[1]=0x%x, buf[2]=0x%x, buf[3]=0x%x, buf[4]=0x%x, buf[6]=0x%x" \
-		 "vout_mv_to_reg(%d mV)=0x%x, ilim_ma_to_reg(%d mA) = 0x%x",
+		 "vout_mv_to_reg(%d mV)=0x%x, ilim_ma_to_reg(%d mA) = 0x%x,byb_id:%d\n",
 		  buf[0], buf[1], buf[2], buf[3], buf[4], buf[6],
 		  chip->vout_mv, vout_mv_to_reg(chip->vout_mv),
-		  chip->ilim_ma, hl7603_ilim_ma_to_reg(chip->ilim_ma));
+		  chip->ilim_ma, hl7603_ilim_ma_to_reg(chip->ilim_ma), chip->ic_dev->index);
 
 	if (rc >= 0 && (buf[1] == vout_mv_to_reg(chip->vout_mv)) &&
-	    ((buf[2] & 0xff) == hl7603_ilim_ma_to_reg(chip->ilim_ma)))
+	    ((buf[2] & 0xff) == hl7603_ilim_ma_to_reg(chip->ilim_ma))) {
 		chip->i2c_success = true;
-	else
+		chip->hl7603_init_track_count = 1;
+		hl7603_reg_dump(chip->ic_dev);
+	} else {
 		chip->i2c_success = false;
+		chip->hl7603_init_track_count = 0;
+	}
 
-	chg_info("i2c %s reg=%*ph\n", chip->i2c_success ? "success" : "fail", HL7603_REG_CNT, buf);
+	chg_info("byb_id:%d,i2c %s reg=%*ph\n", chip->ic_dev->index,
+		chip->i2c_success ? "success" : "fail", HL7603_REG_CNT, buf);
 
 	return 0;
 }
@@ -478,25 +489,34 @@ struct oplus_chg_ic_virq hl7603_virq_table[] = {
 #define TRACK_UPLOAD_COUNT_MAX 10
 #define TRACK_LOCAL_T_NS_TO_S_THD 1000000000
 #define TRACK_DEVICE_ABNORMAL_UPLOAD_PERIOD (24 * 3600)
+#define TRACK_INIT_DELAY_TIME 12 /* 1 minute delay time */
 static int hl7603_push_err(struct oplus_chg_ic_dev *ic_dev,
 				   bool i2c_error, int err_code, char *reg, bool tsd)
 {
 	static int upload_count = 0;
 	static int pre_upload_time = 0;
 	int curr_time;
+	struct chip_hl7603 *chip;
+	chip = oplus_chg_ic_get_drvdata(ic_dev);
 
 	curr_time = local_clock() / TRACK_LOCAL_T_NS_TO_S_THD;
 	if (curr_time - pre_upload_time > TRACK_DEVICE_ABNORMAL_UPLOAD_PERIOD)
 		upload_count = 0;
 
-	if (upload_count >= TRACK_UPLOAD_COUNT_MAX)
+	if (upload_count >= TRACK_UPLOAD_COUNT_MAX) {
+		chg_err("upload_count >= TRACK_UPLOAD_COUNT_MAX is true%d\n", ic_dev->index);
 		return 0;
+	}
 
 	pre_upload_time = local_clock() / TRACK_LOCAL_T_NS_TO_S_THD;
 
 	if (i2c_error)
 		oplus_chg_ic_creat_err_msg(ic_dev, OPLUS_IC_ERR_I2C, 0,
 			"$$err_scene@@i2c_err$$err_reason@@%d$$byb_id@@%d", err_code, ic_dev->index);
+	else if (chip != NULL && chip->hl7603_init_track_count > TRACK_INIT_DELAY_TIME)
+		oplus_chg_ic_creat_err_msg(ic_dev, OPLUS_IC_ERR_BUCK_BOOST, 0,
+			"$$err_scene@@byb_init_info$$err_reason@@%s$$reg_info@@%s$$byb_id@@%d",
+			tsd ? "TSD" : "normal", reg, ic_dev->index);
 	else
 		oplus_chg_ic_creat_err_msg(ic_dev, OPLUS_IC_ERR_BUCK_BOOST, 0,
 			"$$err_scene@@byb_work_err$$err_reason@@%s$$reg_info@@%s$$byb_id@@%d",
@@ -542,11 +562,13 @@ static int hl7603_reg_dump(struct oplus_chg_ic_dev *ic_dev)
 	}
 	chip = oplus_chg_ic_get_drvdata(ic_dev);
 
-	if (!ic_dev->online || !chip->i2c_success)
+	if (!ic_dev->online || !chip->i2c_success) {
+		chg_err("!ic_dev->online || !chip->i2c_success is true%d\n", ic_dev->index);
 		return 0;
+	}
 
 	if(atomic_read(&chip->suspended) == 1) {
-		chg_err("in suspended\n");
+		chg_err("in suspended%d\n", ic_dev->index);
 		return 0;
 	}
 
@@ -557,11 +579,15 @@ static int hl7603_reg_dump(struct oplus_chg_ic_dev *ic_dev)
 	rc = hl7603_read(chip, HL7603_STATUS_REG, (unsigned int *)&buf[4]);
 	rc = hl7603_read(chip, HL7603X_REG_BOOST_CONTROL, (unsigned int *)&buf[5]);
 
-	chg_err("%*ph\n", HL7603_REG_CNT, buf);
+	chg_err("byb_id:%d,%*ph, %d\n", ic_dev->index, HL7603_REG_CNT, buf, chip->hl7603_init_track_count);
 
-	if (rc < 0 || hl7603_debug_track) {
+	if (chip->hl7603_init_track_count > 0)
+		chip->hl7603_init_track_count++;
+
+	if (rc < 0 || hl7603_debug_track || chip->hl7603_init_track_count > TRACK_INIT_DELAY_TIME) {
 		snprintf(reg_info, REG_INFO_LEN, "reg01~04:[%*ph]", HL7603_REG_CNT, buf);
 		hl7603_push_err(ic_dev, rc < 0, rc, reg_info, 0);
+		chip->hl7603_init_track_count = 0;
 	}
 
 	return 0;
@@ -1072,11 +1098,6 @@ static int hl7603_driver_probe(struct i2c_client *client, const struct i2c_devic
 		chg_err("hl7603 gpio init failed, rc = %d!\n", rc);
 	}
 
-	rc = hl7603_hardware_init(chip);
-	if (rc < 0) {
-		chg_err("hl7603 ic init failed, rc = %d!\n", rc);
-		goto gpio_init_err;
-	}
 
 	rc = of_property_read_u32(node, "oplus,ic_type", &ic_type);
 	if (rc < 0) {
@@ -1088,6 +1109,13 @@ static int hl7603_driver_probe(struct i2c_client *client, const struct i2c_devic
 		chg_err("can't get ic index, rc=%d\n", rc);
 		goto reg_ic_err;
 	}
+
+	rc = hl7603_hardware_init(chip);
+	if (rc < 0) {
+		chg_err("hl7603 ic init failed, rc = %d!\n", rc);
+		goto gpio_init_err;
+	}
+
 	ic_cfg.name = client->dev.of_node->name;
 	ic_cfg.index = ic_index;
 	snprintf(ic_cfg.manu_name, OPLUS_CHG_IC_MANU_NAME_MAX - 1, "buck-BYB/HL7603:%d", ic_index);
@@ -1134,7 +1162,7 @@ static int hl7603_driver_probe(struct i2c_client *client, const struct i2c_devic
 	if (!chip->i2c_success && chip->probe_gpio_status == chip->id_match_status)
 		schedule_delayed_work(&chip->retry_init_work, msecs_to_jiffies(5000));
 #endif
-	chg_info("success!\n");
+	chg_info("byb_id:%d,success!\n", chip->ic_dev->index);
 	return 0;
 
 reg_ic_err:

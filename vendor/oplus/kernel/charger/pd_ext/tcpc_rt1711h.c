@@ -54,6 +54,7 @@
 #define SC2150A_PID		0x2150
 #define SC6607_VID		0x311c
 #define SC6607_PID		0x6600
+#define SC6607A_PID		0x6610
 #define PD_MSG_CRC_LEN 4
 #define PD_MSG_LEN_OVER_TOTAL_LENGTH 3
 #define PD_CCOPEN_TIMER	500 /* ms */
@@ -1097,7 +1098,7 @@ static int rt1711_is_low_power_mode(struct tcpc_device *tcpc)
 		return rv;
 
 
-	if (chip->chip_id == HUSB311_DID || chip->chip_id == CPS8851_DID) {
+	if (chip->chip_id == HUSB311_DID || chip->chip_pid == CPS8851_PID) {
 		pr_info("%s - read HUSB311_REG_BMC_CTRL=0x%x\n", __func__, rv);
 		return (rv & RT1711H_REG_BMCIO_OSC_EN) != 0;
 	}
@@ -1131,7 +1132,7 @@ static int rt1711_set_low_power_mode(
 			RT1711H_REG_VBUS_DET_EN | RT1711H_REG_BMCIO_OSC_EN;
 	}
 
-	if (chip->chip_id == HUSB311_DID || chip->chip_id == CPS8851_DID) {
+	if (chip->chip_id == HUSB311_DID || chip->chip_pid == CPS8851_PID) {
 		data &= ~RT1711H_REG_BMCIO_OSC_EN;
 		pr_info("%s - write HUSB311_REG_BMC_CTRL=0x%x\n",
 			__func__, data);
@@ -1149,7 +1150,7 @@ int rt1711h_set_watchdog(struct tcpc_device *tcpc, bool en)
 /********* workaround MO.230913213000256759: sc6607 workaround for pd abnormal start*********/
 	struct rt1711_chip *chip = tcpc_get_dev_data(tcpc);
 	int data = 0;
-	if (chip->chip_pid == SC6601_PID) {
+	if (chip->chip_pid == SC6601_PID || chip->chip_pid == SC6607A_PID) {
 		data = rt1711_i2c_read8(tcpc, TCPC_V10_REG_TCPC_CTRL);
 		if (data < 0)
 			return data;
@@ -1190,7 +1191,7 @@ static int rt1711_tcpc_deinit(struct tcpc_device *tcpc)
 	rt1711_set_cc(tcpc, TYPEC_CC_DRP);
 	rt1711_set_cc(tcpc, TYPEC_CC_OPEN);
 
-	if (chip->chip_id == HUSB311_DID || chip->chip_id == CPS8851_DID) {
+	if (chip->chip_id == HUSB311_DID || chip->chip_pid == CPS8851_PID) {
 		rt1711_i2c_write8(tcpc, RT1711H_REG_I2CRST_CTRL, 0x08);
 	} else {
 		rt1711_i2c_write8(tcpc, RT1711H_REG_I2CRST_CTRL, RT1711H_REG_I2CRST_SET(true, 4));
@@ -1202,7 +1203,8 @@ static int rt1711_tcpc_deinit(struct tcpc_device *tcpc)
 	rt1711_i2c_write8(tcpc, RT1711H_REG_INTRST_CTRL, RT1711H_REG_INTRST_SET(true, 0));
 #endif
 
-	if (chip->chip_id == SC2150A_DID) {
+	pr_info("%s shutdown\n", __func__);
+	if (chip->chip_id == SC2150A_DID || chip->chip_id == CPS8851_DID) {
 		msleep(PD_CCOPEN_TIMER);
 		rt1711_i2c_write8(tcpc, RT1711H_REG_SWRESET, 1);
 	}
@@ -1225,7 +1227,7 @@ static int rt1711_set_msg_header(
 		data_role, power_role);
 	uint16_t hdr = (data_role << 5) | (power_role << 8);
 
-	if (chip->chip_pid == SC6601_PID)
+	if (chip->chip_pid == SC6601_PID || chip->chip_pid == SC6607A_PID)
 		msg_hdr = TCPC_V10_REG_MSG_HDR_INFO_SET(0, 0);
 	rt1711_i2c_write8(tcpc, TCPC_V10_REG_MSG_HDR_INFO, msg_hdr);
 	return rt1711_i2c_write16(tcpc, TCPC_V10_REG_TX_HDR, hdr);
@@ -1549,11 +1551,11 @@ static int rt1711_tcpcdev_init(struct rt1711_chip *chip, struct device *dev)
 	chip->tcpc->tcpc_flags = TCPC_FLAGS_LPM_WAKEUP_WATCHDOG |
 			TCPC_FLAGS_VCONN_SAFE5V_ONLY;
 
-	if ((chip->chip_id > RT1711H_DID_B) || (chip->chip_id == CPS8851_DID))
+	if ((chip->chip_id > RT1711H_DID_B) || (chip->chip_pid == CPS8851_PID))
 		chip->tcpc->tcpc_flags |= TCPC_FLAGS_CHECK_RA_DETACH;
 
 #ifdef CONFIG_USB_PD_RETRY_CRC_DISCARD
-	if ((chip->chip_id > RT1715_DID_D) || (chip->chip_id == CPS8851_DID))
+	if ((chip->chip_id > RT1715_DID_D) || (chip->chip_pid == CPS8851_PID))
 		chip->tcpc->tcpc_flags |= TCPC_FLAGS_RETRY_CRC_DISCARD;
 #endif  /* CONFIG_USB_PD_RETRY_CRC_DISCARD */
 
@@ -1578,9 +1580,27 @@ static int rt1711_tcpcdev_init(struct rt1711_chip *chip, struct device *dev)
 
 
 #ifdef OPLUS_FEATURE_CHG_BASIC
+static bool rt1711h_check_sc6607_did(struct rt1711_chip *chip)
+{
+	u16 did;
+	int ret;
+
+	ret = rt1711_read_device(chip->client, TCPC_V10_REG_DID, 2, &did);
+	if (ret < 0) {
+		dev_err(&chip->client->dev, "read device id fail(%d)\n", ret);
+		return false;
+	}
+
+	pr_info("%s, did=0x%x\n", __func__, did);
+	if (did == SC6607_DID || did == SC6607A_DID)
+		return true;
+
+	return false;
+}
+
 static inline bool rt1711h_check_sc6607(struct tcpc_device *tcpc)
 {
-	u16 vid, pid, did;
+	u16 vid, pid;
 	int ret;
 	struct rt1711_chip *chip = tcpc_get_dev_data(tcpc);
 	static bool check_done = false;
@@ -1609,17 +1629,10 @@ static inline bool rt1711h_check_sc6607(struct tcpc_device *tcpc)
 		return is_sc6607;
 	}
 	pr_info("%s, pid=0x%x\n", __func__, pid);
-	if (pid != SC6607_PID)
+	if ((pid != SC6607_PID) && (pid != SC6607A_PID))
 		return is_sc6607;
 
-	ret = rt1711_read_device(chip->client, TCPC_V10_REG_DID, 2, &did);
-	if (ret < 0) {
-		dev_err(&chip->client->dev, "read device id fail(%d)\n", ret);
-		return is_sc6607;
-	}
-
-	pr_info("%s, did=0x%x\n", __func__, did);
-	if (did == SC6607_DID)
+	if (rt1711h_check_sc6607_did(chip))
 		is_sc6607 = true;
 
 	return is_sc6607;
@@ -1651,7 +1664,8 @@ static inline int rt1711h_check_revision(struct i2c_client *client)
 	}
 
 	if ((pid != RICHTEK_1711_PID) && (pid != HUSB311_PID) &&
-	   (pid != SC2150A_PID) && (pid != SC6607_PID) && (pid != CPS8851_PID)) {
+	   (pid != SC2150A_PID) && (pid != SC6607_PID) && (pid != CPS8851_PID) &&
+	   (pid != SC6607A_PID)) {
 		pr_info("%s failed, PID=0x%04x\n", __func__, pid);
 		return -ENODEV;
 	}
@@ -1667,7 +1681,8 @@ static inline int rt1711h_check_revision(struct i2c_client *client)
 		dev_err(&client->dev, "read device ID fail(%d)\n", ret);
 		return -EIO;
 	}
-	if (vid == SC6607_VID && pid == SC6607_PID && did == SC6607_DID)
+	if ((vid == SC6607_VID && pid == SC6607_PID && did == SC6607_DID)||
+	    (vid == SC6607_VID && pid == SC6607A_PID && did == SC6607A_DID))
 		did = SC2150A_DID;
 	pr_err(" (%s) vid = 0x%x pid = 0x%x did = 0x%x\n", __func__, vid, pid, did);
 
@@ -1933,6 +1948,22 @@ static int rt1711_i2c_resume(struct device *dev)
 	return 0;
 }
 
+static bool is_support_oplus_chg_v2(void)
+{
+	struct device_node *node;
+	bool is_framework_v2 = false;
+
+	node = of_find_node_by_path("/soc/oplus_chg_core");
+	if (node) {
+		is_framework_v2 =
+		    of_property_read_bool(node, "oplus,chg_framework_v2");
+		of_node_put(node);
+	} else {
+		is_framework_v2 =  false;
+	}
+	return is_framework_v2;
+}
+
 static void rt1711_shutdown(struct i2c_client *client)
 {
 	struct rt1711_chip *chip = i2c_get_clientdata(client);
@@ -1949,7 +1980,10 @@ static void rt1711_shutdown(struct i2c_client *client)
 		if (chip->chip_pid == CPS8851_PID)
 			mdelay(25);
 #endif
-		tcpm_shutdown(chip->tcpc);
+		if (!is_support_oplus_chg_v2()) {
+			if (chip->tcpc)
+				tcpm_shutdown(chip->tcpc);
+		}
 	} else {
 		i2c_smbus_write_byte_data(
 			client, RT1711H_REG_SWRESET, 0x01);

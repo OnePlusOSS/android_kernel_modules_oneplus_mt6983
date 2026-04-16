@@ -15,23 +15,65 @@
  */
 
 //This file has been modified by Unisoc (Tianjin) Technologies Co., Ltd in 2023.
-
+#include <linux/version.h>
 #include <linux/atomic.h>
 #include <linux/module.h>
 #include <linux/blkdev.h>
-#include <linux/blk-cgroup.h>
+#if (LINUX_VERSION_CODE < KERNEL_VERSION(6, 1, 0))
+#include "linux/blk-cgroup.h"
+#endif
+#if (LINUX_VERSION_CODE >= KERNEL_VERSION(6, 1, 0))
+#include "block/blk-cgroup.h"
+#endif
 #include <linux/cgroup.h>
 #include <linux/jiffies.h>
 #include <linux/sched/signal.h>
+#include <linux/kthread.h>
 #include <trace/hooks/mm.h>
 
 #define CREATE_TRACE_POINTS
-#include "trace.h"
+
+#undef TRACE_SYSTEM
+#define TRACE_SYSTEM unisoc_io
+
+#include <linux/tracepoint.h>
+
+TRACE_EVENT(iolimit_write_control,
+	TP_PROTO(unsigned long delta),
+
+	TP_ARGS(delta),
+
+	TP_STRUCT__entry(
+		__field(pid_t, tgid)
+		__field(pid_t, pid)
+		__array(char, comm, TASK_COMM_LEN)
+		__field(unsigned long, delta)
+	),
+
+	TP_fast_assign(
+		__entry->tgid = current->tgid;
+		__entry->pid  = current->pid;
+		memcpy(__entry->comm, current->comm, TASK_COMM_LEN);
+		__entry->delta = delta * 1000 / HZ;
+	),
+
+	TP_printk("tgid:%d pid:%d comm=%s delta=%lu\n",
+		__entry->tgid,
+		__entry->pid,
+		__entry->comm,
+		__entry->delta
+	)
+);
+
+#undef TRACE_INCLUDE_PATH
+#define TRACE_INCLUDE_PATH .
+#define TRACE_INCLUDE_FILE trace
+
+#include <trace/define_trace.h>
 
 //IO control's window is selected as (1/8)s.
 #define WAIT_PARTS_NUM		(8)
 #define WAIT_INTERNAL_JIF	(HZ/WAIT_PARTS_NUM)
-
 
 static struct blkcg_policy iolimit_policy;
 
@@ -45,6 +87,64 @@ struct iolimit_grp {
 	spinlock_t		write_lock;
 	wait_queue_head_t	write_wq;
 };
+
+#if (LINUX_VERSION_CODE >= KERNEL_VERSION(6, 1, 0))
+/*blkcg_css & kthread_blkcg not export api from kernel, copy from kthread.c*/
+struct kthread {
+	unsigned long flags;
+	unsigned int cpu;
+	int result;
+	int (*threadfn)(void *);
+	void *data;
+	struct completion parked;
+	struct completion exited;
+#ifdef CONFIG_BLK_CGROUP
+	struct cgroup_subsys_state *blkcg_css;
+#endif
+	/* To store the full name if task comm is truncated. */
+	char *full_name;
+};
+
+static inline struct kthread *to_kthread(struct task_struct *k)
+{
+	WARN_ON(!(k->flags & PF_KTHREAD));
+	return k->worker_private;
+}
+
+/**
+ * kthread_blkcg - get associated blkcg css of current kthread
+ *
+ * Current thread must be a kthread.
+ */
+struct cgroup_subsys_state *kthread_blkcg(void)
+{
+	struct kthread *kthread;
+
+	if (current->flags & PF_KTHREAD) {
+		kthread = to_kthread(current);
+		if (kthread)
+			return kthread->blkcg_css;
+	}
+	return NULL;
+}
+
+/**
+ * blkcg_css - find the current css
+ *
+ * Find the css associat KERed with either the kthread or the current task.
+ * This may return a dying css, so it is up to the caller to use tryget logic
+ * to confirm it is alive and well.
+ */
+static struct cgroup_subsys_state *blkcg_css(void)
+{
+        struct cgroup_subsys_state *css;
+
+        css = kthread_blkcg();
+        if (css)
+                return css;
+        return task_css(current, io_cgrp_id);
+}
+#endif
 
 static inline struct iolimit_grp *cpd_to_iolimitcg(struct blkcg_policy_data *cpd)
 {
@@ -123,6 +223,8 @@ repeat:
 	rcu_read_lock();
 	iolimit_blkcg = current_to_iolimitcg();
 
+	if (!iolimit_blkcg)
+		goto out_rcu;
 	if (!is_need_iolimit(iolimit_blkcg, true))
 		goto out_rcu;
 
@@ -132,7 +234,8 @@ repeat:
 	if (io_space_cnt < count) {
 		spin_unlock_bh(&iolimit_blkcg->write_lock);
 		css = blkcg_css();
-
+		if (!css)
+			goto out_rcu;
 		if (css_tryget_online(css)) {
 			rcu_read_unlock();
 			ret = wait_event_interruptible(iolimit_blkcg->write_wq,
@@ -155,9 +258,8 @@ repeat:
 		}
 
 		iolimit_blkcg->nr_written += count;
+		spin_unlock_bh(&iolimit_blkcg->write_lock);
 	}
-
-	spin_unlock_bh(&iolimit_blkcg->write_lock);
 
 out_rcu:
 	rcu_read_unlock();
@@ -166,6 +268,25 @@ out:
 	if (delta > 0)
 		trace_iolimit_write_control(delta);
 }
+
+#if (LINUX_VERSION_CODE > KERNEL_VERSION(6, 1, 0))
+static void io_write_bandwidth_control(void *unuse, struct inode *inode)
+{
+	struct cgroup_subsys_state *css;
+
+	rcu_read_lock();
+	css = blkcg_css();
+
+	if (!css || !cgroup_parent(css->cgroup)) {
+		rcu_read_unlock();
+		return;
+	}
+	rcu_read_unlock();
+
+	do_io_write_bandwidth_control(PAGE_SIZE);
+}
+
+#elif (LINUX_VERSION_CODE <= KERNEL_VERSION(6, 1, 0))
 
 static void io_write_bandwidth_control(void *data, void *unuse)
 {
@@ -182,6 +303,7 @@ static void io_write_bandwidth_control(void *data, void *unuse)
 
 	do_io_write_bandwidth_control(PAGE_SIZE);
 }
+#endif
 
 static struct blkcg_policy_data *iolimit_alloc_cpd(gfp_t gfp)
 {
@@ -226,6 +348,8 @@ static int write_limit_store(struct cgroup_subsys_state *css,
 		return -EINVAL;
 
 	iolimit_blkcg = css_to_iolimitcg(css);
+	if (!iolimit_blkcg)
+		return -EAGAIN;
 	atomic64_set(&iolimit_blkcg->write_max, limit);
 
 	spin_lock_bh(&iolimit_blkcg->write_lock);
@@ -244,6 +368,8 @@ static s64 write_limit_show(struct cgroup_subsys_state *css,
 		return -EINVAL;
 
 	iolimit_blkcg = css_to_iolimitcg(css);
+	if (!iolimit_blkcg)
+		return -EAGAIN;
 	return atomic64_read(&iolimit_blkcg->write_max);
 }
 

@@ -18,7 +18,7 @@ static struct ilitek_protocol_info protocol_info[PROTOCL_VER_NUM] = {
 	[7] = {PROTOCOL_VER_570, 9, 4, 14, 30, 5, 5, 3, 8, 15, 14},
 };
 
-#define FUNC_CTRL_NUM   24
+#define FUNC_CTRL_NUM   25
 static struct ilitek_ic_func_ctrl func_ctrl[FUNC_CTRL_NUM] = {
 	/* cmd[3] = cmd, func, ctrl */
 	[0] = {"sense", {0x1, 0x1, 0x0}, 3},
@@ -45,6 +45,7 @@ static struct ilitek_ic_func_ctrl func_ctrl[FUNC_CTRL_NUM] = {
 	[21] = {"int_trigger", {0x1, 0x1B, 0x0}, 3},
 	[22] = {"aod", {0x1, 0xD, 0x0}, 3},
 	[23] = {"waterproof", {0xDA, 0x00, 0x01, 0x02}, 4},
+	[24] = {"rainstorm", {0x01 , 0x37 , 0x00}, 3},
 };
 
 static int ilitek_tddi_ic_check_info(u32 pid, u32 id)

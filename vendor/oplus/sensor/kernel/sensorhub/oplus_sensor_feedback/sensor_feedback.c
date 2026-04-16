@@ -149,6 +149,7 @@ struct sensor_fb_conf g_fb_conf[] = {
 	{FOLD_DEVICE_FOLDE_COUNT_ID, "device_fold_count", SENSOR_DEVICE_TYPE},
 	{FOLD_DEVICE_RELI_FOLD_ID, "device_reli_fold", SENSOR_DEVICE_TYPE},
 	{FOLD_DEVICE_RELI_OPEN_ID, "device_reli_open", SENSOR_DEVICE_TYPE},
+	{HINGE_DETECT_INTERVAL_TIME_ID, "device_hinge_detect_interval_time_id", SENSOR_DEVICE_TYPE},
 
 	{FREE_FALL_TRIGGER_ID, "device_free_fall", SENSOR_DEVICE_TYPE},
 
@@ -430,10 +431,11 @@ static int parse_shr_info(struct sensor_fb_cxt *sensor_fb_cxt)
 
 		memset(payload, 0, sizeof(payload));
 		memset(detail_buff, 0, sizeof(detail_buff));
-		snprintf(detail_buff, sizeof(detail_buff), "%d %d %d",
+		snprintf(detail_buff, sizeof(detail_buff), "%d %d %d %d",
 			sensor_fb_cxt->fb_smem.event[count].buff[0],
 			sensor_fb_cxt->fb_smem.event[count].buff[1],
-			sensor_fb_cxt->fb_smem.event[count].buff[2]);
+			sensor_fb_cxt->fb_smem.event[count].buff[2],
+			sensor_fb_cxt->fb_smem.event[count].buff[3]);
 		fb_len += scnprintf(payload, sizeof(payload),
 				"NULL$$EventField@@%s$$FieldData@@%d$$detailData@@%s$$SensorName@@0x%x",
 				g_fb_conf[index].fb_field,

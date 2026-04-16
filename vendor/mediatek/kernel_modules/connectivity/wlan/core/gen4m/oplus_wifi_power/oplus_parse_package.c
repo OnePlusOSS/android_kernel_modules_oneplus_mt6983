@@ -44,7 +44,7 @@ uint16_t oplusStatsParseIPV4Info(struct sk_buff *skb, uint8_t *pucEthBody)
     uint16_t u2IpId = pucEthBody[4] << 8 | pucEthBody[5];
     uint16_t packageType = ETH_P_IPV4;
 
-    if (ucIpVersion != IPVERSION) {
+    if (ucIpVersion != IPVERSION || !skb || !pucEthBody) {
         return packageType;
     }
 
@@ -54,6 +54,10 @@ uint16_t oplusStatsParseIPV4Info(struct sk_buff *skb, uint8_t *pucEthBody)
             packageType = IP_PRO_ICMP;
             break;
         }
+        case IP_PRO_TCP: {
+            packageType = IP_PRO_TCP;
+            break;
+        }
         case IP_PRO_UDP: {
             packageType = oplusStatsParseUDPInfo(skb, pucEthBody);
             break;
@@ -61,6 +65,7 @@ uint16_t oplusStatsParseIPV4Info(struct sk_buff *skb, uint8_t *pucEthBody)
         default:
             break;
     }
+    DBGLOG(RX, INFO, "wake ipv4 pkttype is %d\n", packageType);
     return packageType;
 }
 

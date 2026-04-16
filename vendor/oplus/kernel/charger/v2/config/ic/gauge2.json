@@ -316,8 +316,59 @@
                 },
                 "overwrite": false
             }
+        },
+        {
+            "lable": "OPLUS_IC_FUNC_GAUGE_SET_FAST_SAMPLING",
+            "desc": {
+                "zh": "设置电量计电压电流等参数快速采样功能使能与否"
+            },
+            "auto_debug_code": true,
+            "parameter_list": ["bool"],
+            "parameter_desc": [
+                {
+                    "range": "0-1",
+                    "type": "in",
+                    "desc": {
+                        "zh": "0:不使能, 1:使能"
+                    }
+                }
+            ],
+            "vict": {
+                "read": false,
+                "write": {
+                    "cmd": "vict -f {id} -S{val} vic-*",
+                    "desc": {
+                        "zh": "N/A"
+                    }
+                },
+                "overwrite": {
+                    "cmd": "vict -f {id} -O {val} vic-*",
+                    "desc": {
+                        "zh": "N/A"
+                    }
+                }
+            }
+        },
+        {
+            "lable": "OPLUS_IC_FUNC_GAUGE_CHECK_IMP_MODEL",
+            "desc": {
+                "zh": "通知电量计, 去检查电池阻抗模型参数"
+            },
+            "auto_debug_code": true,
+            "parameter_list": [],
+            "parameter_desc": [],
+            "vict": {
+                "read": false,
+                "write": {
+                    "cmd": "vict -f {id} -S vic-*",
+                    "desc": {
+                        "zh": "N/A"
+                    }
+                },
+                "overwrite": false
+            }
         }
     ],
 
-    "version": "V6.1:11:62bb2a4abafd34f37d6973d70b379e98a6872be17ac17d9816bc36568b80c895"
+    "version": "V6.3:13:fc5a9eee81f62237db7c139824df88152c251d48936ae75c47df6fdb1aa03430"
 }

@@ -24,6 +24,7 @@
 #include <backend/gpu/mali_kbase_irq_internal.h>
 
 #include <linux/interrupt.h>
+
 #if IS_ENABLED(CONFIG_MALI_MTK_GPU_FREQUENCY_TRACE)
 #ifdef CONFIG_TRACE_POWER_GPU_FREQUENCY
 #include <trace/events/power_gpu_frequency.h>
@@ -32,7 +33,6 @@
 #endif
 #include <mtk_gpufreq.h>
 #endif /* CONFIG_MALI_MTK_GPU_FREQUENCY_TRACE */
-
 
 #if !IS_ENABLED(CONFIG_MALI_NO_MALI)
 
@@ -188,16 +188,15 @@ static irqreturn_t kbase_gpu_irq_handler(int irq, void *data)
 		static unsigned int last_gpufreq = 0;
                 static int count_gpu_freq_trace = 0;
 		unsigned int cur_gpufreq = 0;
-		dev_err(kbdev->dev, "kbase_gpu_irq_handler count_gpu_freq_trace = %u last_gpufreq = %u, cur_gpufreq = %u\n", count_gpu_freq_trace, last_gpufreq, cur_gpufreq);
+
 		cur_gpufreq = gpufreq_get_cur_freq(TARGET_DEFAULT);
-		if (cur_gpufreq != last_gpufreq || ++count_gpu_freq_trace == 5) {
+		if (cur_gpufreq != last_gpufreq || ++count_gpu_freq_trace == 10) {
 			last_gpufreq = cur_gpufreq;
                         count_gpu_freq_trace = 0;
 			trace_gpu_frequency(cur_gpufreq, 0);
 		}
 	}
 #endif /* CONFIG_MALI_MTK_GPU_FREQUENCY_TRACE*/
-
 	spin_lock_irqsave(&kbdev->hwaccess_lock, flags);
 
 	if (!kbdev->pm.backend.gpu_powered) {

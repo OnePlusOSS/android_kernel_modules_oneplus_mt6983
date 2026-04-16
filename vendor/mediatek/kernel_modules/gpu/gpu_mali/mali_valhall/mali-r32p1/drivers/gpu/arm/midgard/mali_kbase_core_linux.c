@@ -5365,6 +5365,11 @@ static int kbase_platform_device_remove(struct platform_device *pdev)
 	kbase_device_term(kbdev);
 	dev_set_drvdata(kbdev->dev, NULL);
 	kbase_device_free(kbdev);
+	/* #ifdef OPLUS_DISPLAY_FEATURE */
+       if (mali_pending_submission_workqueue){
+           destroy_workqueue(mali_pending_submission_workqueue);
+       }
+      /* #endif */
 
 	return 0;
 }
@@ -5460,14 +5465,15 @@ static int kbase_platform_device_probe(struct platform_device *pdev)
 		kbase_arbiter_pm_vm_event(kbdev, KBASE_VM_GPU_INITIALIZED_EVT);
 		mutex_unlock(&kbdev->pm.lock);
 #endif
-	}
-
-	mali_pending_submission_workqueue = alloc_workqueue("mali_pemding_subm", WQ_HIGHPRI | WQ_UX | WQ_UNBOUND, 0);
-	pr_err("create mali_pending_submission_workqueue\n");
+    /* #define OPLUS_DISPLAY_FEATURE */
+	mali_pending_submission_workqueue = alloc_workqueue("mali_pending_subm", WQ_HIGHPRI | WQ_UX | WQ_UNBOUND, 0);
+	pr_info("create mali_pending_submission_workqueue\n");
 	if (!mali_pending_submission_workqueue) {
 		dev_err(kbdev->dev, "Failed to create mali_pending_submission_workqueue");
 	}
+    /* #endif */
 
+	}
 	RETURN_ERROR(err);
 }
 

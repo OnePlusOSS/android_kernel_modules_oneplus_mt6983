@@ -433,6 +433,7 @@ static int cts_ioctl_rdwr_reg(struct cts_device *cts_dev,
                 kfree(data);
                 TPD_INFO("<E> Copy reg(addr: 0x%06x len: %u) data to user failed\n",
                     reg->addr, reg->len);
+                goto disable_access_ddi_reg;
             }
             kfree(data);
         } else {

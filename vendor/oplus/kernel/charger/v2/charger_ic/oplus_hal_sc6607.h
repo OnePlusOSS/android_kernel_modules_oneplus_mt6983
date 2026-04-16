@@ -7,6 +7,7 @@
 #define __SC6607_HAL_H__
 
 #include <tcpm.h>
+#include <tcpci.h>
 #include <oplus_chg_pps.h>
 
 #define SC6607_VINDPM_VOL_MV(x)		(x)
@@ -85,6 +86,7 @@
 #define SC6607_ADC_1000		1000
 #define SC6607_ADC_TSBUS_CONVERT		100000
 #define SC6607_ADC_TSBUS_200		200
+#define SC6607_ADC_TSBUS_100		100
 #define SC6607_PD_AICR_MAX_3000MA		3000
 
 #ifdef CONFIG_OPLUS_CHARGER_MTK
@@ -102,7 +104,7 @@
 #define TRACK_DEVICE_ABNORMAL_UPLOAD_PERIOD		(24 * 3600)
 
 #define SC6607_1P1_CHIP_ID		0x67
-#define SC6607_1P0_CHIP_ID		0x66
+#define SC6607A_CHIP_ID			0x66
 
 #define PORT_ERROR		0
 #define PORT_A		1
@@ -380,6 +382,7 @@ enum sc6607_fields {
 	F_EDL_TSBUS_SEL,
 	F_ADC_EN,
 	F_ADC_FREEZE,
+	F_FORCE_REGN_BYPASS,
 	F_BATSNS_EN,
 	F_VBAT,
 	F_ICHG_CC,
@@ -635,6 +638,7 @@ enum {
 /* Register 32h */
 #define SC6607_BUCK_ICHG_OFFSET		0
 #define SC6607_BUCK_ICHG_STEP		50
+#define SC6607_BUCK_ICHG_500MA		500
 
 /* Register 34h */
 #define SC6607_BUCK_IINDPM_OFFSET		100
@@ -744,6 +748,7 @@ static const struct reg_field sc6607_reg_fields[] = {
 	[F_EDL_TSBUS_SEL] = REG_FIELD(SC6607_REG_EDL_BUFFER, 0, 0),
 	[F_ADC_EN] = REG_FIELD(SC6607_REG_HK_ADC_CTRL, 7, 7),
 	[F_ADC_FREEZE] = REG_FIELD(SC6607_REG_HK_ADC_CTRL, 5, 5),
+	[F_FORCE_REGN_BYPASS] = REG_FIELD(SC6607_REG_HK_ADC_CTRL, 4, 4),
 	[F_BATSNS_EN] = REG_FIELD(SC6607_REG_VBAT, 7, 7),
 	[F_VBAT] = REG_FIELD(SC6607_REG_VBAT, 0, 6),
 	[F_ICHG_CC] = REG_FIELD(SC6607_REG_ICHG_CC, 0, 6),
@@ -1007,6 +1012,7 @@ struct sc6607 {
 	bool error_reported;
 	bool use_ufcs_phy;
 	bool use_vooc_phy;
+	bool is_sc6607a;
 	struct votable *chg_disable_votable;
 	struct oplus_chg_ic_dev *ic_dev;
 	struct oplus_mms *err_topic;
@@ -1028,8 +1034,13 @@ struct sc6607 {
 	struct delayed_work charger_suspend_recovery_work;
 
 	struct delayed_work flash_mode_checkout_work;
+
+	struct votable *wired_icl_votable;
+	struct votable *wired_fcc_votable;
+	struct work_struct rerun_votable_work;
 };
 
+int sc6607a_set_dpdm_ctrl(struct sc6607 *chip, bool enable);
 #ifdef CONFIG_OPLUS_CHARGER_MTK
 void Charger_Detect_Init(void);
 void Charger_Detect_Release(void);

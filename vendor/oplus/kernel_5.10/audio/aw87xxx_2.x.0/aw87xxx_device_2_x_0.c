@@ -1144,6 +1144,45 @@ static void aw_dev_chipid_c1_init(struct aw_device *aw_dev)
 /********************** aw87xxx_pid_c1 attributes end ************************/
 
 /********************** aw87xxx_pid_c2 attributes ****************************/
+static int aw_dev_pid_c2_pwr_off(struct aw_device *aw_dev, struct aw_data_container *data)
+{
+	int ret = 0;
+	unsigned char reg_val = 0;
+	unsigned char pa_gain = 0;
+	unsigned char rcv_mode = 0;
+
+	aw87xxx_dev_i2c_read_byte(aw_dev, AW87XXX_PID_C2_PAG_REG, &reg_val);
+	pa_gain = reg_val & (~AW87XXX_PID_C2_PA_GAIN_MASK);
+	aw87xxx_dev_i2c_read_byte(aw_dev, AW87XXX_PID_C2_SYSCTRL_REG, &reg_val);
+	rcv_mode = reg_val & (~AW87XXX_PID_C2_RCV_MODE_MASK);
+
+	while (pa_gain != AW87XXX_PID_C2_PA_GAIN_0DB_VALUE) {
+		if ((pa_gain == AW87XXX_PID_C2_PA_GAIN_12DB_VALUE) &&
+			(rcv_mode == AW87XXX_PID_C2_RCV_MODE_DISABLE_VALUE)) {
+			rcv_mode = AW87XXX_PID_C2_RCV_MODE_ENABLE_VALUE;
+			aw87xxx_dev_i2c_write_bits(aw_dev, AW87XXX_PID_C2_SYSCTRL_REG,
+				AW87XXX_PID_C2_RCV_MODE_MASK, rcv_mode);
+			aw87xxx_dev_i2c_write_bits(aw_dev, AW87XXX_PID_C2_ADPSET_REG,
+				AW87XXX_PID_C2_ADP_BOOST_MODE_MASK, AW87XXX_PID_C2_ADP_BOOST_MODE_RCV_VALUE);
+			usleep_range(2000, 2000 + 10);
+			continue;
+		}
+
+		pa_gain--;
+		aw87xxx_dev_i2c_write_bits(aw_dev, AW87XXX_PID_C2_PAG_REG,
+			AW87XXX_PID_C2_PA_GAIN_MASK, pa_gain);
+
+		usleep_range(2000, 2000 + 10);
+	}
+
+	/* Update scene parameters in mute mode */
+	ret = aw87xxx_dev_default_pwr_off(aw_dev, data);
+	if (ret < 0)
+		return ret;
+
+	return 0;
+}
+
 static void aw_dev_chipid_c2_init(struct aw_device *aw_dev)
 {
 	/* Product register permission info */
@@ -1172,6 +1211,7 @@ static void aw_dev_chipid_c2_init(struct aw_device *aw_dev)
 
 	aw_dev->ipeak_desc.reg = AW87XXX_PID_C2_PEAKLIMIT_REG;
 	aw_dev->ipeak_desc.mask = AW87XXX_PID_C2_BST_IPEAK_MASK;
+	aw_dev->ops.pwr_off_func = aw_dev_pid_c2_pwr_off;
 
 	aw_dev->vol_desc.addr = AW_REG_NONE;
 

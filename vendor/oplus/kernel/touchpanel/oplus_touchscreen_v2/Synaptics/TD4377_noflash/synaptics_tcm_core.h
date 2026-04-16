@@ -237,6 +237,7 @@ enum dynamic_config_id {
 	DC_GLOVE_MODE_STATE = 0xF5,
 	DC_LOW_TEMP_ENABLE = 0xFD,
 	DC_WATERPROOF_ENABLE = 0xFC,
+	DC_UNDER_WATER = 0xF6,
 };
 
 enum command {
@@ -750,8 +751,7 @@ static inline int syna_tcm_realloc_mem(struct syna_tcm_hcd *tcm_hcd,
 		if (!(buffer->buf)) {
 			TPD_INFO("%s: Failed to allocate memory\n",
 				 __func__);
-			kfree(temp);
-			buffer->buf_size = 0;
+			buffer->buf = temp;
 			return -ENOMEM;
 		}
 

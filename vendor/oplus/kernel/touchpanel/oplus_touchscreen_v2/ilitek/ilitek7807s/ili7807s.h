@@ -750,6 +750,9 @@ struct core_mp_test_data {
 	bool lost_benchmark;
 	bool lost_parameter;
 
+	/*raw cap test max min test*/
+	int raw_cap_restriction;
+
 	struct open_test_para open_para;
 	struct shor_test_para short_para;
 };

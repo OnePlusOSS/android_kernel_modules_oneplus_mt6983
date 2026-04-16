@@ -49,6 +49,9 @@
 #define BATT_BAL_CURR_BELOW_COUNT 1
 #define BATT_BAL_FAST_CURR_BELOW_COUNT 1
 
+/* The num of temp region max suppoerted */
+#define BATT_BAL_MAX_TEMP_COUNT_DFT 7
+
 #define SERIES_FORM	1
 #define BATT_BAL_FIX_CURR_MA(x) (x % 500 ? ((x /500 + 1) * 500) : x)
 #define BATT_BAL_LIMIT_CURR_MA(x) ((x /500 - 1) * 500)
@@ -73,6 +76,9 @@ enum batt_temp_region {
 	BATT_TEMP_REGION_T5,
 	BATT_TEMP_REGION_T6,
 	BATT_TEMP_REGION_T7,
+	BATT_TEMP_REGION_T8,
+	BATT_TEMP_REGION_T9,
+	BATT_TEMP_REGION_T10,
 	BATT_TEMP_REGION_MAX,
 };
 
@@ -154,8 +160,9 @@ struct oplus_batt_bal_cfg {
 	struct bal_bat_curve_table *b1;
 	struct bal_bat_curve_table *b2;
 
-	int32_t chg_volt_diff_thr[BATT_TEMP_REGION_MAX - 1];
-	int32_t chg_curr_thr[BATT_TEMP_REGION_MAX - 1];
+	uint32_t bal_temp_region_count;
+	int32_t chg_volt_diff_thr[BATT_TEMP_REGION_MAX];
+	int32_t chg_curr_thr[BATT_TEMP_REGION_MAX];
 	int32_t vout_thr[CTRL_REGION_MAX];
 	int32_t curr_over_thr[CTRL_REGION_MAX];
 	int32_t curr_below_thr[CTRL_REGION_MAX];
@@ -303,6 +310,9 @@ static const char * const batt_bal_temp_table[] = {
 	[BATT_TEMP_REGION_T5] = "batt_temp_t5",
 	[BATT_TEMP_REGION_T6] = "batt_temp_t6",
 	[BATT_TEMP_REGION_T7] = "batt_temp_t7",
+	[BATT_TEMP_REGION_T8] = "batt_temp_t8",
+	[BATT_TEMP_REGION_T9] = "batt_temp_t9",
+	[BATT_TEMP_REGION_T10] = "batt_temp_t10",
 };
 
 static const char * const oplus_batt_bal_state_text[] = {
@@ -503,7 +513,8 @@ static int oplus_batt_bal_parse_strategy_dt(struct oplus_batt_bal_chip *chip)
 		} else {
 			chg_info("oplus,bal_b1_strategy_data size is %d\n", rc);
 			cfg->b1_strategy_data_size = rc;
-			if (cfg->b1_strategy_data_size > ((BATT_TEMP_REGION_MAX + 1) * sizeof(u32))) {
+			/* bal_temp_region + temp_type + anti_thr */
+			if (cfg->b1_strategy_data_size > ((chip->cfg.bal_temp_region_count + 2) * sizeof(u32))) {
 				chg_err("oplus,bal_b1_strategy_data size err\n");
 				if (cfg->b1_strategy_data)
 					devm_kfree(chip->dev, cfg->b1_strategy_data);
@@ -522,7 +533,8 @@ static int oplus_batt_bal_parse_strategy_dt(struct oplus_batt_bal_chip *chip)
 		} else {
 			chg_info("oplus,bal_b2_strategy_data size is %d\n", rc);
 			cfg->b2_strategy_data_size = rc;
-			if (cfg->b2_strategy_data_size > ((BATT_TEMP_REGION_MAX + 1) * sizeof(u32))) {
+			/* bal_temp_region + temp_type + anti_thr */
+			if (cfg->b2_strategy_data_size > ((chip->cfg.bal_temp_region_count + 2) * sizeof(u32))) {
 				chg_err("oplus,bal_b2_strategy_data size err\n");
 				if (cfg->b2_strategy_data)
 					devm_kfree(chip->dev, cfg->b2_strategy_data);
@@ -559,7 +571,7 @@ static int oplus_batt_bal_parse_curve_dt(struct oplus_batt_bal_chip *chip)
 
 	node = chip->dev->of_node;
 	for (k =0; k < 2; k++) {
-		memset(name, 0, sizeof(0));
+		memset(name, 0, sizeof(name));
 		sprintf(name, "b%d_curve_table", k + 1);
 		temp_node = of_get_child_by_name(node, name);
 		if (!temp_node) {
@@ -571,13 +583,20 @@ static int oplus_batt_bal_parse_curve_dt(struct oplus_batt_bal_chip *chip)
 		else
 			batt = &(chip->cfg.b2);
 		*batt = devm_kzalloc(
-			chip->dev, BATT_TEMP_REGION_MAX * sizeof(struct bal_bat_curve_table), GFP_KERNEL);
+				chip->dev, (chip->cfg.bal_temp_region_count + 1) * sizeof(struct bal_bat_curve_table),
+				GFP_KERNEL);
 		if (*batt == NULL) {
 			chg_err("kzalloc error\n");
 			return -ENOMEM;
 		}
 
-		for (i = 0; i < BATT_TEMP_REGION_MAX; i++) {
+		if (chip->cfg.bal_temp_region_count > BATT_TEMP_REGION_MAX) {
+			chg_err("Size not compatible ,bal_temp_region_count:%d, max_batt_bal_temp_table:%d",
+				chip->cfg.bal_temp_region_count, BATT_TEMP_REGION_MAX);
+			return -EINVAL;
+		}
+
+		for (i = 0; i < chip->cfg.bal_temp_region_count; i++) {
 			rc = of_property_count_elems_of_size(temp_node, batt_bal_temp_table[i], sizeof(u32));
 			if (rc > 0 && rc % (sizeof(struct batt_bal_spec)/sizeof(int)) == 0) {
 				length = rc;
@@ -609,6 +628,7 @@ static int oplus_batt_bal_parse_dt(struct oplus_batt_bal_chip *chip)
 	int i;
 	int rc;
 	struct device_node *node = NULL;
+	int temp_region_count;
 
 	if (!chip || !chip->dev) {
 		chg_err("oplus_mos_dev null!\n");
@@ -616,6 +636,21 @@ static int oplus_batt_bal_parse_dt(struct oplus_batt_bal_chip *chip)
 	}
 
 	node = chip->dev->of_node;
+
+	rc = of_property_read_u32(node, "oplus,bal-temp-region-count", &chip->cfg.bal_temp_region_count);
+	if (rc) {
+		chip->cfg.bal_temp_region_count = BATT_BAL_MAX_TEMP_COUNT_DFT;
+		chg_info("use default temp region count: %d\n", chip->cfg.bal_temp_region_count);
+	} else {
+		if (chip->cfg.bal_temp_region_count > BATT_TEMP_REGION_MAX) {
+			chip->cfg.bal_temp_region_count = BATT_TEMP_REGION_MAX;
+			chg_err("bal_temp_region_count %d > max limit %d",
+				chip->cfg.bal_temp_region_count, BATT_TEMP_REGION_MAX);
+		}
+		chg_info("set temp region count as %d\n", chip->cfg.bal_temp_region_count);
+	}
+
+	temp_region_count = chip->cfg.bal_temp_region_count;
 	rc = of_property_read_u32(node, "oplus,bal-dischg-volt-diff-thr", &chip->cfg.dischg_volt_diff_thr);
 	if (rc)
 		chip->cfg.dischg_volt_diff_thr = 2000;
@@ -659,18 +694,18 @@ static int oplus_batt_bal_parse_dt(struct oplus_batt_bal_chip *chip)
 		chip->cfg.fastchg_b2_to_b1_max_curr_anti_thr = 500;
 
 	rc = read_signed_data_from_node(node, "oplus,bal-volt-diff-thr",
-					(s32 *)chip->cfg.chg_volt_diff_thr, BATT_TEMP_REGION_MAX - 1);
+					(s32 *)chip->cfg.chg_volt_diff_thr, temp_region_count);
 	if (rc < 0) {
 		chg_err("get oplus,bal-volt-diff-thr, rc=%d\n", rc);
-		for (i = 0;i < BATT_TEMP_REGION_MAX - 1; i++)
+		for (i = 0;i < temp_region_count; i++)
 			chip->cfg.chg_volt_diff_thr[i] = 5;
 	}
 
 	rc = read_signed_data_from_node(node, "oplus,bal-curr-thr",
-					(s32 *)chip->cfg.chg_curr_thr, BATT_TEMP_REGION_MAX - 1);
+					(s32 *)chip->cfg.chg_curr_thr, temp_region_count);
 	if (rc < 0) {
 		chg_err("get oplus,bal-curr-thr, rc=%d\n", rc);
-		for (i = 0; i < BATT_TEMP_REGION_MAX - 1; i++)
+		for (i = 0; i < temp_region_count; i++)
 			chip->cfg.chg_curr_thr[i] = 100;
 	}
 
@@ -1302,11 +1337,11 @@ static void oplus_batt_bal_check_batt_temp_region(
 			chg_err("can't get b2_temp_region, rc=%d\n", rc);
 	}
 
-	if (chip->b1_temp_region > BATT_TEMP_REGION_T6)
-		chip->b1_temp_region =  BATT_TEMP_REGION_T6;
+	if (chip->b1_temp_region >= chip->cfg.bal_temp_region_count)
+		chip->b1_temp_region = chip->cfg.bal_temp_region_count - 1;
 
-	if (chip->b2_temp_region > BATT_TEMP_REGION_T6)
-		chip->b2_temp_region =  BATT_TEMP_REGION_T6;
+	if (chip->b2_temp_region >= chip->cfg.bal_temp_region_count)
+		chip->b2_temp_region = chip->cfg.bal_temp_region_count - 1;
 }
 
 static int oplus_batt_bal_update_batt_info(struct oplus_batt_bal_chip *chip)
@@ -3620,6 +3655,7 @@ static int oplus_chg_batt_bal_probe(struct platform_device *pdev)
 
 strategy_init_err:
 bal_init_err:
+	chg_err("probe fail, rc=%d", rc);
 	devm_kfree(&pdev->dev, chip);
 	platform_set_drvdata(pdev, NULL);
 	return rc;

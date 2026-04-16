@@ -20,4 +20,15 @@
 
 uint16_t ParseRxPackage(struct SW_RFB *prSwRfb);
 
+enum enum_oplus_wifi_wkup_reason {
+    OPLUS_WIFI_RX_EVENT_Uni = 0,    /* wakeup by RX UNI FW EVT */
+    OPLUS_WIFI_RX_EVENT,            /* wakeup by RX FW EVT */
+    OPLUS_WIFI_RX_MGMT,             /* wakeup by RX Management frame */
+    OPLUS_WIFI_OUT_OF_DEF,          /* wakeup by RX NO define */
+    OPLUS_WIFI_RX_DATA,             /* wakeup by RX data */
+    OPLUS_WIFI_RX_FRAME,            /* wakeup by RX Control/Data frame */
+    OPLUS_WIFI_RX_OTHERS,           /* wakeup by RX unknown */
+};
+
+uint16_t oplusStatsParseIPV4Info (struct sk_buff *skb, uint8_t *pucEthBody);
 #endif /* _OPLUS_PARSE_PACKAGE_H */

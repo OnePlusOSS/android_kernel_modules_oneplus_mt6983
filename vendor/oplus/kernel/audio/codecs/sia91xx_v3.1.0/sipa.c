@@ -133,7 +133,7 @@ void *oplus_pa_sia_node = NULL;
 
 #ifdef OPLUS_ARCH_EXTENDS
 /* 2024/06/15, Add for calibration*/
-#if (LINUX_VERSION_CODE >= KERNEL_VERSION(6, 6, 0))
+#if (LINUX_VERSION_CODE >= KERNEL_VERSION(6, 1, 0))
 #define PDE_DATA(inode) pde_data(inode)
 #endif
 #endif
@@ -258,6 +258,8 @@ static int sia91xx_show_all_reg(struct sipa_dev_s *si_pa)
 int distinguish_chip_type(sipa_dev_t *si_pa)
 {
 #ifdef DISTINGUISH_CHIP_TYPE
+	int ret = 0;
+
 	/* check sia81xx is available */
 	if (NULL == si_pa) {
 		pr_err("[  err][%s] %s: si_pa is NULL !!! \r\n", LOG_FLAG, __func__);
@@ -269,9 +271,10 @@ int distinguish_chip_type(sipa_dev_t *si_pa)
 			LOG_FLAG, __func__);
 	} else {
 		if (1 == si_pa->en_dyn_id) {
-			if (1 == check_sipa_status(si_pa)) {
+			ret = check_sipa_status(si_pa);
+			if (ret == 1) {
 				si_pa->chip_type = CHIP_TYPE_SIA8001;
-			} else if (0 == check_sipa_status(si_pa)) {
+			} else if (ret == 0) {
 				si_pa->chip_type = CHIP_TYPE_SIA8102;
 			}
 			device_create_file(&si_pa->pdev->dev, &dev_attr_sipa_device);
@@ -1967,6 +1970,11 @@ void sia81xx_pa_enable_by_scene(int enable, int mode, int32_t channel) {
 	}
 	mutex_unlock(&sipa_mutex);
 
+	if (sia81xx == NULL) {
+		pr_err("%s: sia81xx not found", __func__);
+		return;
+	}
+
 	if(mode == SPK_MODE) {
 		if (enable) {
 			sipa_resume(sia81xx);
@@ -2237,40 +2245,40 @@ static int sipa_spk_mute_ctrl_put(struct snd_kcontrol *kcontrol,
 
 	int val = ucontrol->value.integer.value[0];
 
+	if (si_pa == NULL) {
+		return -ENODEV;
+	}
+
 	pr_warn("channle %d, Speaker mute set to %s\n", si_pa->channel_num, val == 1 ? "on" : "off");
 	speaker_mute_control = val;
 
-	if (speaker_mute_control == 1) {
-		if (si_pa &&
-			si_pa->mute == SIPA_DEVICE_MUTE_OFF &&
-			si_pa->scene == AUDIO_SCENE_RECEIVER &&
-			si_pa->channel_num == 0) {
-			pr_info("%s: is handset mode\n", __func__);
-			return 0;
-		}
+	if (speaker_mute_control == 1 &&
+		si_pa->mute == SIPA_DEVICE_MUTE_OFF &&
+		si_pa->scene == AUDIO_SCENE_RECEIVER &&
+		si_pa->channel_num == 0) {
+		pr_info("%s: is handset mode\n", __func__);
+		return 0;
 	}
 
-	if (si_pa) {
-		if (speaker_mute_control) {
-			if (true == si_pa->sipa_on ) {
-				if (false == sipa_regmap_get_chip_en(si_pa)) {
-					pr_info("[ info][%s] %s: chip_en is false, direct return!\n", LOG_FLAG, __func__);
-					return 0;
-				}
-				if (sia91xx_soft_mute(si_pa)) {
-					gpio_set_value(si_pa->rst_pin, 1);
-				}
+	if (speaker_mute_control) {
+		if ( true == si_pa->sipa_on ) {
+			if (false == sipa_regmap_get_chip_en(si_pa)) {
+				pr_info("[ info][%s] %s: chip_en is false, direct return!\n", LOG_FLAG, __func__);
+				return 0;
 			}
-		} else {
-			if (true == si_pa->sipa_on) {
-				if (true == sipa_regmap_get_chip_en(si_pa)) {
-					pr_info("[ info][%s] %s: chip_en is true, direct return!\n", LOG_FLAG, __func__);
-					return 0;
-				}
-				sipa_reg_init(si_pa);
-				sia91xx_dsp_start(si_pa, SNDRV_PCM_STREAM_PLAYBACK);
-				sipa_regmap_check_trimming(si_pa);
+			if (sia91xx_soft_mute(si_pa)) {
+				gpio_set_value(si_pa->rst_pin, 1);
 			}
+		}
+	} else {
+		if (true == si_pa->sipa_on) {
+			if (true == sipa_regmap_get_chip_en(si_pa)) {
+				pr_info("[ info][%s] %s: chip_en is true, direct return!\n", LOG_FLAG, __func__);
+				return 0;
+			}
+			sipa_reg_init(si_pa);
+			sia91xx_dsp_start(si_pa, SNDRV_PCM_STREAM_PLAYBACK);
+			sipa_regmap_check_trimming(si_pa);
 		}
 	}
 
@@ -2867,7 +2875,7 @@ static ssize_t sipa_dbgfs_range_read(struct file *file,
 				char __user *user_buf, size_t count,
 				loff_t *ppos)
 {
-#if (LINUX_VERSION_CODE < KERNEL_VERSION(6, 6, 0))
+#if (LINUX_VERSION_CODE < KERNEL_VERSION(5, 15, 0))
 	struct i2c_client *i2c = file->private_data;
 #else
 	struct i2c_client *i2c = PDE_DATA(file_inode(file));
@@ -2899,7 +2907,7 @@ static ssize_t sipa_proc_f0_cali_status_read(struct file *file,
 				char __user *user_buf, size_t count,
 				loff_t *ppos)
 {
-#if (LINUX_VERSION_CODE < KERNEL_VERSION(6, 6, 0))
+#if (LINUX_VERSION_CODE < KERNEL_VERSION(5, 15, 0))
 	struct i2c_client *i2c = file->private_data;
 #else
 	struct i2c_client *i2c = PDE_DATA(file_inode(file));
@@ -2927,7 +2935,7 @@ static ssize_t sipa_proc_f0_cali_status_read(struct file *file,
 	return ret;
 }
 
-#if (LINUX_VERSION_CODE < KERNEL_VERSION(6, 6, 0))
+#if (LINUX_VERSION_CODE < KERNEL_VERSION(5, 15, 0))
 static const struct file_operations sipa_dbgfs_range_fops = {
 	.open = simple_open,
 	.read = sipa_dbgfs_range_read,
@@ -2956,7 +2964,7 @@ static void sipa_debug_init(sipa_dev_t *si_pa, struct i2c_client *i2c)
 {
 	char name[50];
 	scnprintf(name, MAX_CONTROL_NAME, "%s-%x", i2c->name, i2c->addr);
-#if (LINUX_VERSION_CODE < KERNEL_VERSION(6, 6, 0))
+#if (LINUX_VERSION_CODE < KERNEL_VERSION(5, 15, 0))
 	si_pa->dbg_dir = debugfs_create_dir(name, NULL);
 	debugfs_create_file("range", S_IRUGO, si_pa->dbg_dir,
 					i2c,&sipa_dbgfs_range_fops);

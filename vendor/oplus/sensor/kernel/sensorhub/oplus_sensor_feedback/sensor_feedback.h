@@ -136,6 +136,7 @@ enum sensor_fb_event_id {
 	FOLD_DEVICE_FOLDE_COUNT_ID = 750,
 	FOLD_DEVICE_RELI_FOLD_ID = 751,
 	FOLD_DEVICE_RELI_OPEN_ID = 752,
+	HINGE_DETECT_INTERVAL_TIME_ID = 753,
 
 	/*790~799*/
 	FREE_FALL_TRIGGER_ID = 790,
@@ -174,9 +175,10 @@ struct fd_data {
 	int data_x;
 	int data_y;
 	int data_z;
+	int data_1;
 };
 
-#define EVNET_DATA_LEN 3
+#define EVNET_DATA_LEN 4
 struct sns_fb_event {
 	unsigned short event_id;
 	unsigned int count;

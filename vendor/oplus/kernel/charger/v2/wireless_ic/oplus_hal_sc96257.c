@@ -1446,6 +1446,10 @@ static int sc96257_get_running_mode(struct oplus_sc96257 *chip)
 		return 0;
 	}
 
+	if (!chip->rx_connected) {
+		chip->adapter_type = 0;
+		return 0;
+	}
 	if (chip->adapter_type != 0)
 		return chip->adapter_type;
 

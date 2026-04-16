@@ -379,6 +379,10 @@ config MALI_HW_ERRATA_1485982_USE_CLOCK_ALTERNATIVE
 
 endif
 
+config MALI_MTK_GPU_FREQUENCY_TRACE
+	bool "provide gpu_frequency trace event"
+	default n
+
 config MALI_ARBITRATION
 	tristate "Enable Virtualization reference code"
 	depends on MALI_MIDGARD

@@ -1035,6 +1035,7 @@ static int cts_tcs_get_data(struct cts_device *cts_dev, u8 *buf, size_t size,
 {
     u8 old_int_data_method;
     u16 old_int_data_types;
+    int ret;
 
     old_int_data_types = cts_dev->fwdata.int_data_types;
     old_int_data_method = cts_dev->fwdata.int_data_method;
@@ -1042,11 +1043,13 @@ static int cts_tcs_get_data(struct cts_device *cts_dev, u8 *buf, size_t size,
     cts_set_int_data_types(cts_dev, type);
     cts_set_int_data_method(cts_dev, INT_DATA_METHOD_POLLING);
 
-    cts_tcs_polling_data(cts_dev, buf, size);
+    ret = cts_tcs_polling_data(cts_dev, buf, size);
+    if (ret) {
+        TPD_INFO("<E> Polling data failed: %d\n", ret);
+    }
 
     cts_set_int_data_method(cts_dev, old_int_data_method);
     cts_set_int_data_types(cts_dev, old_int_data_types);
-
     return 0;
 }
 
@@ -1666,6 +1669,7 @@ static int cts_tcs_test_compensate_cap(struct chipone_ts_data *chip_data,
 		if ((chip_data->p_cts_autotest_offset->cts_comp_cap_max == NULL)
 			|| (chip_data->p_cts_autotest_offset->cts_comp_cap_min == NULL)) {
 			TPD_INFO("<E> max or min NULL\n");
+			kfree(cap);
 			return -EINVAL;
 		}
 		memset(data_buf, 0, sizeof(data_buf));
@@ -1840,6 +1844,7 @@ static int cts_tcs_test_short(struct chipone_ts_data *chip_data,
 		if ((chip_data->p_cts_autotest_offset->cts_short_max == NULL)
 			|| (chip_data->p_cts_autotest_offset->cts_short_min == NULL)) {
 			TPD_INFO("<E> max or min NULL\n");
+			kfree(test_result);
 			return -EINVAL;
 		}
 		memset(data_buf, 0, sizeof(data_buf));
@@ -2256,6 +2261,7 @@ static int cts_tcs_test_open(struct chipone_ts_data *chip_data,
 		if ((chip_data->p_cts_autotest_offset->cts_open_max == NULL)
 			|| (chip_data->p_cts_autotest_offset->cts_open_min == NULL)) {
 			TPD_INFO("<E> max or min NULL\n");
+			kfree(test_result);
 			return -EINVAL;
 		}
 		memset(data_buf, 0, sizeof(data_buf));
@@ -2473,6 +2479,7 @@ static int cts_tcs_test_rawdata(struct chipone_ts_data *chip_data,
 		if ((chip_data->p_cts_autotest_offset->cts_rawdata_max == NULL)
 			|| (chip_data->p_cts_autotest_offset->cts_rawdata_min == NULL)) {
 			TPD_INFO("<E> max or min NULL\n");
+			kfree(rawdata);
 			return -EINVAL;
 		}
 		memset(data_buf, 0, sizeof(data_buf));
@@ -2677,6 +2684,7 @@ static int cts_tcs_test_noise(struct chipone_ts_data *chip_data,
 		if ((chip_data->p_cts_autotest_offset->cts_noise_max == NULL)
 			|| (chip_data->p_cts_autotest_offset->cts_noise_min == NULL)) {
 			TPD_INFO("<E> max or min NULL\n");
+			kfree(buffer);
 			return -EINVAL;
 		}
 		memset(data_buf, 0, sizeof(data_buf));
@@ -2952,6 +2960,7 @@ static int cts_tcs_test_gesture_rawdata(struct chipone_ts_data *chip_data,
 			|| (chip_data->p_cts_autotest_offset->cts_gstr_lp_rawdata_max == NULL)
 			|| (chip_data->p_cts_autotest_offset->cts_gstr_lp_rawdata_min == NULL)) {
 			TPD_INFO("<E> max or min NULL\n");
+			kfree(gstr_rawdata);
 			return -EINVAL;
 		}
 		memset(data_buf, 0, sizeof(data_buf));
@@ -2999,7 +3008,7 @@ static int cts_tcs_test_gesture_rawdata(struct chipone_ts_data *chip_data,
             ret = cts_tcs_polling_data(cts_dev, (u8 *)gstr_rawdata,
                 RAWDATA_BUFFER_SIZE(cts_dev));
             if (ret) {
-                TPD_INFO("<E> Get gesture rawdata failed %d\n", r);
+                TPD_INFO("<E> Get gesture rawdata failed %d\n", ret);
                 mdelay(30);
 				data_valid = false;
             } else {
@@ -3185,6 +3194,7 @@ static int cts_tcs_test_gesture_noise(struct chipone_ts_data *chip_data,
 			|| (chip_data->p_cts_autotest_offset->cts_gstr_lp_noise_max == NULL)
 			|| (chip_data->p_cts_autotest_offset->cts_gstr_lp_noise_min == NULL)) {
 			TPD_INFO("<E> max or min NULL\n");
+			kfree(buffer);
 			return -EINVAL;
 		}
 		memset(data_buf, 0, sizeof(data_buf));

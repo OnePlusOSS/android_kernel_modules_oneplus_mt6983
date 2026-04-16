@@ -258,7 +258,7 @@ static char * const mt6359_poff_reason_str[] = {
 	[7]=":Power off for PWRHOLD clear",
 	[8]=":Power off for BWDT",
 	[9]=":DDLO occurs after system on",
-	[10]=":APWDT",
+	[10]=":AP WDT",
 	[11]=":Power off for power source missing",
 	[12]=":Critical power is turned off during system on",
 	[13]=":PWRKEY short press",
@@ -406,10 +406,46 @@ static ssize_t pmic_monitor_show(struct kobject *kobj,
 
 }
 pmic_info_attr_ro(pmic_monitor);
+
+#define PON_PWRKEY   0x01
+#define PON_CHARIN   0x04
+static ssize_t batt_remove_show(struct kobject *kobj,
+	struct kobj_attribute *attr, char *buf) {
+	struct PMICHistoryKernelStruct *pmic_history_ptr = NULL;
+	struct PMICRecordKernelStruct pmic_first_record = {0};
+	struct PMICRegStruct pmic_reg_value = {0};
+	u64 pmic_history_count = 0;
+	unsigned int batt_remove = 0;
+	unsigned int poff = 0;
+	unsigned int pon = 0;
+
+	pmic_history_ptr = (struct PMICHistoryKernelStruct *)get_pmic_history();
+	if (NULL == pmic_history_ptr) {
+		return sprintf(buf, "%x\n", batt_remove);
+	}
+
+	pmic_history_count = pmic_history_ptr->log_count;
+	printk(KERN_INFO "pmic_history_count = %llu\n", pmic_history_count);
+	if (pmic_history_count >= 1) {
+		pmic_first_record = pmic_history_ptr->pmic_record[pmic_history_count-1];   // last record
+		pmic_reg_value = pmic_first_record.pmic_pon_poff_reason[0];
+		if (DATA_VALID_FLAG == pmic_reg_value.data_is_valid) {
+			poff = pmic_reg_value.poff_reason;
+			pon = pmic_reg_value.pon_reason;
+			printk(KERN_INFO "poff 0x%x, pon 0x%x\n", poff, pon);
+			if (poff == 0 && (pon == PON_PWRKEY || pon == PON_CHARIN))
+				batt_remove = 1;
+		}
+	}
+	return sprintf(buf, "%x\n", batt_remove);
+}
+
+pmic_info_attr_ro(batt_remove);
 /**********************************************/
 
 static struct attribute * g[] = {
-    &pmic_monitor_attr.attr,
+	&pmic_monitor_attr.attr,
+	&batt_remove_attr.attr,
 	NULL,
 };
 

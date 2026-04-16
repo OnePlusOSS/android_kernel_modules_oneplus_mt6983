@@ -514,6 +514,11 @@ void oplus_chglib_set_vooc_startup(struct device *dev, int status)
 	}
 }
 
+void oplus_chglib_set_ovp_forced(bool enable)
+{
+	oplus_set_ovp_forced(enable);
+}
+
 int oplus_chglib_push_break_code(struct device *dev, int code)
 {
 	struct vphy_chip *chip = oplus_chglib_get_vphy_chip(dev);

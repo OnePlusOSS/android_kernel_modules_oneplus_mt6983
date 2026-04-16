@@ -2191,10 +2191,16 @@ out:
 	return ret;
 }
 
+static int raw_cap_data_restriction(int val)
+{
+	return val * ilits->core_mp.raw_cap_restriction / 100;
+}
+
 static void mp_compare_cdc_result(int index, s32 *tmp, s32 *max_ts, s32 *min_ts,
 				  int *result)
 {
 	int i;
+        int rawdata = 0;
 	struct core_mp_test_data *core_mp = &ilits->core_mp;
 
 	if (ERR_ALLOC_MEM(tmp)) {
@@ -2213,8 +2219,14 @@ static void mp_compare_cdc_result(int index, s32 *tmp, s32 *max_ts, s32 *min_ts,
 
 	} else {
 		for (i = 0; i < core_mp->frame_len; i++) {
-			if (tmp[i] > max_ts[i] || tmp[i] < min_ts[i]) {
-				ILI_DBG("Fail No.%d: max=%d, val=%d, min=%d\n", i, max_ts[i], tmp[i],
+			if (tItems[index].test_index != TYPE_TEST5 && tItems[index].test_index != TYPE_TEST15) {
+				rawdata = tmp[i];
+			} else {
+				rawdata = raw_cap_data_restriction(tmp[i]);
+			}
+
+			if (rawdata> max_ts[i] || rawdata < min_ts[i]) {
+				ILI_DBG("Fail No.%d: max=%d, val=%d, rawdata=%d, min=%d\n", i, max_ts[i], tmp[i], rawdata,
 					min_ts[i]);
 				*result = MP_DATA_FAIL;
 				return;
@@ -2798,6 +2810,7 @@ static void mp_test_run(bool lcm_on, int test_index,
 	}
 
 	tItems[i].do_test(i);
+	ilits->core_mp.raw_cap_restriction = testdata->raw_cap_restriction;
 	mp_compare_test_result(i);
 
 	/* P2P TD retry after RA sample failed. */

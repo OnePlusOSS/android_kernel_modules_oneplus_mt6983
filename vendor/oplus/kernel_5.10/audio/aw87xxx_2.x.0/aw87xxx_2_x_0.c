@@ -62,8 +62,12 @@
  * aw87xxx marco
  ******************************************************************/
 #define AW87XXX_I2C_NAME	"aw87xxx_pa_2_x_0"
-#define AW87XXX_DRIVER_VERSION	"v2.12.0"
-#define AW87XXX_FW_BIN_NAME	"../../odm/firmware/awinic/aw87xxx_acf.bin"
+#define AW87XXX_DRIVER_VERSION	"v2.12.0.1"
+#if (LINUX_VERSION_CODE < KERNEL_VERSION(5, 10, 236))
+#define AW87XXX_FW_BIN_NAME     "../../odm/firmware/awinic/aw87xxx_acf.bin"
+#else
+#define AW87XXX_FW_BIN_NAME     "aw87xxx_acf.bin"
+#endif
 #define AW87XXX_LOW_VOLUME_VOLTAGE 0x04
 #define AW87XXX_HIGH_VOLUME_VOLTAGE_DEFAULT 0x08
 
@@ -1468,7 +1472,6 @@ static ssize_t reg_show(struct device *dev,
 
 	return len;
 }
-
 static ssize_t reg_store(struct device *dev,
 			struct device_attribute *attr, const char *buf,
 			size_t len)

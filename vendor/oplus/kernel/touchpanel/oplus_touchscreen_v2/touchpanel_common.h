@@ -215,6 +215,8 @@ typedef enum {
 	MODE_WATERPROOF,
 	MODE_LEATHER_COVER,
 	MODE_AOD,
+	MODE_UNDERWATER,
+	MODE_RAINSTORM,
 } work_mode;
 
 typedef enum {
@@ -1025,10 +1027,13 @@ struct touchpanel_data {
 	bool skip_reinit_device_support;                    /*spi need skip complete_all, prevent error in access reg*/
 	bool edge_pull_out_support;                         /*feature used to edge coordinates pull out*/
 	bool aiunit_game_info_support;                      /*feature used to aiunit game info*/
+	bool disable_touch_event_support;                      /*feature to support underwater photo*/
 	u8 aiunit_game_get_num;
 	u8 aiunit_game_set_num;
 	int aiunit_game_enable;
 	u32 aiunit_game_valid_bits;
+	bool rainstorm_mode_v2_support;                     /*rainstorm_mode support feature*/
+	int rainstorm_enable;                               /*control state of rainstorm mode*/
 	/******For FW update area********/
 	bool lpwg_fw_support;                               /*feature to support low power wakeup gesture firmware and effect firmware are separated.*/
 	bool loading_fw;                                    /*touchpanel FW updating*/
@@ -1226,6 +1231,7 @@ struct touchpanel_data {
 	int cur_headset_state;                                /*current state of headset for usb*/
 
 	bool is_usb_checked;                                /*state of charger for tp*/
+	int disable_touch_event;                            /*disable touch event for underwater photo mode*/
 	int cur_usb_state;                                    /*current state of charger for usb*/
 	bool is_wireless_checked;                           /*state of wireless charger*/
 

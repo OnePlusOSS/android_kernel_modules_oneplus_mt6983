@@ -45,6 +45,10 @@ int oplus_RWO_root_check(struct task_struct *p)
 		if(p->tgid != p->pid) {
 		/* get tgid's task and cred */
 		tgid_task = find_task_by_vpid(p->tgid);
+		if (tgid_task == NULL) {
+			printk("[ROOTCHECK-EXEC2-ERROR]:can not find task.\n");
+			return 0;
+		}
 		get_task_struct(tgid_task);
 		/* get tgid's uid */
 		/* printk("[kevent][INFO]:curr process %s(%d), tgid process %s(%d). \n", p->comm, p->cred->uid, tgid_task->comm, tgid_task->cred->uid);*/

@@ -905,14 +905,18 @@ void kbase_csf_ring_cs_kernel_doorbell(struct kbase_device *kbdev,
 		kbase_csf_ring_csg_doorbell(kbdev, csg_nr);
 }
 
+/* #define OPLUS_FEATURE_DISPLAY */
 extern struct workqueue_struct *mali_pending_submission_workqueue;
+/* #endif */
 static void enqueue_gpu_submission_work(struct kbase_context *const kctx)
 {
-	//queue_work(system_highpri_wq, &kctx->csf.pending_submission_work);
+	/* #define OPLUS_FEATURE_DISPLAY */
 	if (mali_pending_submission_workqueue) {
-		pr_err("enqueue_gpu_submission_work\n");
 		queue_work(mali_pending_submission_workqueue, &kctx->csf.pending_submission_work);
+	}else{
+		queue_work(system_highpri_wq, &kctx->csf.pending_submission_work);
 	}
+	/* #endif */
 }
 
 int kbase_csf_queue_kick(struct kbase_context *kctx,

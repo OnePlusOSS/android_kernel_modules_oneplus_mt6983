@@ -149,6 +149,7 @@ static int fts_hw_reset(struct chip_data_ft3683g *ts_data, u32 delayms);
 #define SPI_HEADER_LENGTH           6   /*CRC*/
 static void fts_get_rawdata_snr(struct chip_data_ft3683g *ts_data);
 static void fts_rate_white_list_ctrl(void *chip_data, int value);
+static int fts_reset(void *chip_data);
 
 /* spi interface */
 static int fts_spi_transfer(struct spi_device *spi, u8 *tx_buf, u8 *rx_buf, u32 len)
@@ -2412,9 +2413,24 @@ static int fts_enable_black_gesture(struct chip_data_ft3683g *ts_data,
 	u8 gesture_config_D1 = 0xBF;
 	u8 gesture_config_D2 = 0x07;
 	u8 gesture_config_D6 = 0x3E;
+	u8 ucReadD0 = 0;
+	int i = 0;
 
 	TPD_INFO("MODE_GESTURE, write 0xD0=%d", enable);
 	fts_write_reg(FTS_REG_GESTURE_EN, enable);
+	for (i = 0; i < 3; i++) {
+		fts_read_reg(FTS_REG_GESTURE_EN, &ucReadD0);
+		if (ucReadD0 == enable) {
+			TPD_INFO("MODE_GESTURE, Read 0xD0=%d (write success)", ucReadD0);
+			break;
+		} else {
+		    fts_write_reg(FTS_REG_GESTURE_EN, enable);
+		}
+		msleep(10);
+	}
+	if (i >= 3) {
+    	TPD_INFO("MODE_GESTURE, Write 0xD0 failed after 3 retries!");
+	}
 
 	if (enable) {
 			SET_GESTURE_BIT(state, DOU_TAP, gesture_config_D1, 4)
@@ -2657,7 +2673,7 @@ static int fts_mode_switch(void *chip_data, work_mode mode, int flag)
 
 		if (ts_data->ts->is_suspended) {                             /* do not pull up reset when doing resume*/
 			if (ts_data->is_ic_sleep == true) {
-				fts_hw_reset(ts_data, RESET_TO_NORMAL_TIME);
+				fts_reset(ts_data);
 			}
 		}
 
@@ -3863,6 +3879,8 @@ static void fts_enable_fingerprint_underscreen(void *chip_data, uint32_t enable)
 {
 	int ret = 0;
 	u8 val = 0xFF;
+	u8 ucReadCF = 0;
+	int i = 0;
 	struct chip_data_ft3683g *ts_data = (struct chip_data_ft3683g *)chip_data;
 
 
@@ -3901,6 +3919,19 @@ static void fts_enable_fingerprint_underscreen(void *chip_data, uint32_t enable)
 
 	TPD_INFO("%s:write %x=%x.", __func__, FTS_REG_FOD_EN, val);
 	ret = fts_write_reg(FTS_REG_FOD_EN, val);
+	for (i = 0; i < 3; i++) {
+		fts_read_reg(FTS_REG_FOD_EN, &ucReadCF);
+		if (ucReadCF == val) {
+			TPD_INFO("MODE_GESTURE, Read 0xCF=%d (write success)", ucReadCF);
+			break;
+		} else {
+		    ret = fts_write_reg(FTS_REG_FOD_EN, val);
+		}
+		msleep(10);
+	}
+	if (i >= 3) {
+    	TPD_INFO("MODE_GESTURE, Write 0xCF failed after 3 retries!");
+	}
 
 	if (ret < 0) {
 		TPD_INFO("%s: write FOD enable(%x=%x) fail", __func__, FTS_REG_FOD_EN, val);

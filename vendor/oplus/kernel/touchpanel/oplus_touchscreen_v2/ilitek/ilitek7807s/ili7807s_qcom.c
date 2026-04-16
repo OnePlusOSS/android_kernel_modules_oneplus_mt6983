@@ -650,6 +650,14 @@ int ili_proximity_far(int mode)
 			ILI_ERR("Switch to gesture mode failed during proximity far\n");
 		}
 
+		if (ilits->differ_mode) {
+			if (ili_set_tp_data_len(DATA_FORMAT_DEBUG, false, NULL) < 0) {
+				ILI_ERR("Failed to switch debug mode\n");
+			}
+			if (ilits->wrapper(open_differ_cmd, 2, NULL, 0, ON, OFF) < 0) {
+				ILI_ERR("switch ilitek diff mode fail\n");
+			}
+		}
 		break;
 
 	default:
@@ -1479,6 +1487,7 @@ void ili_report_ap_mode(u8 *buf, int len)
 		ilits->glove_mode = buf[ilits->tp_data_len - ILI_V2080_WATER_FLAG] & 0x01;
 		ilits->water_flag = (buf[ilits->tp_data_len - ILI_V2080_WATER_FLAG] & 0x02) >> 1;
 		ilits->thr = (s16)((buf[ilits->tp_data_len - ILI_V2080_THR_H8] << 8) | buf[ilits->tp_data_len - ILI_V2080_THR_L8]);
+		ILI_DBG("glove_mode = %d, water_flag = %d, thr = %d\n", ilits->glove_mode, ilits->water_flag, ilits->thr);
 	}
 
 	if (ilits->ts->health_monitor_support) {
@@ -2498,7 +2507,6 @@ void ili_aod_gesture_mode (u8 *buf, int len)
 }
 int ili_report_handler(void *chip_data)
 {
-	struct ilitek_ts_data *chip_info = (struct ilitek_ts_data *)chip_data;
 	int ret = 0, pid = 0;
 	u8  checksum = 0, pack_checksum = 0;
 	u8 *trdata = NULL;
@@ -2567,11 +2575,8 @@ int ili_report_handler(void *chip_data)
 	ILI_DBG("Packet ID = %x\n", pid);
 	if (ilits->actual_tp_mode == P5_X_FW_AP_MODE) {
 		if (pid == P5_X_DEMO_PALM_PACKET_ID) {
-			if (chip_info->ts->palm_to_sleep_enable) {
-				ILI_INFO("PALM PACKET ID Code = 0x%X", pid);
-				ret = P5_X_DEMO_PALM_PACKET_ID;
-				goto out;
-			}
+			ILI_INFO("PALM PACKET ID Code = 0x%X", pid);
+			ret = P5_X_DEMO_PALM_PACKET_ID;
 			goto out;
 		}
 	}
@@ -3273,7 +3278,15 @@ static int ilitek_mode_switch(void *chip_data, work_mode mode, int flag)
 		}
 
 		break;
+	case MODE_RAINSTORM:
+		ILI_INFO("MODE_RAINSTORM flag = %d\n", flag);
 
+		ret = ili_ic_func_ctrl("rainstorm", flag);
+		if (ret < 0) {
+			ILI_ERR("write MODE_RAINSTORM flag failed\n");
+		}
+
+		break;
 	default:
 		ILI_INFO("%s: Wrong mode.\n", __func__);
 	}

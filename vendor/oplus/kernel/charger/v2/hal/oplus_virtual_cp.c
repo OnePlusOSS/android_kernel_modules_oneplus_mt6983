@@ -1229,7 +1229,7 @@ static int oplus_chg_vc_open_step(struct oplus_virtual_cp_ic *vc, struct oplus_c
 		return -ENODEV;
 
 	rc = oplus_chg_ic_func(ic_dev, OPLUS_IC_FUNC_CP_SET_ADC_ENABLE, true);
-	if (rc < 0) {
+	if (rc < 0 && rc != -ENOTSUPP) {
 		chg_err("can't enable cp[%s] adc, rc=%d\n", ic_dev->manu_name, rc);
 		return rc;
 	}
@@ -1271,6 +1271,7 @@ static void oplus_chg_vc_close_step(struct oplus_virtual_cp_ic *vc, struct oplus
 	if (ic_dev == NULL)
 		return;
 
+	chg_info("close cp!\n");
 	rc = oplus_chg_ic_func(ic_dev, OPLUS_IC_FUNC_CP_SET_WORK_START, false);
 	if (rc < 0)
 		chg_err("can't set cp[%s] work stop, rc=%d\n", ic_dev->manu_name, rc);
@@ -1701,6 +1702,31 @@ static int oplus_chg_vc_set_sstimeout_ucp_enable(struct oplus_chg_ic_dev *ic_dev
 	return rc;
 }
 
+static int oplus_chg_vc_set_pmid2vout_ovp_enable(struct oplus_chg_ic_dev *ic_dev, bool enable)
+{
+	struct oplus_virtual_cp_ic *vc;
+	int rc = 0;
+
+	if (ic_dev == NULL) {
+		chg_err("oplus_chg_ic_dev is NULL");
+		return -ENODEV;
+	}
+
+	vc = oplus_chg_ic_get_drvdata(ic_dev);
+	if (vc == NULL) {
+		chg_err("oplus virtual cp is NULL");
+		return -ENODEV;
+	}
+
+	if (vc->main_cp < 0 || vc->main_cp >= vc->child_num)
+		return -EINVAL;
+	rc = oplus_chg_ic_func(vc->child_list[vc->main_cp].ic_dev,
+			OPLUS_IC_FUNC_CP_SET_PMID2VOUT_OVP_ENABLE, enable);
+	if (rc < 0 && rc != -ENOTSUPP)
+		chg_err("main cp set pmid2vout ovp err, enable = %d, rc=%d\n", enable, rc);
+	return rc;
+}
+
 static int oplus_chg_vc_get_work_status(struct oplus_chg_ic_dev *ic_dev, bool *start)
 {
 	struct oplus_virtual_cp_ic *vc;
@@ -1746,16 +1772,40 @@ static int oplus_chg_vc_adc_enable(struct oplus_chg_ic_dev *ic_dev, bool en)
 	}
 
 	vc = oplus_chg_ic_get_drvdata(ic_dev);
-	/* When using a policy, the CP adc is enabled by the policy */
-	if (en && vc->strategy)
-		return 0;
-
 	for (i = 0; i < vc->child_num; i++) {
 		rc = oplus_chg_ic_func(vc->child_list[i].ic_dev,
 			OPLUS_IC_FUNC_CP_SET_ADC_ENABLE, en);
 		if (rc < 0 && rc != -ENOTSUPP) {
 			chg_err("child ic[%d] %s error, rc=%d\n", i, en ? "enable" : "disable", rc);
 			err = rc;
+		} else if (rc >= 0) {
+			err = rc;
+		}
+	}
+
+	return err;
+}
+
+static int oplus_chg_vc_get_adc_enable(struct oplus_chg_ic_dev *ic_dev, bool *en)
+{
+	struct oplus_virtual_cp_ic *vc;
+	int i;
+	int rc = 0;
+	int err = -ENOTSUPP;
+
+	if (ic_dev == NULL) {
+		chg_err("oplus_chg_ic_dev is NULL");
+		return -ENODEV;
+	}
+
+	vc = oplus_chg_ic_get_drvdata(ic_dev);
+	for (i = 0; i < vc->child_num; i++) {
+		rc = oplus_chg_ic_func(vc->child_list[i].ic_dev,
+			OPLUS_IC_FUNC_CP_GET_ADC_ENABLE, en);
+		if (rc < 0) {
+			if (rc != -ENOTSUPP)
+				chg_err("child ic[%d] error, rc=%d\n", i, rc);
+			continue;
 		} else if (rc >= 0) {
 			err = rc;
 		}
@@ -2096,6 +2146,9 @@ static void *oplus_chg_vc_get_func(struct oplus_chg_ic_dev *ic_dev, enum oplus_c
 	case OPLUS_IC_FUNC_CP_SET_ADC_ENABLE:
 		func = OPLUS_CHG_IC_FUNC_CHECK(OPLUS_IC_FUNC_CP_SET_ADC_ENABLE, oplus_chg_vc_adc_enable);
 		break;
+	case OPLUS_IC_FUNC_CP_GET_ADC_ENABLE:
+		func = OPLUS_CHG_IC_FUNC_CHECK(OPLUS_IC_FUNC_CP_GET_ADC_ENABLE, oplus_chg_vc_get_adc_enable);
+		break;
 	case OPLUS_IC_FUNC_CP_GET_TEMP:
 		func = OPLUS_CHG_IC_FUNC_CHECK(OPLUS_IC_FUNC_CP_GET_TEMP, oplus_chg_vc_get_cp_temp);
 		break;
@@ -2111,6 +2164,10 @@ static void *oplus_chg_vc_get_func(struct oplus_chg_ic_dev *ic_dev, enum oplus_c
 	case OPLUS_IC_FUNC_CP_SET_SSTIMEOUT_UCP_ENABLE:
 		func = OPLUS_CHG_IC_FUNC_CHECK(OPLUS_IC_FUNC_CP_SET_SSTIMEOUT_UCP_ENABLE,
 			oplus_chg_vc_set_sstimeout_ucp_enable);
+		break;
+	case OPLUS_IC_FUNC_CP_SET_PMID2VOUT_OVP_ENABLE:
+		func = OPLUS_CHG_IC_FUNC_CHECK(OPLUS_IC_FUNC_CP_SET_PMID2VOUT_OVP_ENABLE,
+			oplus_chg_vc_set_pmid2vout_ovp_enable);
 		break;
 	default:
 		chg_err("this func(=%d) is not supported\n", func_id);

@@ -4626,6 +4626,7 @@ void p2pRoleFsmRunEventAcs(IN struct ADAPTER *prAdapter,
 	struct P2P_ROLE_FSM_INFO *prP2pRoleFsmInfo;
 	struct MSG_P2P_SCAN_REQUEST *prP2pScanReqMsg;
 	struct P2P_ACS_REQ_INFO *prAcsReqInfo;
+	struct BSS_INFO *prAisBssInfo;
 	uint32_t u4MsgSize = 0;
 
 	if (!prAdapter || !prMsgHdr)
@@ -4645,13 +4646,11 @@ void p2pRoleFsmRunEventAcs(IN struct ADAPTER *prAdapter,
 		prMsgAcsRequest, prAcsReqInfo)) {
 		goto exit;
 	}
-
+	prAisBssInfo = aisGetConnectedBssInfo(prAdapter);
 	if (prAdapter->rWifiVar.eDbdcMode == ENUM_DBDC_MODE_DISABLED) {
-		struct BSS_INFO *prAisBssInfo;
 
 		DBGLOG(P2P, INFO, "Report SCC channel\n");
 
-		prAisBssInfo = aisGetConnectedBssInfo(prAdapter);
 		if (prAisBssInfo &&
 			prAisBssInfo->eBand == BAND_2G4 &&
 			prAcsReqInfo->eHwMode == P2P_VENDOR_ACS_HW_MODE_11G) {
@@ -4679,11 +4678,11 @@ void p2pRoleFsmRunEventAcs(IN struct ADAPTER *prAdapter,
 
 
 	if (prAcsReqInfo->eHwMode == P2P_VENDOR_ACS_HW_MODE_11ANY) {
-		struct BSS_INFO *prAisBssInfo;
-
-		prAisBssInfo = aisGetAisBssInfo(prAdapter,
-			AIS_DEFAULT_INDEX);
-		if (prAisBssInfo->eConnectionState == MEDIA_STATE_CONNECTED) {
+		if (prAisBssInfo &&
+		    prAisBssInfo->eConnectionState == MEDIA_STATE_CONNECTED &&
+		    (!p2pFuncIsDualAPMode(prAdapter) ||
+		     (p2pFuncIsDualAPMode(prAdapter) &&
+		      prAisBssInfo->eBand > BAND_2G4))) {
 			/* Force SCC, indicate channel directly */
 			indicateAcsResultByAisCh(prAdapter, prAcsReqInfo,
 				prAisBssInfo);
@@ -4717,6 +4716,16 @@ void p2pRoleFsmRunEventAcs(IN struct ADAPTER *prAdapter,
 			/* Trim 5G channels */
 			trimAcsScanList(prAdapter, prMsgAcsRequest,
 				prAcsReqInfo, BIT(BAND_5G));
+		}
+		} else if (prAcsReqInfo->eHwMode == P2P_VENDOR_ACS_HW_MODE_11G) {
+		if (prAisBssInfo && prAisBssInfo->eBand == BAND_2G4) {
+			/* Force SCC, indicate channel directly */
+			indicateAcsResultByAisCh(prAdapter, prAcsReqInfo,
+						 prAisBssInfo);
+			goto exit;
+		} else {
+			trimAcsScanList(prAdapter, prMsgAcsRequest,
+				prAcsReqInfo, BIT(BAND_2G4));
 		}
 	}
 

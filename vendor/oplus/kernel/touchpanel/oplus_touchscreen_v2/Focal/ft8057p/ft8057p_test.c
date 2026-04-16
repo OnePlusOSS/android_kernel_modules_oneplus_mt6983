@@ -879,10 +879,11 @@ static int fts_enter_test_environment(struct touchpanel_data *ts, bool test_stat
 		ret = request_firmware(&fw, fw_name_test, ts->dev);
 		if (ret) {
 			TPD_INFO("request_firmware(%s) fail", fw_name_test);
+			kfree(fw_name_test);
 			return -ENODATA;
 		}
 	} else {
-		memcpy(ts->panel_data.fw_name, FTS_TEST_FW_NAME, MAX_FW_NAME_LENGTH);
+		strlcpy(ts->panel_data.fw_name, FTS_TEST_FW_NAME, MAX_FW_NAME_LENGTH);
 		/*write normal firmware.bin*/
 		ret = request_firmware(&fw, ts->panel_data.fw_name, ts->dev);
 	}
@@ -894,9 +895,12 @@ static int fts_enter_test_environment(struct touchpanel_data *ts, bool test_stat
 	ts->loading_fw = false;
 
 	msleep(50);
-	fts_test_read_reg(0xB4, &detach_flag);
-	TPD_INFO("regb4:0x%02x\n", detach_flag);
-
+	ret = fts_test_read_reg(0xB4, &detach_flag);
+	if (ret) {
+		TPD_INFO("<E> Read reg 0xB4 failed: %d\n", ret);
+	} else {
+		TPD_INFO("regb4:0x%02x\n", detach_flag);
+	}
 	if (fw) {
 		release_firmware(fw);
 		fw = NULL;
@@ -1940,11 +1944,8 @@ static int ft8057_fast_calibration(void)
 		sys_delay(50);
 	}
 
-	if (i >= 100) {
-		FTS_TEST_SAVE_ERR("waite for fast calibration time out!!\n");
-		return -EINVAL;
-	}
-	return 0;
+	FTS_TEST_SAVE_ERR("wait for fast calibration time out!!\n");
+	return -EINVAL;
 }
 
 

@@ -312,6 +312,11 @@ config OPLUS_SEC_IC_SC5891
 	help
 	  Say Y here to declare encryption ic sc5891 support
 
+config OPLUS_DUAL_CELLS_PROTECTION
+	bool "enable dual cells protection support"
+	help
+	  Say Y here to declare dual cells protection support
+
 config OPLUS_MT6835_CHARGER
         bool "MTK6835 support"
         help
@@ -327,6 +332,12 @@ config OPLUS_GAUGE_MPC7022
 	default n
 	help
 	  Say Y here to declare GAUGE MPC7022 support
+
+config OPLUS_GAUGE_SH366002
+	bool "GAUGE SH366002 support"
+	default n
+	help
+	  Say Y here to declare GAUGE SH366002 support
 
 config OPLUS_SGM41515_CHARGER
 	bool "SGM41515 support"

@@ -127,7 +127,7 @@ typedef struct sipa_dev_s {
 	uint32_t max_f0;
 	uint32_t need_f0_cali;
 #ifdef CONFIG_DEBUG_FS
-#if (LINUX_VERSION_CODE < KERNEL_VERSION(6, 6, 0))
+#if (LINUX_VERSION_CODE < KERNEL_VERSION(5, 15, 0))
 	struct dentry *dbg_dir;
 #else
 	struct proc_dir_entry *dbg_dir;

@@ -73,6 +73,7 @@ struct pd_manager_chip {
 	struct delayed_work bc12_wait_work;
 	struct delayed_work vconn_wait_work;
 	struct delayed_work svid_check_work;
+	struct delayed_work tcpc_complete_work;
 
 	struct oplus_mms *wired_topic;
 	struct mms_subscribe *wired_subs;
@@ -91,6 +92,7 @@ struct pd_manager_chip {
 	bool pd_svooc;
 	bool svid_completed;
 	bool cpa_support;
+	bool enable_tcpc_irq;
 	struct power_supply *batt_psy;
 };
 
@@ -253,7 +255,7 @@ static int oplus_discover_id(struct tcpc_device *tcpc_dev)
 	int ret = 0;
 
 	ret = tcpm_dpm_vdm_discover_id(tcpc_dev, NULL);
-#if (LINUX_VERSION_CODE >= KERNEL_VERSION(6, 1, 0))
+#if (LINUX_VERSION_CODE >= KERNEL_VERSION(6, 1, 0)) && !IS_ENABLED(CONFIG_OPLUS_PD_EXT_SUPPORT)
 	if (ret == TCP_DPM_RET_NOT_SUPPORT ||
 	    ret == TCP_DPM_RET_DENIED_WRONG_ROLE ||
 	    ret == TCPM_ERROR_PUT_EVENT) {
@@ -601,7 +603,6 @@ static void pd_sink_set_vol_and_cur(struct pd_manager_chip *chip,
 static int tcpc_pd_state_change(struct pd_manager_chip *chip, struct tcp_notify *noti)
 {
 	uint32_t partner_vdos[VDO_MAX_NR];
-	int pd_type;
 	int ret = 0;
 
 	switch (noti->pd_state.connected) {
@@ -654,16 +655,6 @@ static int tcpc_pd_state_change(struct pd_manager_chip *chip, struct tcp_notify 
 		break;
 	case PD_CONNECT_PE_READY_SRC:
 	case PD_CONNECT_PE_READY_SRC_PD30:
-		/* update chip->pd_active */
-		pd_type = noti->pd_state.connected ==
-					  PD_CONNECT_PE_READY_SNK_APDO ?
-				  OPLUS_CHG_USB_TYPE_PD_PPS :
-					OPLUS_CHG_USB_TYPE_PD;
-		tcpc_set_pd_type(chip, pd_type);
-		pd_sink_set_vol_and_cur(chip, chip->sink_mv_old,
-					chip->sink_ma_old,
-					TCP_VBUS_CTRL_PD_STANDBY);
-
 		typec_set_pwr_opmode(chip->typec_port, TYPEC_PWR_MODE_PD);
 		if (!chip->partner)
 			break;
@@ -1674,7 +1665,7 @@ static int pd_manager_bc12_completed(struct oplus_chg_ic_dev *ic_dev)
 
 	if (first_boot) {
 		first_boot = false;
-		oplus_mms_get_item_data(chip->wired_topic, WIRED_ITEM_REAL_CHG_TYPE,
+		oplus_mms_get_item_data(chip->wired_topic, WIRED_ITEM_CHG_TYPE,
 					&data, true);
 		chip->chg_type = data.intval;
 		chg_info("chg_type=%s\n", oplus_wired_get_chg_type_str(chip->chg_type));
@@ -1976,6 +1967,19 @@ static void tcpc_variable_init(struct pd_manager_chip *chip)
 	chip->current_max_ma = 0;
 }
 
+static void oplus_pd_tcpc_complete_work(struct work_struct *work)
+{
+	struct delayed_work *dwork = to_delayed_work(work);
+	struct pd_manager_chip *chip = container_of(dwork, struct pd_manager_chip, tcpc_complete_work);
+
+	if (chip->tcpc != NULL) {
+		tcpc_device_irq_enable(chip->tcpc);
+		chg_info("enable tcpc_device irq");
+	}
+
+	return;
+}
+
 static int oplus_pd_manager_probe(struct platform_device *pdev)
 {
 	int ret = 0;
@@ -2056,6 +2060,8 @@ static int oplus_pd_manager_probe(struct platform_device *pdev)
 		chg_err("can't get ic index, rc=%d\n", ret);
 		goto reg_ic_err;
 	}
+	chip->enable_tcpc_irq = of_property_read_bool(node, "oplus,enable_tcpc_irq");
+	chg_info("enable_tcpc_irq:%d", chip->enable_tcpc_irq);
 
 	ic_cfg.name = node->name;
 	ic_cfg.index = ic_index;
@@ -2074,6 +2080,12 @@ static int oplus_pd_manager_probe(struct platform_device *pdev)
 	}
 	chip->batt_psy = power_supply_get_by_name("battery");
 	chip->cpa_support = oplus_cpa_support();
+
+	if (chip->enable_tcpc_irq) {
+		INIT_DELAYED_WORK(&chip->tcpc_complete_work, oplus_pd_tcpc_complete_work);
+		schedule_delayed_work(&chip->tcpc_complete_work, msecs_to_jiffies(100));
+	}
+
 out:
 	platform_set_drvdata(pdev, chip);
 	tcpc_variable_init(chip);
@@ -2127,6 +2139,18 @@ static int oplus_pd_manager_remove(struct platform_device *pdev)
 #endif
 }
 
+static void oplus_pd_manager_shutdown(struct platform_device *pdev)
+{
+	struct pd_manager_chip *chip = platform_get_drvdata(pdev);
+
+	if (!chip)
+		return;
+	if (!chip->tcpc)
+		return;
+
+	tcpm_shutdown(chip->tcpc);
+}
+
 static const struct of_device_id oplus_pd_manager_of_match[] = {
 	{ .compatible = "oplus,hal-pd-manager" },
 	{ }
@@ -2140,6 +2164,7 @@ static struct platform_driver oplus_pd_manager_driver = {
 	},
 	.probe = oplus_pd_manager_probe,
 	.remove = oplus_pd_manager_remove,
+	.shutdown   = oplus_pd_manager_shutdown,
 };
 
 #if (LINUX_VERSION_CODE < KERNEL_VERSION(5, 4, 0))

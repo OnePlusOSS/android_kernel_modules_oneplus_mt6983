@@ -689,6 +689,7 @@ struct oplus_chg_wls {
 	struct mutex update_data_lock;
 	struct mutex tx_switch_lock;
 	struct mutex trx_enable_lock;
+	struct mutex usb_lock;
 
 	struct votable *fcc_votable;
 	struct votable *fastchg_disable_votable;
@@ -2512,6 +2513,32 @@ static int oplus_chg_wls_force_bpp_mode_vote_callback(struct votable *votable, v
 	chg_info("rx_present: %d, bpp_mode_set %d, by %s\n", wls_dev->mms_info.rx_present, bpp_mode_set, client);
 
 	return 0;
+}
+
+static void oplus_wls_sub_btb_connnect_check(struct oplus_chg_wls *wls_dev)
+{
+	int btb_abnormal_current = 0;
+	union mms_msg_data data = { 0 };
+
+	if (NULL == wls_dev || NULL == wls_dev->gauge_topic)
+		return;
+
+	oplus_mms_get_item_data(wls_dev->gauge_topic, GAUGE_ITEM_SUB_BTB_STATE, &data,  false);
+	if (data.intval == BATT_BTB_STATE_NOT_CONNECT) {
+		btb_abnormal_current = oplus_gauge_get_sub_btb_curr_limit(wls_dev->gauge_topic);
+		chg_info("sub_btb_state = %d is abnormal, set limit current %d mA.\n",
+			data.intval, btb_abnormal_current);
+		if (btb_abnormal_current > 0)
+			vote(wls_dev->fcc_votable, BAD_SUB_BTB_VOTER, true,
+			     btb_abnormal_current, false);
+	} else if (data.intval == BATT_BTB_STATE_CONNECT) {
+		vote(wls_dev->fcc_votable, BAD_SUB_BTB_VOTER, false,
+			 0, false);
+	} else {
+		chg_info("state[%d] is not support now!", data.intval);
+	}
+
+	return;
 }
 
 static void  oplus_chg_wls_set_charging_disable(
@@ -4620,11 +4647,21 @@ static int oplus_chg_wls_set_trx_enable(struct oplus_chg_wls *wls_dev, bool en)
 			if (wls_dev->wls_boost_curr_limit_ma > 0)
 				oplus_chg_wls_nor_set_boost_curr_limit(wls_dev->wls_nor->nor_ic,
 					wls_dev->wls_boost_curr_limit_ma);
-			oplus_chg_wls_nor_set_boost_en(wls_dev->wls_nor->nor_ic, true);
+			rc = oplus_chg_wls_nor_set_boost_en(wls_dev->wls_nor->nor_ic, true);
 			if (rc < 0) {
 				chg_err("can't enable trx boost, rc=%d\n", rc);
 				goto out;
 			}
+			msleep(500);
+		}
+		if (!wls_dev->trx_wake_lock_on) {
+			chg_info("acquire trx_wake_lock\n");
+			__pm_stay_awake(wls_dev->trx_wake_lock);
+			wls_dev->trx_wake_lock_on = true;
+		} else {
+			chg_err("trx_wake_lock is already stay awake\n");
+		}
+		if (rc == TX_POWER_BOOST)
 			msleep(500);
 		}
 		oplus_chg_wls_reset_variables(wls_dev);
@@ -4642,6 +4679,13 @@ static int oplus_chg_wls_set_trx_enable(struct oplus_chg_wls *wls_dev, bool en)
 		} else {
 			chg_err("trx_wake_lock is already stay awake\n");
 		}
+		if (!wls_dev->trx_wake_lock_on) {
+			chg_info("acquire trx_wake_lock\n");
+			__pm_stay_awake(wls_dev->trx_wake_lock);
+			wls_dev->trx_wake_lock_on = true;
+		} else {
+			chg_err("trx_wake_lock is already stay awake\n");
+		}
 		cancel_delayed_work_sync(&wls_dev->wls_trx_sm_work);
 		queue_delayed_work(wls_dev->wls_wq, &wls_dev->wls_trx_sm_work, 0);
 	} else {
@@ -4649,10 +4693,10 @@ static int oplus_chg_wls_set_trx_enable(struct oplus_chg_wls *wls_dev, bool en)
 			goto out;
 		if (wls_status->trx_rxac == true)
 			vote(wls_dev->rx_disable_votable, RXAC_VOTER, true, 1, false);
-		cancel_delayed_work_sync(&wls_dev->wls_trx_sm_work);
 		oplus_chg_wls_rx_set_trx_start(wls_dev->wls_rx->rx_ic, false);
 		if (!(wls_dev->pre_otg_enable && wls_dev->support_acdrv_no_ext_boost))
 			oplus_chg_wls_nor_set_boost_en(wls_dev->wls_nor->nor_ic, false);
+		cancel_delayed_work_sync(&wls_dev->wls_trx_sm_work);
 		wls_status->wls_type = OPLUS_CHG_WLS_UNKNOWN;
 		wls_status->trx_present = false;
 		pre_trx_online = wls_status->trx_online;
@@ -4752,6 +4796,7 @@ static enum oplus_chg_temp_region oplus_chg_wls_get_temp_region(struct oplus_chg
 		temp_region = BATT_TEMP_COLD;
 		break;
 	case TEMP_REGION_LITTLE_COLD:
+	case TEMP_REGION_LITTLE_COLD_HIGH:
 		temp_region = BATT_TEMP_LITTLE_COLD;
 		break;
 	case TEMP_REGION_COOL:
@@ -5075,6 +5120,10 @@ static void oplus_chg_wls_config(struct oplus_chg_wls *wls_dev)
 	int fcc_max_ma;
 	int icl_index;
 	static bool pre_temp_abnormal;
+	union mms_msg_data mms_data = { 0 };
+	int rc;
+	static bool shell_temp_ready = false;
+	int shell_temp = 0;
 
 	ffc_status = oplus_chg_wls_get_ffc_status(wls_dev);
 	if (ffc_status != FFC_DEFAULT) {
@@ -5099,10 +5148,23 @@ static void oplus_chg_wls_config(struct oplus_chg_wls *wls_dev)
 		icl_index = OPLUS_WLS_CHG_BATT_CL_LOW;
 
 	temp_region = oplus_chg_wls_get_temp_region(wls_dev);
+
+	if (wls_dev->comm_topic && !shell_temp_ready) {
+		rc = oplus_mms_get_item_data(wls_dev->comm_topic, COMM_ITEM_SHELL_TEMP, &mms_data, false);
+		if (rc < 0) {
+			chg_err("can't get shell temp data, rc=%d", rc);
+		} else {
+			shell_temp = mms_data.intval;
+			if (shell_temp != GAUGE_INVALID_TEMP)
+				shell_temp_ready = true;
+
+			chg_info("shell temp = %d, shell temp ready = %d\n", shell_temp, shell_temp_ready);
+		}
+	}
 	switch (temp_region) {
 	case BATT_TEMP_COLD:
 	case BATT_TEMP_HOT:
-		if (!pre_temp_abnormal) {
+		if (!pre_temp_abnormal && shell_temp_ready) {
 			pre_temp_abnormal = true;
 			wls_status->online_keep = true;
 			vote(wls_dev->rx_disable_votable, JEITA_VOTER, true, 1, false);
@@ -5609,6 +5671,7 @@ static void oplus_chg_wls_usb_int_work(struct work_struct *work)
 	struct oplus_chg_wls *wls_dev = container_of(dwork, struct oplus_chg_wls, usb_int_work);
 	struct oplus_chg_wls_status *wls_status = &wls_dev->wls_status;
 
+	mutex_lock(&wls_dev->usb_lock);
 	if (wls_dev->usb_present) {
 		oplus_chg_wls_rx_set_rx_mode_safety(wls_dev, OPLUS_CHG_WLS_RX_MODE_UNKNOWN);
 		vote(wls_dev->rx_disable_votable, USB_VOTER, true, 1, false);
@@ -5646,6 +5709,7 @@ static void oplus_chg_wls_usb_int_work(struct work_struct *work)
 				vote(wls_dev->insert_disable_votable, USB_VOTER, false, 0, false);
 		}
 	}
+	mutex_unlock(&wls_dev->usb_lock);
 }
 
 static void oplus_chg_wls_vac_int_work(struct work_struct *work)
@@ -5654,6 +5718,7 @@ static void oplus_chg_wls_vac_int_work(struct work_struct *work)
 	struct oplus_chg_wls *wls_dev = container_of(dwork, struct oplus_chg_wls, vac_int_work);
 	struct oplus_chg_wls_status *wls_status = &wls_dev->wls_status;
 
+	mutex_lock(&wls_dev->usb_lock);
 	if (wls_dev->vac_present) {
 		vote(wls_dev->rx_disable_votable, USB_VOTER, true, 1, false);
 		if (wls_status->wls_type == OPLUS_CHG_WLS_TRX)
@@ -5679,6 +5744,7 @@ static void oplus_chg_wls_vac_int_work(struct work_struct *work)
 			vote(wls_dev->insert_disable_votable, USB_VOTER, false, 0, false);
 		}
 	}
+	mutex_unlock(&wls_dev->usb_lock);
 }
 
 #define OPLUS_CHG_WLS_START_DETECT_CNT 10
@@ -5773,6 +5839,7 @@ static void oplus_chg_wls_connect_work(struct work_struct *work)
 			skin_temp = 250;
 		}
 		wls_dev->high_temp_track.wls_start_time = jiffies;
+		oplus_wls_sub_btb_connnect_check(wls_dev);
 		schedule_delayed_work(&wls_dev->wls_monitor_work, msecs_to_jiffies(OPLUS_CHG_WLS_MONITOR_DELAY));
 	} else {
 		chg_err("!!!!!wls disconnect <<<<<<<<<<<<<<<<<<<<<<<<<<\n");
@@ -10085,9 +10152,16 @@ static void oplus_chg_wls_rx_restore_work(struct work_struct *work)
 {
 	struct delayed_work *dwork = to_delayed_work(work);
 	struct oplus_chg_wls *wls_dev = container_of(dwork, struct oplus_chg_wls, rx_restore_work);
+	enum oplus_chg_temp_region temp_region;
 
+	temp_region = oplus_chg_wls_get_temp_region(wls_dev);
 	vote(wls_dev->rx_disable_votable, JEITA_VOTER, false, 0, false);
-	vote(wls_dev->nor_icl_votable, JEITA_VOTER, true, WLS_CURR_JEITA_CHG_MA, true);
+	if (temp_region <= BATT_TEMP_COLD || temp_region >= BATT_TEMP_HOT) {
+		chg_info("temp region = %d, still abnormal need limit icl\n", temp_region);
+		vote(wls_dev->nor_icl_votable, JEITA_VOTER, true, WLS_CURR_JEITA_CHG_MA, true);
+	} else {
+		vote(wls_dev->nor_icl_votable, JEITA_VOTER, false, 0, true);
+	}
 }
 
 static void oplus_chg_wls_rx_iic_restore_work(struct work_struct *work)
@@ -10560,6 +10634,7 @@ static const char * const norchg_strategy_mode[] = {
 static const char * const norchg_strategy_temp[] = {
 	[TEMP_REGION_COLD]	= "wls_temp_cold",
 	[TEMP_REGION_LITTLE_COLD]	= "wls_temp_little_cold",
+	[TEMP_REGION_LITTLE_COLD_HIGH]	= "wls_temp_little_cold_high",
 	[TEMP_REGION_COOL]	= "wls_temp_cool",
 	[TEMP_REGION_LITTLE_COOL]	= "wls_temp_little_cool",
 	[TEMP_REGION_PRE_NORMAL]	= "wls_temp_pre_normal",
@@ -10812,8 +10887,17 @@ static int read_norchg_strategy_from_node(struct device_node *node, const char *
 			for (k = TEMP_REGION_LITTLE_COLD; k < TEMP_REGION_HOT; k++) {
 				rc = of_property_count_elems_of_size(norchg_vol_node, norchg_strategy_temp[k], sizeof(u32));
 				if (rc < 0) {
-					chg_err("Count %s failed, rc=%d\n", norchg_strategy_temp[k], rc);
-					return rc;
+					if (k > 0 && k == TEMP_REGION_LITTLE_COLD_HIGH) {
+						chg_info("%s node not found, copy little_cold paras\n", norchg_strategy_temp[k]);
+						ranges->norchg_step[i][j][k].max_step = ranges->norchg_step[i][j][k - 1].max_step;
+						memmove(ranges->norchg_step[i][j][k].norchg_step,
+						       ranges->norchg_step[i][j][k - 1].norchg_step,
+						       sizeof(ranges->norchg_step[i][j][k].norchg_step));
+						continue;
+					} else {
+						chg_err("Count %s failed, rc=%d\n", norchg_strategy_temp[k], rc);
+						return rc;
+					}
 				}
 				length = rc;
 
@@ -12814,8 +12898,6 @@ static void oplus_chg_wls_gauge_subs_callback(struct mms_subscribe *subs,
 {
 	struct oplus_chg_wls *wls_dev = subs->priv_data;
 	union mms_msg_data data = { 0 };
-	int btb_abnormal_current;
-	int rc;
 
 	switch (type) {
 	case MSG_TYPE_TIMER:
@@ -12831,23 +12913,7 @@ static void oplus_chg_wls_gauge_subs_callback(struct mms_subscribe *subs,
 	case MSG_TYPE_ITEM:
 		switch (id) {
 		case GAUGE_ITEM_SUB_BTB_STATE:
-			rc = oplus_mms_get_item_data(wls_dev->gauge_topic, id,
-						     &data, false);
-			if (rc < 0) {
-				chg_err("can't get GAUGE_ITEM_SUB_BTB_STATE data, rc=%d\n",
-					 rc);
-			} else {
-				if (data.intval == BATT_BTB_STATE_NOT_CONNECT) {
-					btb_abnormal_current = oplus_gauge_get_sub_btb_curr_limit(wls_dev->gauge_topic);
-					chg_debug("sub_btb abnormal, max curr set %d\n", btb_abnormal_current);
-					if (btb_abnormal_current > 0)
-						vote(wls_dev->fcc_votable, BAD_SUB_BTB_VOTER, true,
-						     btb_abnormal_current, false);
-				} else if (data.intval == BATT_BTB_STATE_CONNECT) {
-					vote(wls_dev->fcc_votable, BAD_SUB_BTB_VOTER, false,
-					     0, false);
-				}
-			}
+			oplus_wls_sub_btb_connnect_check(wls_dev);
 			break;
 		default:
 			break;
@@ -12954,11 +13020,13 @@ static void oplus_chg_wls_wired_subs_callback(struct mms_subscribe *subs,
 			oplus_mms_get_item_data(wls_dev->wired_topic, id, &data, false);
 			if (data.intval) {
 				chg_info("usb online\n");
-				wls_dev->usb_present = true;
-				if (!wls_dev->vac_present)
-					schedule_delayed_work(&wls_dev->usb_int_work, 0);
-				if (is_batt_psy_available(wls_dev))
-					power_supply_changed(wls_dev->batt_psy);
+				if (!wls_dev->usb_present) {
+					wls_dev->usb_present = true;
+					if (!wls_dev->vac_present)
+						schedule_delayed_work(&wls_dev->usb_int_work, 0);
+					if (is_batt_psy_available(wls_dev))
+						power_supply_changed(wls_dev->batt_psy);
+				}
 			} else {
 				chg_info("usb offline\n");
 				wls_dev->usb_present = false;
@@ -13190,6 +13258,7 @@ static void oplus_chg_wls_temp_region_update_work(struct work_struct *work)
 		else
 			wls_dev->wls_status.fastchg_level = 0;
 	}
+
 	oplus_chg_wls_config(wls_dev);
 }
 
@@ -15340,6 +15409,7 @@ static int oplus_chg_wls_driver_probe(struct platform_device *pdev)
 	mutex_init(&wls_dev->update_data_lock);
 	mutex_init(&wls_dev->tx_switch_lock);
 	mutex_init(&wls_dev->trx_enable_lock);
+	mutex_init(&wls_dev->usb_lock);
 	init_waitqueue_head(&wls_dev->read_wq);
 
 	wls_dev->rx_wake_lock = wakeup_source_register(wls_dev->dev, "rx_wake_lock");

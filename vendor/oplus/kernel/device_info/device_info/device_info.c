@@ -230,8 +230,7 @@ static int devinfo_read_emmc_func(struct seq_file *s, void *v)
 		manufacture = "PHISON";
 		break;
 	case 0xD6:
-		if (NULL != strstr(mmc->card->cid.prod_name, "C9C761") || NULL != strstr(mmc->card->cid.prod_name, "C9C762")
-			|| NULL != strstr(mmc->card->cid.prod_name, "C9C764") || NULL != strstr(mmc->card->cid.prod_name, "C9A612")) {
+		if (NULL != strstr(mmc->card->cid.prod_name, "C9")) {
 			manufacture = "FORESEE";
 		} else {
 			manufacture = "HG";

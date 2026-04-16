@@ -1,0 +1,41 @@
+changlog-20250418
+in-tree:
+	to enable in-tree build:
+	a) need add
+	1:
+	source "drivers/soc/oplus/storage/common/iolimit/Kconfig"
+	to
+	//msm-kernel/drivers/soc/Kconfig
+	2:
+	obj-$(CONFIG_OPLUS_UFS_DRIVER) += oplus/storage/common/iolimit/
+	to
+	//msm-kernel/drivers/soc/Makefile
+	b)
+	need set config in vendor config in
+	arch/arm64/configs/.....
+	c)
+	add
+	"drivers/soc/oplus/storage/common/iolimit/iolimit.ko"
+	to
+	//msm-kernel/$chip.bzl (for example :sun.bzl)
+	d)
+	add
+	iolimit.ko
+	to
+	//msm-kernel/moules.list.msm.%chip
+out-tree:
+	to enable out-tree build:
+	add
+	../vendor/oplus/kernel/storage/storage_feature_in_module/common/iolimit
+	to
+	oplus/kernel/build(git) : config/module.ext.xxx (please check the full name
+	for your vendor platform for module.ext.xxx)
+
+Warnning:
+	for build system will auto search all the *.bzl *.bazel as build modules.
+	So if use in tree build, please must
+	remove BUILD.bazel and oplus_local_module.bzl, if not ,will build error.
+	(suggest: rename
+		BUILD.bazel to BUILD.bazel.out
+		oplus_local_module.bzl oplus_local_module.bzl.out.
+	)

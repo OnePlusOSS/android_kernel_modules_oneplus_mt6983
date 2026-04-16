@@ -248,7 +248,8 @@ out:
 
 	TCPC_INFO("recv msg cnt = %d int_count = %d \n", tcpc->recv_msg_cnt, tcpc->int_invaild_cnt);
 
-	if (chip_pid == SC6601_PID && tcpc->recv_msg_cnt > CONFIG_SOUTHCHIP_ERROR_MSG_CNT_MAX) {
+	if ((chip_pid == SC6601_PID || chip_pid == SC6607A_CHIP_PID) &&
+	     tcpc->recv_msg_cnt > CONFIG_SOUTHCHIP_ERROR_MSG_CNT_MAX) {
 		tcpc->recv_msg_cnt = 0;
 		tcpc->int_invaild_cnt++;
 		tcpci_init(tcpc, true);
@@ -539,7 +540,7 @@ static inline int tcpci_report_usb_port_attached(struct tcpc_device *tcpc)
 #ifdef OPLUS_FEATURE_CHG_BASIC
 /********* workaround MO.230913213000256759: sc6607 workaround for pd abnormal start*********/
 	rv = tcpci_get_chip_pid(tcpc, &chip_pid);
-	if (!rv && (SC6601_PID == chip_pid) &&
+	if (!rv && (SC6601_PID == chip_pid || SC6607A_CHIP_PID == chip_pid) &&
 	    tcpc->int_invaild_cnt >= CONFIG_SOUTHCHIP_INT_INVAILD_RETRY_MAX) {
 		TCPC_INFO("sc6607 invaild int happen!!!\n");
 		return 0;

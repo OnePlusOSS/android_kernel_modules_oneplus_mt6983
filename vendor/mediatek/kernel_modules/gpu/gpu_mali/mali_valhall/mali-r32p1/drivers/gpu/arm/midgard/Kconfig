@@ -372,9 +372,11 @@ config MALI_ARBITRATION
 	  Enables the build of several reference modules used in the reference
 	  virtualization setup for Mali
 	  If unsure, say N.
+
 config MALI_MTK_GPU_FREQUENCY_TRACE
 	bool "provide gpu_frequency trace event"
 	default n
+
 if MALI_ARBITRATION
 source "drivers/gpu/arm/midgard/arbitration/Kconfig"
 endif
