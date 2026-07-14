@@ -1,0 +1,8 @@
+config TOUCHSCREEN_HBP_CORE
+    tristate "Oplus Touchscreen"
+    default n
+    help
+      Say Y here if you have Focaltech touch panel.
+      If unsure, say N.
+
+source "drivers/input/touchscreen/tp_hbp/chips/focal/ft3683g/Kconfig"

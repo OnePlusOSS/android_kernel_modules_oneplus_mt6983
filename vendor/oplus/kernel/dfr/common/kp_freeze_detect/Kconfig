@@ -1,0 +1,8 @@
+# SPDX-License-Identifier: GPL-2.0-only
+# Copyright (C) 2023-2030 Oplus. All rights reserved.
+config OPLUS_FEATURE_KP_FREEZE_DETECT
+	tristate "kp freeze detect"
+	default n
+	help
+            OPLUS_FEATURE_KP_FREEZE_DETECT is the kernel config of kp
+            freeze detect designed by OPLUS.

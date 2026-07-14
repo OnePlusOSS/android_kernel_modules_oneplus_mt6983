@@ -1,0 +1,8 @@
+obj-$(CONFIG_OPLUS_RESCTRL) += oplus_resctrl.o
+
+oplus_resctrl-y := resctrl.o
+oplus_resctrl-$(CONFIG_OPLUS_RESCTRL) += iocost.o
+
+ifeq ($(OPLUS_OUT_OF_TREE_KO),y)
+ccflags-y += -DCONFIG_OPLUS_RESCTRL=1
+endif

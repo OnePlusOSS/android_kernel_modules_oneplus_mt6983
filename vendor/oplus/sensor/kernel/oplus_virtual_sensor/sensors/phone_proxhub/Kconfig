@@ -1,0 +1,4 @@
+
+config OPLUS_FEATURE_PHONE_PROX
+	bool "phone_proxhub for MediaTek package"
+	default n

@@ -1,0 +1,14 @@
+prefix=/mfs/mtkslt0338/mtk03818/git_check_in2/kernel/build/abi/abigail-inst/f6134e12
+exec_prefix=${prefix}
+libdir=${exec_prefix}/lib
+includedir=${prefix}/include
+
+Name: libelf
+Description: elfutils libelf library to read and write ELF files
+Version: 0.180
+URL: http://elfutils.org/
+
+Libs: -L${libdir} -lelf
+Cflags: -I${includedir}
+
+Requires.private: zlib
